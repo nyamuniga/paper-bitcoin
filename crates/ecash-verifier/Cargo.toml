@@ -1,0 +1,12 @@
+[package]
+name = "ecash-verifier"
+version = "0.1.0"
+edition = "2021"
+description = "Offline cryptographic verifier for physical ecash notes"
+
+[dependencies]
+ecash-core = { path = "../ecash-core" }
+serde_json = { workspace = true }
+hex        = { workspace = true }
+sha2       = { workspace = true }
+reqwest    = { workspace = true }

@@ -1,0 +1,12 @@
+[package]
+name = "ecash-encoder"
+version = "0.1.0"
+edition = "2021"
+description = "Physical note SVG generator with embedded QR codes"
+
+[dependencies]
+ecash-core = { path = "../ecash-core" }
+qrcode     = { workspace = true }
+base64     = { workspace = true }
+serde_json = { workspace = true }
+flate2 = "1.1.9"

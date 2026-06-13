@@ -1,0 +1,25 @@
+[package]
+name = "ecash-wallet"
+version = "0.1.0"
+edition = "2021"
+description = "Multi-mint Cashu wallet for issuing and redeeming physical notes"
+
+[dependencies]
+ecash-core = { path = "../ecash-core" }
+reqwest    = { workspace = true }
+tokio      = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+anyhow     = { workspace = true }
+hex        = { workspace = true }
+rand       = { workspace = true }
+tracing    = { workspace = true }
+dirs       = { workspace = true }
+uuid       = { workspace = true }
+
+# BIP39 mnemonic seed words
+bip39 = "2"
+
+# Wallet encryption
+aes-gcm = "0.10"
+argon2  = "0.5"

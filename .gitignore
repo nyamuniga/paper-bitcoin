@@ -1,0 +1,26 @@
+# Rust build artifacts
+/target/
+Cargo.lock
+
+# ──────────────────────────────────────────────────────────────────
+# Physical note outputs — NEVER commit these.
+# These directories contain real bearer instruments with private seeds.
+# Anyone with access to the .json files can steal the funds.
+# ──────────────────────────────────────────────────────────────────
+notes/
+new-notes/
+newnotes/
+demo-notes/
+
+# Scratch / research notes (not part of the codebase)
+qr_code_data_compression.md
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
