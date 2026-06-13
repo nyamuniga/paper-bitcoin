@@ -5,6 +5,7 @@ members = [
     "crates/ecash-encoder",
     "crates/ecash-verifier",
     "crates/ecash-cli",
+    "cashu-app/src-tauri",
 ]
 resolver = "2"
 

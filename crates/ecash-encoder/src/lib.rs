@@ -16,15 +16,11 @@ use qrcode::QrCode;
 /// The **public QR** encodes a compact binary payload (see `ecash_core::compact`).
 /// The **private QR** encodes the JSON private seed (unchanged).
 pub fn generate_note_svg(note: &PhysicalNote) -> String {
-    let public_bin = ecash_core::compact::encode_public_data(
-        &note.public_data,
-        note.amount_sats,
-        note.issued_at,
-    );
-    let private_json = serde_json::to_string(&note.private_data).unwrap();
+    let public_bin = bincode::serialize(&note.public_data).unwrap();
+    let full_note_bin = bincode::serialize(note).unwrap();
 
     let pub_qr = qr_bin(&public_bin);
-    let priv_qr = qr_b64(&private_json);
+    let priv_qr = qr_bin(&full_note_bin);
 
     let issued = fmt_ts(note.issued_at);
     let amount_str = fmt_amount(note.amount_sats);
@@ -69,7 +65,13 @@ use flate2::write::ZlibEncoder;
 use flate2::Compression;
 
 fn qr_bin(data: &[u8]) -> String {
-    let code = QrCode::with_error_correction_level(data, qrcode::EcLevel::L)
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
+    encoder.write_all(data).unwrap();
+    let compressed = encoder.finish().unwrap();
+    let b64 = base64::engine::general_purpose::STANDARD.encode(compressed);
+    let final_data = format!("eCashZ:{}", b64);
+
+    let code = QrCode::with_error_correction_level(final_data.as_bytes(), qrcode::EcLevel::L)
         .unwrap_or_else(|_| QrCode::with_error_correction_level(b"Payload too large.", qrcode::EcLevel::L).unwrap());
 
     let svg_str = code

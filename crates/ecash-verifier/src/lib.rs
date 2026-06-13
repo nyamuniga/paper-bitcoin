@@ -58,6 +58,7 @@ impl OfflineVerifier {
     pub fn verify(&self, data: &PublicNoteData) -> VerificationResult {
         let mut total_sats = 0;
         let mut all_mints = Vec::new();
+        let mut all_trusted = true;
 
         if data.entries.is_empty() {
             return VerificationResult::InvalidFormat {
@@ -66,11 +67,9 @@ impl OfflineVerifier {
         }
 
         for entry in &data.entries {
-            // ── 1. Trusted mint ───────────────────────────────────────────────
+            // ── 1. Trusted mint check ─────────────────────────────────────
             if !self.trusted.contains_key(&entry.mint) {
-                return VerificationResult::UntrustedMint {
-                    url: entry.mint.clone(),
-                };
+                all_trusted = false;
             }
             if !all_mints.contains(&entry.mint) {
                 all_mints.push(entry.mint.clone());
@@ -83,38 +82,45 @@ impl OfflineVerifier {
                 };
             }
 
-            // ── 3. DLEQ Verification (NUT-12) ─────────────────────────────────
-            let mint_key_map = self.mint_keys.get(&entry.mint).unwrap();
-            for (i, proof) in entry.proofs.iter().enumerate() {
-                let c_prime = match &proof.c_prime {
-                    Some(cp_hex) => match point_from_hex(cp_hex) {
-                        Ok(p) => p,
-                        Err(_) => return VerificationResult::InvalidProofPoint { index: i },
-                    },
-                    None => return VerificationResult::InvalidFormat { reason: format!("Missing C_ point for proof {}", i) },
-                };
-                
-                // Get the mint public key for this denomination
-                let pubkey_hex = match mint_key_map.get(&proof.amount) {
-                    Some(pk) => pk,
-                    None => return VerificationResult::InvalidFormat { reason: format!("No known public key for denomination {}", proof.amount) },
-                };
-                let mint_pubkey = point_from_hex(pubkey_hex).unwrap();
+            // ── 3. DLEQ Verification (NUT-12) if trusted ──────────────────────
+            if self.trusted.contains_key(&entry.mint) {
+                let mint_key_map = self.mint_keys.get(&entry.mint).unwrap();
+                for (i, proof) in entry.proofs.iter().enumerate() {
+                    let c_prime = match &proof.c_prime {
+                        Some(cp_hex) => match point_from_hex(cp_hex) {
+                            Ok(p) => p,
+                            Err(_) => return VerificationResult::InvalidProofPoint { index: i },
+                        },
+                        None => return VerificationResult::InvalidFormat { reason: format!("Missing C_ point for proof {}", i) },
+                    };
+                    
+                    // Get the mint public key for this denomination
+                    let pubkey_hex = match mint_key_map.get(&proof.amount) {
+                        Some(pk) => pk,
+                        None => return VerificationResult::InvalidFormat { reason: format!("No known public key for denomination {}", proof.amount) },
+                    };
+                    let mint_pubkey = point_from_hex(pubkey_hex).unwrap();
 
-                // Get B_ and DLEQ
-                if let (Some(b_prime_hex), Some(dleq)) = (&proof.b_prime, &proof.dleq) {
-                    if let Ok(b_prime) = point_from_hex(b_prime_hex) {
-                        if !ecash_core::dhke::verify_dleq(&mint_pubkey, &c_prime, &b_prime, dleq) {
-                            return VerificationResult::InvalidFormat { reason: format!("Cryptographic DLEQ Proof failed for proof {}", i) };
+                    // Get B_ and DLEQ
+                    if let (Some(b_prime_hex), Some(dleq)) = (&proof.b_prime, &proof.dleq) {
+                        if let Ok(b_prime) = point_from_hex(b_prime_hex) {
+                            if !ecash_core::dhke::verify_dleq(&mint_pubkey, &c_prime, &b_prime, dleq) {
+                                return VerificationResult::InvalidFormat { reason: format!("Cryptographic DLEQ Proof failed for proof {}", i) };
+                            }
+                        } else {
+                            return VerificationResult::InvalidFormat { reason: format!("Invalid B_ point for proof {}", i) };
                         }
                     } else {
-                        return VerificationResult::InvalidFormat { reason: format!("Invalid B_ point for proof {}", i) };
+                        return VerificationResult::InvalidFormat { reason: format!("Missing DLEQ proof or B_ for proof {}", i) };
                     }
-                } else {
-                    return VerificationResult::InvalidFormat { reason: format!("Missing DLEQ proof or B_ for proof {}", i) };
-                }
 
-                total_sats += proof.amount;
+                    total_sats += proof.amount;
+                }
+            } else {
+                // Untrusted mint, just sum up the sats from proofs
+                for proof in &entry.proofs {
+                    total_sats += proof.amount;
+                }
             }
         }
 
@@ -125,10 +131,18 @@ impl OfflineVerifier {
         }
 
         // ── All checks passed ─────────────────────────────────────────────
-        VerificationResult::Valid {
-            face_value_sats: if data.face_value_sats > 0 { data.face_value_sats } else { total_sats },
-            proof_total_sats: total_sats,
-            mint_urls: all_mints,
+        if all_trusted {
+            VerificationResult::Valid {
+                face_value_sats: if data.face_value_sats > 0 { data.face_value_sats } else { total_sats },
+                proof_total_sats: total_sats,
+                mint_urls: all_mints,
+            }
+        } else {
+            VerificationResult::ValidUntrusted {
+                face_value_sats: if data.face_value_sats > 0 { data.face_value_sats } else { total_sats },
+                proof_total_sats: total_sats,
+                mint_urls: all_mints,
+            }
         }
     }
 }
@@ -141,13 +155,19 @@ pub enum SpentStatus {
     Spent,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum VerificationResult {
-    /// Authentic format, trusted mint, integrity hash matches.
+    /// Note is cryptographically valid and signed by trusted mint(s).
     Valid {
         /// What the note is worth to the holder (face value).
         face_value_sats: u64,
         /// Sum of all proof amounts, which includes fee reserves (always ≥ face value).
+        proof_total_sats: u64,
+        mint_urls: Vec<String>,
+    },
+    /// Note format and hash are valid, but mint is untrusted (DLEQ skipped).
+    ValidUntrusted {
+        face_value_sats: u64,
         proof_total_sats: u64,
         mint_urls: Vec<String>,
     },
@@ -212,6 +232,10 @@ pub fn fmt_result(r: &VerificationResult) -> String {
             } else {
                 format!("✅  VALID — {} sats @ {}", face_value_sats, mints)
             }
+        }
+        VerificationResult::ValidUntrusted { face_value_sats, mint_urls, .. } => {
+            let mints = mint_urls.join(", ");
+            format!("✅  VALID FORMAT — {} sats @ {}\n    ⚠️ MINT NOT TRUSTED/KEYS NOT LOADED", face_value_sats, mints)
         }
         VerificationResult::UntrustedMint { url } => format!(
             "⚠️   UNTRUSTED MINT — {}\n    Add this mint to your trusted list before accepting.",

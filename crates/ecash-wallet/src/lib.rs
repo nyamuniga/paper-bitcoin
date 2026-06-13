@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use ecash_core::{
     derivation::TokenDerivation,
     dhke::{compute_validation_hash, point_from_hex, BlindingSession},
-    types::{Amount, CashuToken, PhysicalNote, PrivateNoteData, Proof, PublicNoteData, TokenEntry},
+    types::{Amount, CashuToken, PhysicalNote, PrivateNoteData, Proof, PublicNoteData, TokenEntry, Transaction, TransactionType, MintTransactionData, MeltTransactionData, TransactionStatus},
 };
 
 pub const DEFAULT_MINT_URL: &str = "https://mint.minibits.cash/Bitcoin";
@@ -30,16 +30,19 @@ pub struct WalletState {
     pub mnemonic: Option<String>,
     pub derivation_index: u64,
     pub proofs: HashMap<String, Vec<Proof>>,
+    #[serde(default)]
     pub mints: Vec<String>,
     /// Mint public keys cached from previous sessions, used for offline DLEQ verification.
     /// Keyed by mint URL → (denomination → compressed pubkey hex).
     #[serde(default)]
     pub trusted_keys: HashMap<String, HashMap<u64, String>>,
+    #[serde(default)]
+    pub transactions: Vec<Transaction>,
 }
 
 impl WalletState {
     pub fn new(seed_hex: String, mnemonic: Option<String>) -> Self {
-        Self { seed_hex, mnemonic, derivation_index: 0, proofs: HashMap::new(), mints: Vec::new(), trusted_keys: HashMap::new() }
+        Self { seed_hex, mnemonic, derivation_index: 0, proofs: HashMap::new(), mints: Vec::new(), trusted_keys: HashMap::new(), transactions: Vec::new() }
     }
 
     pub fn default_path() -> PathBuf {
@@ -396,6 +399,22 @@ impl MintClient {
 
         Ok((paid, change))
     }
+
+    pub async fn check_state(&self, ys: &[String]) -> Result<HashMap<String, String>> {
+        let v: serde_json::Value = self.http.post(format!("{}/v1/checkstate", self.url))
+            .json(&serde_json::json!({ "Ys": ys })).send().await?.json().await?;
+        if let Some(err) = v.get("error") { return Err(anyhow!("Checkstate error: {}", err)); }
+        
+        let mut results = HashMap::new();
+        if let Some(states) = v.get("states").and_then(|s| s.as_array()) {
+            for state_obj in states {
+                if let (Some(y), Some(state_val)) = (state_obj.get("Y").and_then(|y| y.as_str()), state_obj.get("state").and_then(|s| s.as_str())) {
+                    results.insert(y.to_string(), state_val.to_string());
+                }
+            }
+        }
+        Ok(results)
+    }
 }
 
 pub async fn estimate_melt_fee(mint_url: &str, invoice: &str) -> Result<(u64, String)> {
@@ -489,7 +508,32 @@ where
         sessions.push((sess, index));
     }
 
-    let sigs = hub_client.mint_tokens(&hub_qid, outputs).await?;
+    let tx_id = format!("tx_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
+    let pending_tx = Transaction {
+        id: tx_id.clone(),
+        tx_type: TransactionType::Mint(MintTransactionData {
+            quote_id: hub_qid.clone(),
+            outputs: outputs.clone(),
+            blinding_sessions_hex: sessions.iter().map(|(s, _)| s.secret.clone()).collect(),
+        }),
+        amount: total_hub_needed,
+        fee: 0,
+        status: TransactionStatus::Pending,
+        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        mint_url: hub_mint.to_string(),
+    };
+    state.transactions.push(pending_tx);
+    state.save_encrypted(wallet_path, passphrase)?;
+
+    let sigs = match hub_client.mint_tokens(&hub_qid, outputs).await {
+        Ok(s) => s,
+        Err(e) => return Err(anyhow!("Mint error on Hub, but your payment is safe. Go to History to retry minting. Error: {}", e)),
+    };
+    
+    if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+        tx.status = TransactionStatus::Success;
+    }
+
     let mut hub_all_proofs = Vec::new();
     for ((sess, index), sig) in sessions.iter().zip(sigs.iter()) {
         let amount = sig["amount"].as_u64().unwrap();
@@ -520,11 +564,35 @@ where
         let melt_proofs = hub_all_proofs[proofs_idx..proofs_idx + subset_len].to_vec();
         proofs_idx += subset_len;
 
-        hub_client.melt_tokens(&melt_proofs, inv, None, None).await?;
-
+        let tx_id_melt = format!("tx_melt_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
+        let pending_melt_tx = Transaction {
+            id: tx_id_melt.clone(),
+            tx_type: TransactionType::Melt(MeltTransactionData {
+                quote_id: inv.clone(),
+                proofs: melt_proofs.clone(),
+            }),
+            amount: *amt,
+            fee: *fee,
+            status: TransactionStatus::Pending,
+            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+            mint_url: hub_mint.to_string(),
+        };
+        state.transactions.push(pending_melt_tx);
+        
         // ── 2. Remove melted tokens from state immediately ──
         if let Some(hub_proofs) = state.proofs.get_mut(hub_mint) {
             hub_proofs.retain(|p| !melt_proofs.iter().any(|mp| mp.id == p.id && mp.secret == p.secret));
+        }
+        state.save_encrypted(wallet_path, passphrase)?;
+
+        let melt_res = hub_client.melt_tokens(&melt_proofs, inv, None, None).await;
+        if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id_melt) {
+            match melt_res {
+                Ok(_) => tx.status = TransactionStatus::Success,
+                Err(e) => {
+                    return Err(anyhow!("Melt error during issuance: {}. Check History.", e));
+                }
+            }
         }
         state.save_encrypted(wallet_path, passphrase)?;
 
@@ -545,7 +613,32 @@ where
             b_sess.push((sess, index));
         }
 
-        let b_sigs = client.mint_tokens(qid, b_out).await?;
+        let tx_id_mint = format!("tx_mint_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
+        let pending_mint_tx = Transaction {
+            id: tx_id_mint.clone(),
+            tx_type: TransactionType::Mint(MintTransactionData {
+                quote_id: qid.clone(),
+                outputs: b_out.clone(),
+                blinding_sessions_hex: b_sess.iter().map(|(s, _)| s.secret.clone()).collect(),
+            }),
+            amount: *amt,
+            fee: 0,
+            status: TransactionStatus::Pending,
+            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+            mint_url: mint.to_string(),
+        };
+        state.transactions.push(pending_mint_tx);
+        state.save_encrypted(wallet_path, passphrase)?;
+
+        let b_sigs = match client.mint_tokens(qid, b_out).await {
+            Ok(s) => s,
+            Err(e) => return Err(anyhow!("Child mint error. Your funds are at the mint. Check History to retry. Error: {}", e)),
+        };
+        
+        if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id_mint) {
+            tx.status = TransactionStatus::Success;
+        }
+
         let mut b_proofs = Vec::new();
         for ((sess, index), sig) in b_sess.iter().zip(b_sigs.iter()) {
             let amount = sig["amount"].as_u64().unwrap();
@@ -648,6 +741,14 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
         hub_proofs.extend(existing_proofs.drain(..));
     }
 
+    // Deduplicate proofs by secret to prevent "Duplicate inputs provided" if the user
+    // tries to redeem the same physical note multiple times while it's sitting in their wallet.
+    let mut unique = std::collections::HashMap::new();
+    for p in hub_proofs {
+        unique.insert(p.secret.clone(), p);
+    }
+    let mut hub_proofs: Vec<_> = unique.into_values().collect();
+
     for entry in &token.token[1..] {
         if entry.proofs.is_empty() { continue; }
         let amt: u64 = entry.proofs.iter().map(|p| p.amount).sum();
@@ -729,70 +830,100 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let total_hub_sats: u64 = hub_proofs.iter().map(|p| p.amount).sum();
     println!("Total consolidated proofs available at Hub: {} sats", total_hub_sats);
 
-    let payment_result = async {
-        let qv: serde_json::Value = hub_client.http.post(format!("{}/v1/melt/quote/bolt11", hub_client.url))
-            .json(&serde_json::json!({ "request": external_invoice, "unit": "sat" })).send().await?.json().await?;
-        if let Some(err) = qv.get("error") { return Err(anyhow!("Melt quote error: {}", err)); }
-        if let Some(err) = qv.get("detail") { return Err(anyhow!("Melt quote error (detail): {}", err)); }
+    let qv: serde_json::Value = hub_client.http.post(format!("{}/v1/melt/quote/bolt11", hub_client.url))
+        .json(&serde_json::json!({ "request": external_invoice, "unit": "sat" })).send().await?.json().await?;
+    if let Some(err) = qv.get("error") { return Err(anyhow!("Melt quote error: {}", err)); }
+    if let Some(err) = qv.get("detail") { return Err(anyhow!("Melt quote error (detail): {}", err)); }
 
-        let required_amt = qv["amount"].as_u64().unwrap_or(0);
-        let fee_reserve = qv["fee_reserve"].as_u64().unwrap_or(0);
-        println!("Mint requires: {} sats (amount) + {} sats (fee reserve) = {} sats", required_amt, fee_reserve, required_amt + fee_reserve);
+    let quote_id = qv["quote"].as_str().unwrap_or("").to_string();
+    let required_amt = qv["amount"].as_u64().unwrap_or(0);
+    let fee_reserve = qv["fee_reserve"].as_u64().unwrap_or(0);
+    println!("Mint requires: {} sats (amount) + {} sats (fee reserve) = {} sats", required_amt, fee_reserve, required_amt + fee_reserve);
 
-        if total_hub_sats < required_amt + fee_reserve {
-            return Err(anyhow!("Insufficient consolidated funds. Have {}, Need {}", total_hub_sats, required_amt + fee_reserve));
-        }
+    if total_hub_sats < required_amt + fee_reserve {
+        return Err(anyhow!("Insufficient consolidated funds. Have {}, Need {}", total_hub_sats, required_amt + fee_reserve));
+    }
 
-        let max_change = total_hub_sats.saturating_sub(required_amt);
-        let change_denoms = Amount::from_sat(max_change).split_into_powers_of_2();
-        let mut sessions = Vec::new();
-        let mut outputs = Vec::new();
-        for &d in &change_denoms {
-            let secret = deriv.next_secret();
-            let sess = BlindingSession::new(&secret);
-            outputs.push(serde_json::json!({"amount": d, "id": hub_keyset.id, "B_": sess.b_prime_hex()}));
-            sessions.push(sess);
-        }
+    let max_change = total_hub_sats.saturating_sub(required_amt);
+    let change_denoms = Amount::from_sat(max_change).split_into_powers_of_2();
+    let mut sessions = Vec::new();
+    let mut outputs = Vec::new();
+    for &d in &change_denoms {
+        let secret = deriv.next_secret();
+        let sess = BlindingSession::new(&secret);
+        outputs.push(serde_json::json!({"amount": d, "id": hub_keyset.id, "B_": sess.b_prime_hex()}));
+        sessions.push(sess);
+    }
 
-        let (paid, change_sigs) = hub_client.melt_tokens(&hub_proofs, external_invoice, None, Some(outputs)).await?;
+    // Save pending transaction and remove proofs from wallet balance immediately
+    let tx_id = format!("tx_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
+    let pending_tx = Transaction {
+        id: tx_id.clone(),
+        tx_type: TransactionType::Melt(MeltTransactionData {
+            quote_id: quote_id.clone(),
+            proofs: hub_proofs.clone(),
+        }),
+        amount: required_amt,
+        fee: fee_reserve,
+        status: TransactionStatus::Pending,
+        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        mint_url: hub_mint.clone(),
+    };
+    
+    state.transactions.push(pending_tx);
+    state.proofs.remove(&hub_mint.to_string());
+    state.save_encrypted(wallet_path, passphrase).ok();
 
-        let mut new_proofs = Vec::new();
-        for (sess, sig) in sessions.iter().zip(change_sigs.iter()) {
-            let amount = sig["amount"].as_u64().unwrap();
-            let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id);
-            let c_prime = point_from_hex(sig["C_"].as_str().unwrap()).unwrap();
-            let mint_pk = point_from_hex(hub_keyset.keys.get(&amount).unwrap()).unwrap();
-            let dleq = parse_dleq(sig);
-            let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
-            proof.derivation_index = deriv.index;
-            new_proofs.push(proof);
-        }
-        state.proofs.entry(hub_mint.to_string()).or_default().extend(new_proofs);
+    let melt_result = hub_client.melt_tokens(&hub_proofs, external_invoice, Some(&quote_id), Some(outputs)).await;
 
-        Ok((paid, required_amt))
-    }.await;
-
-    match payment_result {
-        Ok((true, amt)) => {
-            state.save_encrypted(wallet_path, passphrase).ok();
-            Ok(amt)
-        }
-        Ok((false, _)) => {
-            state.save_encrypted(wallet_path, passphrase).ok();
-            Err(anyhow!("Lightning Network payment failed. The mint tried to pay but couldn't find a route or the invoice expired. Your funds have been refunded to your wallet dashboard."))
-        }
+    let (paid, change_sigs) = match melt_result {
+        Ok(res) => res,
         Err(e) => {
+            // Do NOT refund proofs immediately on network error. Keep them in Pending state.
+            return Err(anyhow!("Payment might be stuck: {}. Your funds are safe but pending. Go to History and click Check Status to resolve it.", e));
+        }
+    };
+
+    let mut new_proofs = Vec::new();
+    for (sess, sig) in sessions.iter().zip(change_sigs.iter()) {
+        let amount = sig["amount"].as_u64().unwrap();
+        let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id);
+        let c_prime = point_from_hex(sig["C_"].as_str().unwrap()).unwrap();
+        let mint_pk = point_from_hex(hub_keyset.keys.get(&amount).unwrap()).unwrap();
+        let dleq = parse_dleq(sig);
+        let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
+        proof.derivation_index = deriv.index;
+        new_proofs.push(proof);
+    }
+    
+    if !new_proofs.is_empty() {
+        state.proofs.entry(hub_mint.to_string()).or_default().extend(new_proofs);
+    }
+
+    if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+        if paid {
+            tx.status = TransactionStatus::Success;
+        } else {
+            tx.status = TransactionStatus::Failed;
+            // The payment failed gracefully, so we can refund the original proofs
             state.proofs.entry(hub_mint.to_string()).or_default().extend(hub_proofs);
-            state.save_encrypted(wallet_path, passphrase).ok();
-            Err(anyhow!("{}\n(Your funds were safely routed to your local wallet dashboard. You can retry sending to Lightning from there).", e))
         }
     }
+
+    state.save_encrypted(wallet_path, passphrase).ok();
+
+    if !paid {
+        return Err(anyhow!("Lightning Network payment failed. The mint tried to pay but couldn't find a route or the invoice expired. Your funds have been refunded to your wallet dashboard."));
+    }
+
+    Ok(required_amt)
 }
 
 pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, invoice: &str) -> Result<u64> {
     let mut selected_mint = None;
     let mut required_amt = 0;
-    let mut fee_reserve;
+    let mut fee_reserve = 0;
+    let mut quote_id = String::new();
 
     for mint in state.proofs.keys() {
         let client = MintClient::new(mint);
@@ -804,6 +935,9 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
                 if qv.get("error").is_none() && qv.get("detail").is_none() {
                     required_amt = qv["amount"].as_u64().unwrap_or(0);
                     fee_reserve = qv["fee_reserve"].as_u64().unwrap_or(0);
+                    if let Some(q) = qv["quote"].as_str() {
+                        quote_id = q.to_string();
+                    }
 
                     let balance: u64 = state.proofs.get(mint).unwrap().iter().map(|p| p.amount).sum();
                     if balance >= required_amt + fee_reserve {
@@ -837,15 +971,36 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     }
 
     // Advance and persist the derivation index BEFORE calling melt.
-    // This ensures that if the mint signs our change outputs but the Lightning
-    // payment fails (or the process crashes), a retry will always generate
-    // fresh B_ blinding factors and never hit "outputs already signed".
     state.derivation_index = deriv.index;
+    
+    // Save pending transaction and remove proofs from wallet balance immediately
+    let tx_id = format!("tx_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
+    let pending_tx = Transaction {
+        id: tx_id.clone(),
+        tx_type: TransactionType::Melt(MeltTransactionData {
+            quote_id: quote_id.clone(),
+            proofs: hub_proofs.clone(),
+        }),
+        amount: required_amt,
+        fee: fee_reserve,
+        status: TransactionStatus::Pending,
+        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        mint_url: hub_mint.clone(),
+    };
+    
+    state.transactions.push(pending_tx);
+    state.proofs.remove(&hub_mint);
     state.save_encrypted(wallet_path, passphrase).ok();
 
-    let (paid, change_sigs) = hub_client.melt_tokens(&hub_proofs, invoice, None, Some(outputs)).await?;
-
-    state.proofs.remove(&hub_mint);
+    let melt_result = hub_client.melt_tokens(&hub_proofs, invoice, Some(&quote_id), Some(outputs)).await;
+    
+    let (paid, change_sigs) = match melt_result {
+        Ok(res) => res,
+        Err(e) => {
+            // Do NOT refund proofs immediately on network error. Keep them in Pending state.
+            return Err(anyhow!("Payment might be stuck: {}. Your funds are safe but pending. Go to History and click Check Status to resolve it.", e));
+        }
+    };
 
     let mut new_proofs = Vec::new();
     for (sess, sig) in sessions.iter().zip(change_sigs.iter()) {
@@ -860,7 +1015,17 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     }
 
     if !new_proofs.is_empty() {
-        state.proofs.insert(hub_mint.clone(), new_proofs);
+        state.proofs.entry(hub_mint.clone()).or_default().extend(new_proofs);
+    }
+
+    if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+        if paid {
+            tx.status = TransactionStatus::Success;
+        } else {
+            tx.status = TransactionStatus::Failed;
+            // The payment failed gracefully, so we can refund the original proofs
+            state.proofs.entry(hub_mint.clone()).or_default().extend(hub_proofs);
+        }
     }
 
     state.save_encrypted(wallet_path, passphrase).ok();
@@ -870,4 +1035,115 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     }
 
     Ok(required_amt)
+}
+
+// ─── Transaction History API ──────────────────────────────────────────────────
+
+pub async fn retry_mint(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, tx_id: &str) -> Result<()> {
+    let tx = state.transactions.iter().find(|t| t.id == tx_id)
+        .ok_or_else(|| anyhow!("Transaction not found"))?.clone();
+
+    if tx.status != TransactionStatus::Pending {
+        return Err(anyhow!("Transaction is not pending"));
+    }
+
+    let mint_data = match tx.tx_type {
+        TransactionType::Mint(data) => data,
+        _ => return Err(anyhow!("Not a mint transaction")),
+    };
+
+    let client = MintClient::new(&tx.mint_url);
+    let keyset = client.fetch_keyset().await?;
+    
+    let sigs = client.mint_tokens(&mint_data.quote_id, mint_data.outputs.clone()).await?;
+
+    let mut new_proofs = Vec::new();
+    for (secret_hex, sig) in mint_data.blinding_sessions_hex.iter().zip(sigs.iter()) {
+        let amount = sig["amount"].as_u64().unwrap();
+        let sig_id = sig["id"].as_str().unwrap_or(&keyset.id);
+        let c_prime = point_from_hex(sig["C_"].as_str().unwrap()).unwrap();
+        let mint_pk = point_from_hex(keyset.keys.get(&amount).unwrap()).unwrap();
+        let dleq = parse_dleq(sig);
+        
+        let sess = BlindingSession::new(&secret_hex);
+        let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
+        proof.derivation_index = 0; // Salvaged proofs go directly into wallet with index 0
+        new_proofs.push(proof);
+    }
+
+    state.proofs.entry(tx.mint_url.clone()).or_default().extend(new_proofs);
+    
+    if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+        t.status = TransactionStatus::Success;
+    }
+    
+    state.save_encrypted(wallet_path, passphrase)?;
+    
+    Ok(())
+}
+
+pub async fn check_melt_status(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, tx_id: &str) -> Result<TransactionStatus> {
+    let tx = state.transactions.iter().find(|t| t.id == tx_id)
+        .ok_or_else(|| anyhow!("Transaction not found"))?.clone();
+
+    if tx.status != TransactionStatus::Pending {
+        return Ok(tx.status);
+    }
+
+    let melt_data = match tx.tx_type {
+        TransactionType::Melt(data) => data,
+        _ => return Err(anyhow!("Not a melt transaction")),
+    };
+
+    let client = MintClient::new(&tx.mint_url);
+    
+    let mut ys = Vec::new();
+    for p in &melt_data.proofs {
+        let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()));
+        ys.push(y);
+    }
+
+    let states = client.check_state(&ys).await?;
+    
+    let mut any_spent_or_pending = false;
+    for state_str in states.values() {
+        if state_str == "SPENT" || state_str == "PENDING" {
+            any_spent_or_pending = true;
+            break;
+        }
+    }
+
+    let new_status = if any_spent_or_pending {
+        // The proofs are spent! Now we check if the lightning invoice was actually paid.
+        let qv_res = client.http.get(format!("{}/v1/melt/quote/bolt11/{}", client.url, melt_data.quote_id)).send().await;
+        let mut actually_paid = false;
+        
+        if let Ok(resp) = qv_res {
+            if let Ok(qv) = resp.json::<serde_json::Value>().await {
+                if qv["state"].as_str() == Some("PAID") {
+                    actually_paid = true;
+                }
+            }
+        }
+        
+        if actually_paid {
+            TransactionStatus::Success
+        } else {
+            TransactionStatus::FailedMintError // Mint took the proofs but failed to pay invoice!
+        }
+    } else {
+        TransactionStatus::Failed // Unspent, safely failed
+    };
+
+    if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+        t.status = new_status.clone();
+        
+        if new_status == TransactionStatus::Failed {
+            state.proofs.entry(t.mint_url.clone()).or_default().extend(melt_data.proofs.clone());
+        }
+    }
+
+    state.save_encrypted(wallet_path, passphrase)?;
+    
+    Ok(new_status)
 }

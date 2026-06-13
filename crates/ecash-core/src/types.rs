@@ -238,3 +238,50 @@ pub struct PhysicalNote {
     pub public_data: PublicNoteData,
     pub private_data: PrivateNoteData,
 }
+
+// ─── Transaction History ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TransactionStatus {
+    Pending,
+    Success,
+    Failed,
+    FailedMintError, // Proofs spent but invoice unpaid
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MintTransactionData {
+    pub quote_id: String,
+    pub outputs: Vec<serde_json::Value>,
+    /// We need the blinding sessions to unblind the tokens when retrying
+    pub blinding_sessions_hex: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeltTransactionData {
+    pub quote_id: String,
+    pub proofs: Vec<Proof>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueTransactionData {
+    pub note: PhysicalNote,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TransactionType {
+    Mint(MintTransactionData),
+    Melt(MeltTransactionData),
+    Issue(IssueTransactionData),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Transaction {
+    pub id: String,
+    pub tx_type: TransactionType,
+    pub amount: u64,
+    pub fee: u64,
+    pub status: TransactionStatus,
+    pub timestamp: u64,
+    pub mint_url: String,
+}
