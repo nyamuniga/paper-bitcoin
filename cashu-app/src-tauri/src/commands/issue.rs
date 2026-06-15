@@ -27,6 +27,7 @@ pub async fn issue_note(
     state: State<'_, AppState>,
     sats: u64,
     mint_urls: Vec<String>,
+    strategy: String,
 ) -> CommandResult<IssuedNote> {
     let path = WalletState::default_path().with_file_name("gui-wallet.json");
     
@@ -48,11 +49,17 @@ pub async fn issue_note(
         actual_allocs.push((url.as_str(), amt));
     }
 
+    let reserve_strat = match strategy.as_str() {
+        "dynamic" => ecash_wallet::ReserveStrategy::Dynamic,
+        _ => ecash_wallet::ReserveStrategy::Static,
+    };
+
     let note = ecash_wallet::issue_multimint_note(
         &mut w_state,
         &path,
         &passphrase,
         &actual_allocs,
+        reserve_strat,
         |hub_mint, invoice, total_sats| {
             let app_clone = app.clone();
             async move {

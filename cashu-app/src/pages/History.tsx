@@ -4,6 +4,7 @@ import { RefreshCw, AlertCircle, CheckCircle, XCircle, Download, FileText } from
 import { toast } from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
 import 'svg2pdf.js';
+import { useWalletStore } from '../store/wallet';
 
 interface Transaction {
   id: string;
@@ -18,6 +19,7 @@ interface Transaction {
 export default function History() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
   const fetchHistory = async () => {
     try {
@@ -40,6 +42,7 @@ export default function History() {
       await invoke('retry_mint', { txId });
       toast.success('Tokens minted safely!', { id: txId });
       fetchHistory();
+      await refreshWallet();
     } catch (e: any) {
       toast.error(e.toString(), { id: txId });
     }
@@ -58,6 +61,7 @@ export default function History() {
         toast.error('Mint seized proofs but did not pay the invoice!', { id: txId });
       }
       fetchHistory();
+      await refreshWallet();
     } catch (e: any) {
       toast.error(e.toString(), { id: txId });
     }

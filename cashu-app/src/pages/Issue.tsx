@@ -11,6 +11,7 @@ export const Issue = () => {
   const [sats, setSats] = useState<string>('');
   const [mintUrls, setMintUrls] = useState<string[]>([]);
   const [newMint, setNewMint] = useState<string>('');
+  const [strategy, setStrategy] = useState<'dynamic' | 'static'>('dynamic');
   const [loading, setLoading] = useState(false);
   const [invoicePayload, setInvoicePayload] = useState<any>(null);
   const [issuedNote, setIssuedNote] = useState<any>(null);
@@ -47,7 +48,7 @@ export const Issue = () => {
     addLog(`Calling issue_note with amt=${amt}, mintUrls=${mintUrls.join(', ')}`);
     
     try {
-      const res = await invoke('issue_note', { sats: amt, mintUrls: mintUrls });
+      const res = await invoke('issue_note', { sats: amt, mintUrls: mintUrls, strategy: strategy });
       addLog("issue_note resolved with: " + JSON.stringify(res));
       setIssuedNote(res);
       await refreshWallet();
@@ -202,6 +203,26 @@ export const Issue = () => {
           >
             Add
           </button>
+        </div>
+
+        <div className="mb-8">
+          <label className="block text-gray-400 text-sm mb-3">Fee Reserve Strategy</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div 
+              onClick={() => setStrategy('dynamic')}
+              className={`p-4 rounded-xl border cursor-pointer transition-colors ${strategy === 'dynamic' ? 'bg-primary/10 border-primary text-primary' : 'bg-surface-light border-gray-700 text-gray-400 hover:border-gray-500'}`}
+            >
+              <div className="font-bold mb-1">Dynamic (Cheaper)</div>
+              <div className="text-xs opacity-80">Best for immediate use. Data-driven estimates.</div>
+            </div>
+            <div 
+              onClick={() => setStrategy('static')}
+              className={`p-4 rounded-xl border cursor-pointer transition-colors ${strategy === 'static' ? 'bg-amber-500/10 border-amber-500 text-amber-500' : 'bg-surface-light border-gray-700 text-gray-400 hover:border-gray-500'}`}
+            >
+              <div className="font-bold mb-1">Static (Safer)</div>
+              <div className="text-xs opacity-80">Best for long-term cold storage.</div>
+            </div>
+          </div>
         </div>
         
         {error && <div className="text-red-400 text-sm mb-4">{error}</div>}
