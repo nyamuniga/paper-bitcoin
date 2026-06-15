@@ -294,6 +294,27 @@ pub fn validate_invoice(invoice: &str, expected_sats: Option<u64>) -> Result<u64
     Ok(amount.unwrap_or(0))
 }
 
+// ─── NUT-08 Change Output Generation ────────────────────────────────────────────
+
+/// Generate standard blank output denominations to receive change.
+/// In Cashu, to allow the mint to return ANY exact change amount up to max_change,
+/// we must provide blank outputs covering all powers of 2 (1, 2, 4, 8, ...) up to
+/// a sum that is >= max_change.
+fn generate_change_denoms(max_change: u64) -> Vec<u64> {
+    if max_change == 0 {
+        return Vec::new();
+    }
+    let mut denoms = Vec::new();
+    let mut current = 1;
+    let mut sum = 0;
+    while sum < max_change {
+        denoms.push(current);
+        sum += current;
+        current *= 2;
+    }
+    denoms
+}
+
 // ─── Mint Client (internal) ───────────────────────────────────────────────────
 
 struct MintClient {
@@ -447,11 +468,18 @@ fn serial_from_hash(hash: &str) -> String {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ReserveStrategy {
+    Static,
+    Dynamic,
+}
+
 pub async fn issue_multimint_note<F, Fut>(
     state: &mut WalletState,
     wallet_path: &PathBuf,
     passphrase: &str,
     allocations: &[(&str, u64)],
+    strategy: ReserveStrategy,
     on_invoice: F,
 ) -> Result<PhysicalNote>
 where
@@ -459,13 +487,31 @@ where
     Fut: std::future::Future<Output = ()>,
 {
     let hub_mint = allocations[0].0;
+    let hub_client = MintClient::new(hub_mint);
     let mut actual_allocations = Vec::new();
     let mut total_face_value = 0;
 
     for &(mint, face_val) in allocations {
         if face_val == 0 { continue; }
         total_face_value += face_val;
-        let reserve = std::cmp::max(10, face_val * 3 / 100); // 3% reserve
+        
+        let reserve = match strategy {
+            ReserveStrategy::Static => {
+                std::cmp::max(10, face_val * 3 / 100)
+            },
+            ReserveStrategy::Dynamic => {
+                let (_, dummy_inv) = hub_client.request_mint_quote(face_val).await?;
+                let (fee_est, _) = estimate_melt_fee(mint, &dummy_inv).await.unwrap_or((5, "".into()));
+                // Buffer = 1.5x fee + 5 sats, max 5%, min 2 sats
+                let buffer = std::cmp::max(5, fee_est / 2);
+                let dynamic_res = std::cmp::min(
+                    std::cmp::max(2, fee_est + buffer),
+                    std::cmp::max(10, face_val * 5 / 100) // max 5%
+                );
+                dynamic_res
+            }
+        };
+        
         actual_allocations.push((mint, face_val + reserve));
     }
 
@@ -480,7 +526,6 @@ where
         total_hub_needed += amt + fee;
     }
 
-    let hub_client = MintClient::new(hub_mint);
     let (hub_qid, hub_inv) = hub_client.request_mint_quote(total_hub_needed).await?;
 
     on_invoice(hub_mint.to_string(), hub_inv, total_hub_needed).await;
@@ -677,6 +722,10 @@ where
         serial,
         validation_hash: validation_hash.clone(),
         issued_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        fee_strategy: match strategy {
+            ReserveStrategy::Static => "static".to_string(),
+            ReserveStrategy::Dynamic => "dynamic".to_string(),
+        },
         public_data: PublicNoteData {
             entries: public_entries,
             validation_hash: validation_hash.clone(),
@@ -767,7 +816,7 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
         let entry_client = MintClient::new(&entry.mint);
         let entry_keyset = entry_client.fetch_keyset().await?;
         
-        let change_denoms = ecash_core::Amount::from_sat(safe_fee).split_into_powers_of_2();
+        let change_denoms = generate_change_denoms(safe_fee);
         let mut change_sessions = Vec::new();
         let mut change_outputs = Vec::new();
         
@@ -845,7 +894,7 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
     }
 
     let max_change = total_hub_sats.saturating_sub(required_amt);
-    let change_denoms = Amount::from_sat(max_change).split_into_powers_of_2();
+    let change_denoms = generate_change_denoms(max_change);
     let mut sessions = Vec::new();
     let mut outputs = Vec::new();
     for &d in &change_denoms {
@@ -924,6 +973,7 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let mut required_amt = 0;
     let mut fee_reserve = 0;
     let mut quote_id = String::new();
+    let mut mint_errors = Vec::new();
 
     for mint in state.proofs.keys() {
         let client = MintClient::new(mint);
@@ -943,13 +993,22 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
                     if balance >= required_amt + fee_reserve {
                         selected_mint = Some(mint.clone());
                         break;
+                    } else {
+                        mint_errors.push(format!("{}: Insufficient balance (Have {}, Need {})", mint, balance, required_amt + fee_reserve));
                     }
+                } else {
+                    let err_msg = qv.get("error").or(qv.get("detail")).and_then(|v| v.as_str()).unwrap_or("Unknown error");
+                    mint_errors.push(format!("{}: {}", mint, err_msg));
                 }
+            } else {
+                mint_errors.push(format!("{}: Invalid JSON response", mint));
             }
+        } else {
+            mint_errors.push(format!("{}: Network error", mint));
         }
     }
 
-    let hub_mint = selected_mint.ok_or_else(|| anyhow!("No single mint in your wallet has enough balance to pay this invoice."))?;
+    let hub_mint = selected_mint.ok_or_else(|| anyhow!("Payment failed.\n{}", mint_errors.join("\n")))?;
     let hub_proofs = state.proofs.get(&hub_mint).unwrap().clone();
     let hub_client = MintClient::new(&hub_mint);
     let hub_keyset = hub_client.fetch_keyset().await?;
@@ -959,7 +1018,7 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
 
     let total_hub_sats: u64 = hub_proofs.iter().map(|p| p.amount).sum();
     let max_change = total_hub_sats.saturating_sub(required_amt);
-    let change_denoms = Amount::from_sat(max_change).split_into_powers_of_2();
+    let change_denoms = generate_change_denoms(max_change);
 
     let mut sessions = Vec::new();
     let mut outputs = Vec::new();

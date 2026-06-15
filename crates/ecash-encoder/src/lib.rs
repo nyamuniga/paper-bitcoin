@@ -55,6 +55,7 @@ pub fn generate_note_svg(note: &PhysicalNote) -> String {
         hash_short,
         &pub_qr,
         &priv_qr,
+        &note.fee_strategy,
     )
 }
 
@@ -149,7 +150,14 @@ fn build_svg(
     hash_short: &str,
     pub_qr: &str,
     priv_qr: &str,
+    fee_strategy: &str,
 ) -> String {
+    let (c1, c2) = if fee_strategy == "static" {
+        ("#1e3a8a", "#172554") // Deep Navy Blue for long-term safe storage
+    } else {
+        ("#064e3b", "#022c22") // Emerald Green for dynamic/short-term cash
+    };
+
     format!(
         r##"<?xml version="1.0" encoding="UTF-8"?>
 <svg width="920" height="420" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
@@ -172,9 +180,9 @@ fn build_svg(
     <circle cx="20" cy="20" r="10" fill="none" stroke="rgba(217, 119, 6, 0.05)" stroke-width="1"/>
   </pattern>
   <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-    <stop offset="0%" stop-color="#064e3b" />
-    <stop offset="50%" stop-color="#022c22" />
-    <stop offset="100%" stop-color="#064e3b" />
+    <stop offset="0%" stop-color="{c1}" />
+    <stop offset="50%" stop-color="{c2}" />
+    <stop offset="100%" stop-color="{c1}" />
   </linearGradient>
 </defs>
 
@@ -259,5 +267,7 @@ fn build_svg(
         hash_short = hash_short,
         pub_qr = pub_qr,
         priv_qr = priv_qr,
+        c1 = c1,
+        c2 = c2,
     )
 }

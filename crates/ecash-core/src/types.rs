@@ -234,6 +234,9 @@ pub struct PhysicalNote {
     pub validation_hash: String,
     /// Unix timestamp of issuance.
     pub issued_at: u64,
+    /// Strategy used for the fee reserve ('static' or 'dynamic').
+    #[serde(default)]
+    pub fee_strategy: String,
     /// Publicly visible data (outside the seal).
     pub public_data: PublicNoteData,
     pub private_data: PrivateNoteData,
