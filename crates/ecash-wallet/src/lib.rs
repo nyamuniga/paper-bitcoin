@@ -633,18 +633,13 @@ pub enum ReserveStrategy {
     Dynamic,
 }
 
-pub async fn issue_multimint_note<F, Fut>(
+pub async fn prepare_issue_multimint_note(
     state: &mut WalletState,
     wallet_path: &PathBuf,
     passphrase: &str,
     allocations: &[(&str, u64)],
     strategy: ReserveStrategy,
-    on_invoice: F,
-) -> Result<PhysicalNote>
-where
-    F: FnOnce(String, String, u64) -> Fut,
-    Fut: std::future::Future<Output = ()>,
-{
+) -> Result<(String, String, String, u64)> {
     let hub_mint = allocations[0].0;
     let hub_client = MintClient::new(hub_mint);
     let mut actual_allocations = Vec::new();
@@ -655,27 +650,15 @@ where
         total_face_value += face_val;
         
         let reserve = match strategy {
-            ReserveStrategy::Static => {
-                std::cmp::max(10, face_val * 3 / 100)
-            },
+            ReserveStrategy::Static => std::cmp::max(10, face_val * 3 / 100),
             ReserveStrategy::Dynamic => {
                 let fee_est = estimate_routing_fee_from_info(mint, face_val).await;
-                
-                // Buffer = max(5 sats, 0.5 × estimated_fee)
                 let buffer = std::cmp::max(5, fee_est / 2);
-                
-                let min_reserve = 10; // Mint APIs hard-reject external melt quotes below 10 sats
-                let max_reserve = std::cmp::max(10, face_val * 5 / 100); // 5% max
-                
-                let dynamic_res = std::cmp::min(
-                    std::cmp::max(min_reserve, fee_est + buffer),
-                    max_reserve
-                );
-                
-                dynamic_res
+                let min_reserve = 10;
+                let max_reserve = std::cmp::max(10, face_val * 5 / 100);
+                std::cmp::min(std::cmp::max(min_reserve, fee_est + buffer), max_reserve)
             }
         };
-        
         actual_allocations.push((mint, face_val + reserve));
     }
 
@@ -692,14 +675,8 @@ where
 
     let (hub_qid, hub_inv) = hub_client.request_mint_quote(total_hub_needed).await?;
 
-    on_invoice(hub_mint.to_string(), hub_inv, total_hub_needed).await;
-    hub_client.wait_for_quote_paid(&hub_qid).await?;
-
     let hub_keyset = hub_client.fetch_keyset().await?;
-
     state.trusted_keys.insert(hub_mint.to_string(), hub_keyset.keys.clone());
-
-    // Generate a unique seed for this physical note
     let (mut note_deriv, note_seed_hex) = TokenDerivation::generate();
 
     let mut hub_denoms = Amount::from_sat(actual_allocations[0].1).split_into_powers_of_2();
@@ -720,55 +697,105 @@ where
     let tx_id = format!("tx_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
     let pending_tx = Transaction {
         id: tx_id.clone(),
-        tx_type: TransactionType::Mint(MintTransactionData {
+        tx_type: TransactionType::Issue(ecash_core::types::IssueTransactionData {
+            note: None,
+            allocations: actual_allocations.iter().map(|(m, a)| (m.to_string(), *a)).collect(),
+            hub_mint: hub_mint.to_string(),
             quote_id: hub_qid.clone(),
-            outputs: outputs.clone(),
-            blinding_sessions_hex: sessions.iter().map(|(s, _)| s.secret.clone()).collect(),
+            master_seed_hex: note_seed_hex,
+            fee_strategy: match strategy {
+                ReserveStrategy::Static => "static".to_string(),
+                ReserveStrategy::Dynamic => "dynamic".to_string(),
+            },
+            hub_blinding_sessions_hex: sessions.iter().map(|(s, _)| s.secret.clone()).collect(),
+            hub_outputs: outputs.clone(),
+            child_quotes: other_quotes,
         }),
-        amount: total_hub_needed,
-        fee: 0,
+        amount: total_face_value,
+        fee: total_hub_needed - total_face_value,
         status: TransactionStatus::Pending,
         timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-        mint_url: hub_mint.to_string(),
+        mint_url: "Local Wallet".to_string(),
     };
     state.transactions.push(pending_tx);
     state.save_encrypted(wallet_path, passphrase)?;
 
-    let sigs = match hub_client.mint_tokens(&hub_qid, outputs).await {
+    Ok((tx_id, hub_mint.to_string(), hub_inv, total_hub_needed))
+}
+
+pub async fn resume_issue_note(
+    state: &mut WalletState,
+    wallet_path: &PathBuf,
+    passphrase: &str,
+    tx_id: &str,
+) -> Result<PhysicalNote> {
+    let (issue_data, original_amount) = {
+        let tx = state.transactions.iter().find(|t| t.id == tx_id).ok_or_else(|| anyhow!("Tx not found"))?;
+        if tx.status == TransactionStatus::Success {
+            if let TransactionType::Issue(data) = &tx.tx_type {
+                if let Some(note) = &data.note {
+                    return Ok(note.clone());
+                }
+            }
+        }
+        if let TransactionType::Issue(data) = &tx.tx_type {
+            (data.clone(), tx.amount)
+        } else {
+            return Err(anyhow!("Not an issue tx"));
+        }
+    };
+
+    let hub_client = MintClient::new(&issue_data.hub_mint);
+    
+    let check_url = format!("{}/v1/mint/quote/bolt11/{}", hub_client.url, issue_data.quote_id);
+    let is_paid = match hub_client.http.get(&check_url).send().await {
+        Ok(resp) => {
+            if let Ok(check) = resp.json::<serde_json::Value>().await {
+                check.get("state").and_then(|s| s.as_str()) == Some("PAID")
+            } else { false }
+        },
+        Err(_) => false,
+    };
+    
+    if !is_paid {
+        return Err(anyhow!("Invoice is not paid yet."));
+    }
+
+    let hub_keyset = hub_client.fetch_keyset().await?;
+    let sigs = match hub_client.mint_tokens(&issue_data.quote_id, issue_data.hub_outputs.clone()).await {
         Ok(s) => s,
         Err(e) => return Err(anyhow!("Mint error on Hub, but your payment is safe. Go to History to retry minting. Error: {}", e)),
     };
-    
-    if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
-        tx.status = TransactionStatus::Success;
-    }
 
     let mut hub_all_proofs = Vec::new();
-    for ((sess, index), sig) in sessions.iter().zip(sigs.iter()) {
+    let mut note_deriv = TokenDerivation::from_hex(&issue_data.master_seed_hex)?;
+    for (secret_hex, sig) in issue_data.hub_blinding_sessions_hex.iter().zip(sigs.iter()) {
+        let sess = BlindingSession::new(secret_hex);
+        let index = note_deriv.index;
+        note_deriv.next_secret(); // advance index just like we did originally
         let amount = sig["amount"].as_u64().unwrap();
         let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id);
         let c_prime = point_from_hex(sig["C_"].as_str().unwrap()).unwrap();
         let mint_pk = point_from_hex(hub_keyset.keys.get(&amount).unwrap()).unwrap();
         let dleq = parse_dleq(sig);
         let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
-        proof.derivation_index = *index;
+        proof.derivation_index = index;
         hub_all_proofs.push(proof);
     }
 
-    // ── 1. Save Hub tokens to wallet immediately to prevent loss ──
-    state.proofs.entry(hub_mint.to_string()).or_default().extend(hub_all_proofs.clone());
-    if !state.mints.contains(&hub_mint.to_string()) { state.mints.push(hub_mint.to_string()); }
+    state.proofs.entry(issue_data.hub_mint.clone()).or_default().extend(hub_all_proofs.clone());
+    if !state.mints.contains(&issue_data.hub_mint) { state.mints.push(issue_data.hub_mint.clone()); }
     state.save_encrypted(wallet_path, passphrase)?;
 
     let mut entries = Vec::new();
     let mut proofs_idx = 0;
 
-    let hub_main_len = Amount::from_sat(actual_allocations[0].1).split_into_powers_of_2().len();
+    let hub_main_len = Amount::from_sat(issue_data.allocations[0].1).split_into_powers_of_2().len();
     let hub_main_proofs = hub_all_proofs[0..hub_main_len].to_vec();
-    entries.push(TokenEntry { mint: hub_mint.to_string(), proofs: hub_main_proofs });
+    entries.push(TokenEntry { mint: issue_data.hub_mint.clone(), proofs: hub_main_proofs });
     proofs_idx += hub_main_len;
 
-    for (mint, amt, qid, inv, fee) in &other_quotes {
+    for (mint, amt, qid, inv, fee) in &issue_data.child_quotes {
         let subset_len = Amount::from_sat(amt + fee).split_into_powers_of_2().len();
         let melt_proofs = hub_all_proofs[proofs_idx..proofs_idx + subset_len].to_vec();
         proofs_idx += subset_len;
@@ -784,12 +811,11 @@ where
             fee: *fee,
             status: TransactionStatus::Pending,
             timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-            mint_url: hub_mint.to_string(),
+            mint_url: issue_data.hub_mint.clone(),
         };
         state.transactions.push(pending_melt_tx);
         
-        // ── 2. Remove melted tokens from state immediately ──
-        if let Some(hub_proofs) = state.proofs.get_mut(hub_mint) {
+        if let Some(hub_proofs) = state.proofs.get_mut(&issue_data.hub_mint) {
             hub_proofs.retain(|p| !melt_proofs.iter().any(|mp| mp.id == p.id && mp.secret == p.secret));
         }
         state.save_encrypted(wallet_path, passphrase)?;
@@ -798,17 +824,13 @@ where
         if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id_melt) {
             match melt_res {
                 Ok(_) => tx.status = TransactionStatus::Success,
-                Err(e) => {
-                    return Err(anyhow!("Melt error during issuance: {}. Check History.", e));
-                }
+                Err(e) => return Err(anyhow!("Melt error during issuance: {}. Check History.", e)),
             }
         }
         state.save_encrypted(wallet_path, passphrase)?;
 
         let client = MintClient::new(mint);
         let keyset = client.fetch_keyset().await?;
-        // Cache child mint keys in trusted_keys
-
         state.trusted_keys.insert(mint.to_string(), keyset.keys.clone());
         let denoms = Amount::from_sat(*amt).split_into_powers_of_2();
 
@@ -822,31 +844,10 @@ where
             b_sess.push((sess, index));
         }
 
-        let tx_id_mint = format!("tx_mint_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
-        let pending_mint_tx = Transaction {
-            id: tx_id_mint.clone(),
-            tx_type: TransactionType::Mint(MintTransactionData {
-                quote_id: qid.clone(),
-                outputs: b_out.clone(),
-                blinding_sessions_hex: b_sess.iter().map(|(s, _)| s.secret.clone()).collect(),
-            }),
-            amount: *amt,
-            fee: 0,
-            status: TransactionStatus::Pending,
-            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-            mint_url: mint.to_string(),
-        };
-        state.transactions.push(pending_mint_tx);
-        state.save_encrypted(wallet_path, passphrase)?;
-
         let b_sigs = match client.mint_tokens(qid, b_out).await {
             Ok(s) => s,
             Err(e) => return Err(anyhow!("Child mint error. Your funds are at the mint. Check History to retry. Error: {}", e)),
         };
-        
-        if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id_mint) {
-            tx.status = TransactionStatus::Success;
-        }
 
         let mut b_proofs = Vec::new();
         for ((sess, index), sig) in b_sess.iter().zip(b_sigs.iter()) {
@@ -860,7 +861,6 @@ where
             b_proofs.push(proof);
         }
 
-        // ── 3. Save newly minted tokens to state immediately ──
         state.proofs.entry(mint.to_string()).or_default().extend(b_proofs.clone());
         if !state.mints.contains(&mint.to_string()) { state.mints.push(mint.to_string()); }
         state.save_encrypted(wallet_path, passphrase)?;
@@ -868,7 +868,6 @@ where
         entries.push(TokenEntry { mint: mint.to_string(), proofs: b_proofs });
     }
 
-    // ── 4. Remove all tokens from wallet since they move to the physical note ──
     for entry in &entries {
         if let Some(state_proofs) = state.proofs.get_mut(&entry.mint) {
             state_proofs.retain(|p| !entry.proofs.iter().any(|ep| ep.id == p.id && ep.secret == p.secret));
@@ -880,24 +879,63 @@ where
     let validation_hash = compute_validation_hash(&public_entries);
     let serial = serial_from_hash(&validation_hash);
 
-    Ok(PhysicalNote {
-        amount_sats: total_face_value,
-        mint_urls: actual_allocations.iter().map(|a| a.0.to_string()).collect(),
+    let note = PhysicalNote {
+        amount_sats: original_amount,
+        mint_urls: issue_data.allocations.iter().map(|a| a.0.to_string()).collect(),
         serial,
         validation_hash: validation_hash.clone(),
         issued_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-        fee_strategy: match strategy {
-            ReserveStrategy::Static => "static".to_string(),
-            ReserveStrategy::Dynamic => "dynamic".to_string(),
-        },
+        fee_strategy: issue_data.fee_strategy.clone(),
         public_data: PublicNoteData {
             entries: public_entries,
             validation_hash: validation_hash.clone(),
-            face_value_sats: total_face_value,
+            face_value_sats: original_amount,
         },
-        private_data: PrivateNoteData { master_seed_hex: note_seed_hex },
-    })
+        private_data: PrivateNoteData { master_seed_hex: issue_data.master_seed_hex.clone() },
+    };
+
+    if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+        tx.status = TransactionStatus::Success;
+        if let TransactionType::Issue(data) = &mut tx.tx_type {
+            data.note = Some(note.clone());
+        }
+    }
+    state.save_encrypted(wallet_path, passphrase)?;
+
+    Ok(note)
 }
+
+pub async fn issue_multimint_note<F, Fut>(
+    state: &mut WalletState,
+    wallet_path: &PathBuf,
+    passphrase: &str,
+    allocations: &[(&str, u64)],
+    strategy: ReserveStrategy,
+    on_invoice: F,
+) -> Result<PhysicalNote>
+where
+    F: FnOnce(String, String, u64) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let (tx_id, hub_mint, inv, total) = prepare_issue_multimint_note(state, wallet_path, passphrase, allocations, strategy).await?;
+    on_invoice(hub_mint.clone(), inv, total).await;
+    
+    let hub_client = MintClient::new(&hub_mint);
+    
+    let quote_id = if let Some(tx) = state.transactions.iter().find(|t| t.id == tx_id) {
+        if let TransactionType::Issue(data) = &tx.tx_type {
+            data.quote_id.clone()
+        } else {
+            return Err(anyhow!("Invalid tx type"));
+        }
+    } else {
+        return Err(anyhow!("Tx not found"));
+    };
+
+    hub_client.wait_for_quote_paid(&quote_id).await?;
+    resume_issue_note(state, wallet_path, passphrase, &tx_id).await
+}
+
 
 pub async fn reconstruct_token(public_data: &ecash_core::types::PublicNoteData, master_seed_hex: &str) -> Result<CashuToken> {
     let mut entries = Vec::new();
@@ -938,8 +976,29 @@ pub async fn reconstruct_token(public_data: &ecash_core::types::PublicNoteData, 
 }
 
 pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, public_data: &ecash_core::types::PublicNoteData, master_seed_hex: &str, external_invoice: &str) -> Result<u64> {
+    let redeem_tx_id = format!("tx_redeem_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
+    let pending_tx = Transaction {
+        id: redeem_tx_id.clone(),
+        tx_type: TransactionType::Redeem(ecash_core::types::RedeemTransactionData {
+            public_data: public_data.clone(),
+            master_seed_hex: master_seed_hex.to_string(),
+            external_invoice: external_invoice.to_string(),
+        }),
+        amount: public_data.face_value_sats,
+        fee: 0,
+        status: TransactionStatus::Pending,
+        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        mint_url: "Local Wallet".to_string(),
+    };
+    state.transactions.push(pending_tx);
+    state.save_encrypted(wallet_path, passphrase)?;
+
     let token = reconstruct_token(public_data, master_seed_hex).await?;
-    if token.token.is_empty() { return Err(anyhow!("Empty token")); }
+    if token.token.is_empty() { 
+        if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == redeem_tx_id) { tx.status = TransactionStatus::Failed; }
+        state.save_encrypted(wallet_path, passphrase).ok();
+        return Err(anyhow!("Empty token")); 
+    }
 
     let hub_mint = &token.token[0].mint;
     let hub_client = MintClient::new(hub_mint);
@@ -1132,6 +1191,15 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
             tx.status = TransactionStatus::Failed;
             // The payment failed gracefully, so we can refund the original proofs
             state.proofs.entry(hub_mint.to_string()).or_default().extend(hub_proofs);
+        }
+    }
+
+    // Also mark the top-level Redeem transaction
+    if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == redeem_tx_id) {
+        if paid {
+            tx.status = TransactionStatus::Success;
+        } else {
+            tx.status = TransactionStatus::Failed;
         }
     }
 

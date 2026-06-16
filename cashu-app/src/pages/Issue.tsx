@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import { useWalletStore } from '../store/wallet';
 import { CheckCircle, Loader2, X } from 'lucide-react';
 import QRCode from 'react-qr-code';
@@ -13,6 +12,7 @@ export const Issue = () => {
   const [loading, setLoading] = useState(false);
   const [invoicePayload, setInvoicePayload] = useState<any>(null);
   const [issuedNote, setIssuedNote] = useState<any>(null);
+  const [pollTrigger, setPollTrigger] = useState(0);
   const [error, setError] = useState<string>('');
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -24,14 +24,7 @@ export const Issue = () => {
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
   useEffect(() => {
-    addLog("Registering invoice-ready listener...");
-    const unlisten = listen('invoice-ready', (event: any) => {
-      addLog("Received invoice-ready event: " + JSON.stringify(event.payload));
-      setInvoicePayload(event.payload);
-    });
-    return () => {
-      unlisten.then(f => f());
-    };
+    // invoice-ready listener removed as we return the payload directly now
   }, []);
 
   const handleIssue = async () => {
@@ -47,14 +40,56 @@ export const Issue = () => {
     
     try {
       const res = await invoke('issue_note', { sats: amt, mintUrls: mintUrls, strategy: strategy });
-      addLog("issue_note resolved with: " + JSON.stringify(res));
-      setIssuedNote(res);
+      addLog("issue_note resolved with PendingIssue: " + JSON.stringify(res));
+      setInvoicePayload(res); // PendingIssue matches invoice payload mostly, plus tx_id
       await refreshWallet();
     } catch (e: any) {
       addLog("issue_note failed: " + String(e));
       setError(e.toString());
     }
     setLoading(false);
+  };
+
+  useEffect(() => {
+    if (!invoicePayload || !invoicePayload.tx_id || issuedNote) return;
+
+    let timeoutId: any;
+    let isPolling = true;
+
+    const pollStatus = async () => {
+      if (!isPolling) return;
+      try {
+        const res = await invoke('check_issue_status', { txId: invoicePayload.tx_id });
+        addLog("check_issue_status returned success!");
+        setIssuedNote(res);
+        setInvoicePayload(null);
+        await refreshWallet();
+      } catch (e: any) {
+        if (e.toString().includes('not paid yet')) {
+          // Poll again in 2 seconds
+          timeoutId = setTimeout(pollStatus, 2000);
+        } else {
+          addLog("check_issue_status error: " + e.toString());
+          setError("Status check failed. " + e.toString());
+          setLoading(false);
+        }
+      }
+    };
+
+    pollStatus();
+
+    return () => {
+      isPolling = false;
+      clearTimeout(timeoutId);
+    };
+  }, [invoicePayload, issuedNote, refreshWallet, pollTrigger]);
+
+  const handleCheckStatus = () => {
+    if (!invoicePayload) return;
+    setLoading(true);
+    setError('');
+    addLog("Restarting background polling...");
+    setPollTrigger(p => p + 1);
   };
 
   const handlePayFromWallet = async () => {
@@ -170,6 +205,10 @@ export const Issue = () => {
             ) : (
               <div className="text-error text-sm mt-4 bg-error/10 py-3 px-4 rounded-lg border border-error/20 w-full max-w-md font-label-caps text-label-caps">Insufficient wallet balance to auto-pay</div>
             )}
+            
+            <button onClick={handleCheckStatus} disabled={loading} className="w-full max-w-md bg-primary/20 text-primary font-bold py-4 rounded-full text-lg flex justify-center items-center hover:bg-primary/30 transition-colors border border-primary/30 disabled:opacity-50 mt-2">
+              {loading ? <Loader2 className="animate-spin w-6 h-6" /> : 'Check Payment Status'}
+            </button>
             
             {loading && <div className="mt-4 text-sm text-on-surface-variant flex items-center justify-center font-label-caps text-label-caps"><Loader2 className="animate-spin w-4 h-4 mr-2" /> Waiting for payment...</div>}
             

@@ -42,6 +42,7 @@ pub fn run() {
             commands::history::retry_mint,
             commands::history::check_melt_status,
             commands::history::get_note_svg,
+            commands::history::check_issue_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -268,7 +268,32 @@ pub struct MeltTransactionData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IssueTransactionData {
-    pub note: PhysicalNote,
+    pub note: Option<PhysicalNote>,
+    #[serde(default)]
+    pub allocations: Vec<(String, u64)>, // (mint_url, amount)
+    #[serde(default)]
+    pub hub_mint: String,
+    #[serde(default)]
+    pub quote_id: String,
+    #[serde(default)]
+    pub master_seed_hex: String,
+    #[serde(default)]
+    pub fee_strategy: String,
+    // Store necessary blinding secrets to resume the issuance if interrupted
+    #[serde(default)]
+    pub hub_blinding_sessions_hex: Vec<String>,
+    #[serde(default)]
+    pub hub_outputs: Vec<serde_json::Value>,
+    // Store child mint quotes: (mint, amt, qid, inv, fee)
+    #[serde(default)]
+    pub child_quotes: Vec<(String, u64, String, String, u64)>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RedeemTransactionData {
+    pub public_data: PublicNoteData,
+    pub master_seed_hex: String,
+    pub external_invoice: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -276,6 +301,7 @@ pub enum TransactionType {
     Mint(MintTransactionData),
     Melt(MeltTransactionData),
     Issue(IssueTransactionData),
+    Redeem(RedeemTransactionData),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

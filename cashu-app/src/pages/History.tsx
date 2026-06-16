@@ -65,6 +65,18 @@ export default function History() {
     }
   };
 
+  const handleCheckIssue = async (txId: string) => {
+    toast.loading('Checking issuance status...', { id: txId });
+    try {
+      await invoke('check_issue_status', { txId });
+      toast.success('Note issued successfully!', { id: txId });
+      fetchHistory();
+      refreshWallet();
+    } catch (e: any) {
+      toast.error(`Status: ${e}`, { id: txId });
+    }
+  };
+
   const handleDownloadNote = async (txId: string, amount: number, serial?: string) => {
     try {
       toast.loading('Generating PDF...', { id: txId });
@@ -126,6 +138,7 @@ export default function History() {
             const isMint = 'Mint' in tx.tx_type;
             const isIssue = 'Issue' in tx.tx_type;
             const isMelt = 'Melt' in tx.tx_type;
+            const isRedeem = 'Redeem' in tx.tx_type;
             const quoteId = isMint ? tx.tx_type.Mint.quote_id : (isMelt ? tx.tx_type.Melt.quote_id : '');
 
             return (
@@ -143,15 +156,17 @@ export default function History() {
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
                         isMint ? 'bg-emerald-900/30 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 
                         isIssue ? 'bg-primary-container/20 border-primary/20' : 
+                        isRedeem ? 'bg-amber-500/20 border-amber-500/20' :
                         'bg-error-container/20 border-error/20'
                       }`}>
                         {isMint ? <ArrowDown className="text-emerald-400 w-4 h-4" /> : 
                          isIssue ? <FileText className="text-primary w-4 h-4" /> : 
+                         isRedeem ? <ArrowDown className="text-amber-400 w-4 h-4" /> :
                          <ArrowUp className="text-error w-4 h-4" />}
                       </div>
                       <div>
                         <h3 className="text-body-md font-body-md font-semibold text-on-surface">
-                          {isMint ? 'Received / Mint' : isIssue ? 'Issued Note' : 'Sent / Melt'}
+                          {isMint ? 'Received / Mint' : isIssue ? 'Issued Note' : isRedeem ? 'Redeemed Note' : 'Sent / Melt'}
                         </h3>
                         <p className="text-label-caps font-label-caps text-on-surface-variant mt-1 max-w-[200px] truncate" title={tx.mint_url}>
                           {tx.mint_url || 'Local Wallet'}
@@ -159,8 +174,8 @@ export default function History() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className={`text-body-md font-body-md font-bold block ${isMint ? 'text-emerald-400' : isIssue ? 'text-primary' : 'text-on-surface'}`}>
-                        {isMint ? '+' : isIssue ? '' : '-'}{tx.amount} sats
+                      <span className={`text-body-md font-body-md font-bold block ${isMint || isRedeem ? 'text-emerald-400' : isIssue ? 'text-primary' : 'text-on-surface'}`}>
+                        {isMint || isRedeem ? '+' : isIssue ? '' : '-'}{tx.amount} sats
                       </span>
                       {tx.fee > 0 && <span className="text-label-caps font-label-caps text-on-surface-variant mt-1 block">Fee: {tx.fee} sats</span>}
                     </div>
@@ -198,6 +213,10 @@ export default function History() {
                         {isMint ? (
                           <button onClick={() => handleRetryMint(tx.id)} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-teal-500/20 text-teal-400 hover:bg-teal-500/30 transition-colors border border-teal-500/30 text-label-caps font-label-caps">
                             Retry Mint
+                          </button>
+                        ) : isIssue ? (
+                          <button onClick={() => handleCheckIssue(tx.id)} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors border border-primary/30 text-label-caps font-label-caps">
+                            Check Status & Resume
                           </button>
                         ) : (
                           <button onClick={() => handleCheckMelt(tx.id)} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors border border-amber-500/30 text-label-caps font-label-caps">
