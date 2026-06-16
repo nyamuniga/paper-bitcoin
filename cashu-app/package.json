@@ -1,5 +1,5 @@
 {
-  "name": "cashu-app",
+  "name": "bitnotes",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,6 +12,8 @@
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-biometric": "^2.3.2",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-stronghold": "^2.3.1",
     "@yudiel/react-qr-scanner": "^2.6.0",

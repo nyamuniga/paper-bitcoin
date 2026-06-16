@@ -7,9 +7,9 @@ use crate::commands::auth::AppState;
 #[tauri::command]
 pub async fn redeem_note(bin_b64: String, invoice: String, state: State<'_, AppState>) -> CommandResult<bool> {
     let bin_data = crate::utils::decode_qr_payload(&bin_b64).map_err(|e| anyhow::anyhow!("Invalid QR payload: {}", e))?;
-    let note: ecash_core::types::PhysicalNote = bincode::deserialize(&bin_data).map_err(|e| anyhow::anyhow!("Bincode error: {}", e))?;
+    let note = ecash_core::compact::decode_full_note(&bin_data).map_err(|e| anyhow::anyhow!("Decode error: {}", e))?;
 
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+    let path = state.wallet_path.clone();
     
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();

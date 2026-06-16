@@ -29,7 +29,7 @@ pub async fn issue_note(
     mint_urls: Vec<String>,
     strategy: String,
 ) -> CommandResult<IssuedNote> {
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+    let path = state.wallet_path.clone();
     
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();
@@ -38,8 +38,6 @@ pub async fn issue_note(
 
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
 
-    let allocations: Vec<(&str, u64)> = mint_urls.iter().map(|u| (u.as_str(), sats / mint_urls.len() as u64)).collect();
-    
     // We need to handle the remainder if sats is not perfectly divisible by the number of mints
     let mut actual_allocs = Vec::new();
     let per_mint = sats / mint_urls.len() as u64;
@@ -73,7 +71,7 @@ pub async fn issue_note(
     )
     .await?;
 
-    let bin_data = bincode::serialize(&note).map_err(|e| anyhow::anyhow!("Bincode error: {}", e))?;
+    let bin_data = ecash_core::compact::encode_full_note(&note);
     use base64::Engine;
     let bin_b64 = base64::engine::general_purpose::STANDARD.encode(&bin_data);
     let serial = note.serial.chars().take(8).collect::<String>();
@@ -106,14 +104,40 @@ pub async fn issue_note(
 }
 
 #[tauri::command]
-pub async fn save_file_to_disk(base64_data: String, filename: String) -> CommandResult<String> {
+pub async fn get_pdf_from_bin(bin_b64: String) -> CommandResult<Vec<u8>> {
     use base64::Engine;
-    let data = base64::engine::general_purpose::STANDARD.decode(base64_data).map_err(|e| anyhow::anyhow!("Base64 decode error: {}", e))?;
-    
-    let mut path = dirs::download_dir().ok_or_else(|| anyhow::anyhow!("Could not find Downloads directory"))?;
-    path.push(filename);
-    
-    std::fs::write(&path, data).map_err(|e| anyhow::anyhow!("Failed to write file: {}", e))?;
-    
-    Ok(path.to_string_lossy().to_string())
+    let bin_data = base64::engine::general_purpose::STANDARD.decode(bin_b64)
+        .map_err(|e| anyhow::anyhow!("Base64 decode error: {}", e))?;
+    let note = ecash_core::compact::decode_full_note(&bin_data)
+        .map_err(|e| anyhow::anyhow!("Decode error: {}", e))?;
+
+    let svg_string = ecash_encoder::generate_note_svg(&note);
+
+    let result = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
+        let mut fontdb = svg2pdf::usvg::fontdb::Database::new();
+        fontdb.load_font_data(include_bytes!("../../assets/Roboto-Regular.ttf").to_vec());
+        fontdb.set_serif_family("Roboto");
+        fontdb.set_sans_serif_family("Roboto");
+        fontdb.set_monospace_family("Roboto");
+        fontdb.set_cursive_family("Roboto");
+        fontdb.set_fantasy_family("Roboto");
+
+        let mut opt = svg2pdf::usvg::Options::default();
+        opt.font_family = "Roboto".to_string();
+        opt.fontdb = std::sync::Arc::new(fontdb);
+        
+        let tree = svg2pdf::usvg::Tree::from_str(&svg_string, &opt)
+            .map_err(|e| anyhow::anyhow!("SVG parse error: {}", e))?;
+        
+        let pdf_bytes = svg2pdf::to_pdf(
+            &tree, 
+            svg2pdf::ConversionOptions::default(), 
+            svg2pdf::PageOptions::default()
+        ).map_err(|e| anyhow::anyhow!("PDF generation failed: {:?}", e))?;
+        
+        Ok(pdf_bytes)
+    }).await.map_err(|e| anyhow::anyhow!("Task panic: {}", e))?;
+
+    let bytes = result.map_err(|e| anyhow::anyhow!("Failed to generate PDF: {}", e))?;
+    Ok(bytes)
 }

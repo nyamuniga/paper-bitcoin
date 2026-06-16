@@ -357,7 +357,7 @@ async fn cmd_issue(
         allocations.push((*url, amt));
     }
 
-    let note = issue_multimint_note(&mut state, wallet_path, &passphrase, &allocations, |hub_mint, inv, total_sats| async move {
+    let note = issue_multimint_note(&mut state, wallet_path, &passphrase, &allocations, ecash_wallet::ReserveStrategy::Static, |hub_mint, inv, total_sats| async move {
         println!();
         println!("  💰 Note face value : {} sats (what the recipient redeems)", sats);
         println!("  ⚡ Total payment  : {} sats (includes fee reserves + routing)", total_sats);
@@ -455,7 +455,7 @@ async fn cmd_verify(_mint_url: &str, input: &str) -> Result<()> {
     println!();
     fmt_verbose_result(&result);
 
-    if matches!(result, VerificationResult::Valid { .. }) {
+    if matches!(result, VerificationResult::Valid { .. } | VerificationResult::ValidUntrusted { .. }) {
         println!();
         print!("    Checking double-spend status online... ");
         use std::io::Write;
@@ -504,6 +504,27 @@ fn fmt_verbose_result(r: &VerificationResult) {
                 );
             } else {
                 println!("    ✅ VALID — {} sats face value", face_value_sats.to_string().green());
+            }
+        }
+        VerificationResult::ValidUntrusted { face_value_sats, proof_total_sats, mint_urls } => {
+            println!("    [✓] Validation hash perfectly matches data");
+            println!("    [✓] Cryptographic DLEQ proofs verified");
+            println!("    [✓] Blind signatures mathematically valid");
+            println!("    [✓] Face value safely bounded by proofs");
+            println!("    [!] Mints have been verified but are UNTRUSTED:");
+            for mint in mint_urls {
+                println!("        - {}", mint);
+            }
+            println!("    ----------------------------------------");
+            if *proof_total_sats > *face_value_sats {
+                println!(
+                    "    ⚠️ VALID (UNTRUSTED MINT) — {} sats face value ({} sats in proofs, {} sats fee reserves)",
+                    face_value_sats.to_string().yellow(),
+                    proof_total_sats,
+                    proof_total_sats - face_value_sats
+                );
+            } else {
+                println!("    ⚠️ VALID (UNTRUSTED MINT) — {} sats face value", face_value_sats.to_string().yellow());
             }
         }
         VerificationResult::UntrustedMint { url } => {
@@ -662,7 +683,7 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
                 let pb_clone = std::sync::Arc::new(std::sync::Mutex::new(None::<ProgressBar>));
                 let pb_ref = pb_clone.clone();
 
-                match issue_multimint_note(&mut state, wallet_path, &passphrase, &allocations, |hub_mint, inv, total_sats| async move {
+                match issue_multimint_note(&mut state, wallet_path, &passphrase, &allocations, ecash_wallet::ReserveStrategy::Static, |hub_mint, inv: String, total_sats| async move {
                     pb.finish_and_clear();
                     println!("\n{}", "==================================================".cyan());
                     println!("{} {}", "⚡ Lightning Invoice for".bold(), hub_mint);

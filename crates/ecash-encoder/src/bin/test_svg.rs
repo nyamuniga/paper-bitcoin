@@ -9,12 +9,14 @@ fn main() {
         issued_at: 1234567890,
         validation_hash: "hash0000hash0000hash0000hash0000".to_string(),
         mint_urls: vec!["https://mint.minibits.cash/Bitcoin".to_string()],
+        fee_strategy: "dynamic".to_string(),
         public_data: PublicNoteData {
             entries: vec![],
+            face_value_sats: 100,
+            validation_hash: "hash0000hash0000hash0000hash0000".to_string(),
         },
         private_data: PrivateNoteData {
             master_seed_hex: "seed0000".to_string(),
-            entries: vec![],
         },
     };
 

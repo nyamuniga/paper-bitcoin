@@ -17,9 +17,9 @@
 //!   num_proofs:       1 byte
 //!
 //!   [FOR EACH PROOF]
-//!     amount:         4 bytes   (u32 LE)
+//!     amount:         varint
 //!     id:             8 bytes   (keyset-id hex decoded — 16 hex chars → 8 bytes)
-//!     derivation_idx: 4 bytes   (u32 LE)
+//!     derivation_idx: varint
 //!     C:              33 bytes  (compressed secp256k1 point)
 //!     C_:             33 bytes
 //!     B_:             33 bytes
@@ -33,7 +33,7 @@
 use crate::types::{Dleq, PublicNoteData, PublicProof, PublicTokenEntry};
 
 const MAGIC: [u8; 2] = [0xEC, 0xA5];
-const VERSION: u8 = 0x01;
+const VERSION: u8 = 0x03;
 
 // ─── Encode ──────────────────────────────────────────────────────────────────
 
@@ -60,12 +60,14 @@ pub fn encode_public_data(data: &PublicNoteData, face_value_sats: u64, issued_at
         buf.push(entry.proofs.len() as u8);
 
         for proof in &entry.proofs {
-            // amount (4 bytes)
-            buf.extend_from_slice(&(proof.amount as u32).to_le_bytes());
-            // keyset id (8 bytes — id is 16 hex chars)
-            buf.extend_from_slice(&hex_to_bytes8(&proof.id));
-            // derivation index (4 bytes)
-            buf.extend_from_slice(&(proof.derivation_index as u32).to_le_bytes());
+            // amount (varint)
+            write_varint(&mut buf, proof.amount);
+            // keyset id (variable length: 1 byte length + bytes)
+            let id_bytes = hex::decode(&proof.id).expect("invalid hex in keyset id");
+            buf.push(id_bytes.len() as u8);
+            buf.extend_from_slice(&id_bytes);
+            // derivation index (varint)
+            write_varint(&mut buf, proof.derivation_index);
             // secp256k1 points (33 bytes each)
             buf.extend_from_slice(&hex_to_bytes33(&proof.c));
             buf.extend_from_slice(&hex_to_bytes33(proof.c_prime.as_deref().unwrap_or(&"00".repeat(33))));
@@ -94,6 +96,7 @@ pub enum DecodeError {
     UnsupportedVersion(u8),
     InvalidUtf8,
     TrailingData,
+    VarintTooLarge,
 }
 
 impl std::fmt::Display for DecodeError {
@@ -104,6 +107,7 @@ impl std::fmt::Display for DecodeError {
             DecodeError::UnsupportedVersion(v) => write!(f, "unsupported binary version 0x{:02x}", v),
             DecodeError::InvalidUtf8 => write!(f, "mint URL is not valid UTF-8"),
             DecodeError::TrailingData => write!(f, "unexpected trailing data in binary payload"),
+            DecodeError::VarintTooLarge => write!(f, "varint is too large"),
         }
     }
 }
@@ -114,16 +118,14 @@ pub struct DecodedPublicData {
     pub issued_at: u64,
 }
 
-pub fn decode_public_data(bytes: &[u8]) -> Result<DecodedPublicData, DecodeError> {
-    let mut r = Reader::new(bytes);
-
+fn decode_public_internal<'a>(r: &mut Reader<'a>) -> Result<DecodedPublicData, DecodeError> {
     // Header
     let magic = r.read(2)?;
     if magic != MAGIC {
         return Err(DecodeError::BadMagic);
     }
     let version = r.read(1)?[0];
-    if version != VERSION {
+    if version != 0x02 && version != 0x03 {
         return Err(DecodeError::UnsupportedVersion(version));
     }
     let face_value_sats = u32::from_le_bytes(r.read(4)?.try_into().unwrap()) as u64;
@@ -143,9 +145,14 @@ pub fn decode_public_data(bytes: &[u8]) -> Result<DecodedPublicData, DecodeError
 
         let mut proofs = Vec::with_capacity(num_proofs);
         for _ in 0..num_proofs {
-            let amount = u32::from_le_bytes(r.read(4)?.try_into().unwrap()) as u64;
-            let id = hex::encode(r.read(8)?);
-            let derivation_index = u32::from_le_bytes(r.read(4)?.try_into().unwrap()) as u64;
+            let amount = r.read_varint()?;
+            let id = if version >= 0x03 {
+                let id_len = r.read(1)?[0] as usize;
+                hex::encode(r.read(id_len)?)
+            } else {
+                hex::encode(r.read(8)?)
+            };
+            let derivation_index = r.read_varint()?;
 
             let c = hex::encode(r.read(33)?);
             let c_prime = hex::encode(r.read(33)?);
@@ -169,10 +176,6 @@ pub fn decode_public_data(bytes: &[u8]) -> Result<DecodedPublicData, DecodeError
         entries.push(PublicTokenEntry { mint, proofs });
     }
 
-    if !r.is_empty() {
-        return Err(DecodeError::TrailingData);
-    }
-
     Ok(DecodedPublicData {
         data: PublicNoteData {
             entries,
@@ -182,6 +185,15 @@ pub fn decode_public_data(bytes: &[u8]) -> Result<DecodedPublicData, DecodeError
         face_value_sats,
         issued_at,
     })
+}
+
+pub fn decode_public_data(bytes: &[u8]) -> Result<DecodedPublicData, DecodeError> {
+    let mut r = Reader::new(bytes);
+    let res = decode_public_internal(&mut r)?;
+    if !r.is_empty() {
+        return Err(DecodeError::TrailingData);
+    }
+    Ok(res)
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -205,8 +217,43 @@ impl<'a> Reader<'a> {
         Ok(slice)
     }
 
+    fn read_varint(&mut self) -> Result<u64, DecodeError> {
+        let mut result = 0u64;
+        let mut shift = 0;
+        loop {
+            if self.is_empty() {
+                return Err(DecodeError::TooShort);
+            }
+            let byte = self.data[self.pos];
+            self.pos += 1;
+            result |= ((byte & 0x7F) as u64) << shift;
+            if byte & 0x80 == 0 {
+                break;
+            }
+            shift += 7;
+            if shift >= 64 {
+                return Err(DecodeError::VarintTooLarge);
+            }
+        }
+        Ok(result)
+    }
+
     fn is_empty(&self) -> bool {
         self.pos >= self.data.len()
+    }
+}
+
+fn write_varint(buf: &mut Vec<u8>, mut v: u64) {
+    loop {
+        let mut byte = (v & 0x7F) as u8;
+        v >>= 7;
+        if v != 0 {
+            byte |= 0x80;
+        }
+        buf.push(byte);
+        if v == 0 {
+            break;
+        }
     }
 }
 
@@ -220,7 +267,50 @@ fn hex_to_bytes33(s: &str) -> [u8; 33] {
     v.try_into().expect("hex field is not 33 bytes")
 }
 
-fn hex_to_bytes8(s: &str) -> [u8; 8] {
-    let v = hex::decode(s).expect("invalid hex in keyset id (expected 8 bytes)");
-    v.try_into().expect("keyset id is not 8 bytes")
+
+
+// ─── Full Note Codec ─────────────────────────────────────────────────────────
+
+use crate::types::{PhysicalNote, PrivateNoteData};
+
+pub fn encode_full_note(note: &PhysicalNote) -> Vec<u8> {
+    let mut buf = encode_public_data(&note.public_data, note.amount_sats, note.issued_at);
+    buf.push(note.serial.len() as u8);
+    buf.extend_from_slice(note.serial.as_bytes());
+    buf.extend_from_slice(&hex_to_bytes32(&note.private_data.master_seed_hex));
+    
+    // Encode fee_strategy string
+    buf.push(note.fee_strategy.len() as u8);
+    buf.extend_from_slice(note.fee_strategy.as_bytes());
+    buf
 }
+
+pub fn decode_full_note(bytes: &[u8]) -> Result<PhysicalNote, DecodeError> {
+    let mut r = Reader::new(bytes);
+    let DecodedPublicData { data, face_value_sats, issued_at } = decode_public_internal(&mut r)?;
+    
+    let serial_len = r.read(1)?[0] as usize;
+    let serial = String::from_utf8(r.read(serial_len)?.to_vec()).map_err(|_| DecodeError::InvalidUtf8)?;
+    let master_seed_hex = hex::encode(r.read(32)?);
+
+    // Decode fee_strategy string
+    let fee_strat_len = r.read(1)?[0] as usize;
+    let fee_strategy = String::from_utf8(r.read(fee_strat_len)?.to_vec()).map_err(|_| DecodeError::InvalidUtf8)?;
+
+    if !r.is_empty() {
+        return Err(DecodeError::TrailingData);
+    }
+
+    Ok(PhysicalNote {
+        amount_sats: face_value_sats,
+        issued_at,
+        serial,
+        mint_urls: data.entries.iter().map(|e| e.mint.clone()).collect(),
+        validation_hash: data.validation_hash.clone(),
+        fee_strategy,
+        public_data: data,
+        private_data: PrivateNoteData { master_seed_hex },
+    })
+}
+
+

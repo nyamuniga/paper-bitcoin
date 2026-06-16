@@ -67,11 +67,85 @@ impl WalletState {
         if let Ok(enc) = serde_json::from_str::<EncryptedWallet>(&data) {
             if enc.version == 1 {
                 let plaintext = decrypt_wallet(&enc, passphrase)?;
-                return Ok(serde_json::from_slice(&plaintext)?);
+                let mut state: WalletState = serde_json::from_slice(&plaintext)?;
+                state.normalize();
+                return Ok(state);
             }
         }
         // Fallback: legacy plaintext wallet
         Err(anyhow!("Wallet appears to be unencrypted. Run `ecash migrate` to encrypt it."))
+    }
+
+    fn normalize(&mut self) {
+        // Find a valid fallback mint from trusted_keys in case we need to rescue garbage URLs
+        let fallback_mint = self.trusted_keys.keys()
+            .find(|k| k.contains('.') && !k.to_lowercase().contains("https://https"))
+            .cloned();
+
+        let normalize_url = |url: &str| -> String {
+            let mut clean = url.trim().to_lowercase();
+            // Remove any trailing slashes or /v1
+            clean = clean.trim_end_matches('/').to_string();
+            if clean.ends_with("/v1") {
+                clean = clean.trim_end_matches("/v1").to_string();
+            }
+            clean = clean.trim_end_matches('/').to_string();
+
+            let with_scheme = if !clean.starts_with("http://") && !clean.starts_with("https://") {
+                format!("https://{}", clean.trim_start_matches("https://").trim_start_matches("http://"))
+            } else {
+                clean
+            };
+            
+            if let Ok(parsed) = reqwest::Url::parse(&with_scheme) {
+                let host = parsed.host_str().unwrap_or("");
+                // Rescue garbage URLs created by accidental 'https://' inputs
+                if host == "https" || host == "http" || host.is_empty() {
+                    if let Some(ref fb) = fallback_mint {
+                        // Recursively normalize the fallback to ensure it's clean
+                        let mut fb_clean = fb.trim().to_lowercase();
+                        fb_clean = fb_clean.trim_end_matches('/').to_string();
+                        if fb_clean.ends_with("/v1") { fb_clean = fb_clean.trim_end_matches("/v1").to_string(); }
+                        fb_clean = fb_clean.trim_end_matches('/').to_string();
+                        if !fb_clean.starts_with("http") { fb_clean = format!("https://{}", fb_clean); }
+                        return fb_clean;
+                    }
+                    return with_scheme;
+                }
+
+                // Force everything to https to merge http and https variants
+                let mut norm = format!("https://{}", host);
+                if let Some(port) = parsed.port() {
+                    norm.push_str(&format!(":{}", port));
+                }
+                norm
+            } else {
+                with_scheme
+            }
+        };
+
+        let mut new_proofs = std::collections::HashMap::new();
+        for (k, mut v) in self.proofs.drain() {
+            let norm = normalize_url(&k);
+            new_proofs.entry(norm).or_insert_with(Vec::new).append(&mut v);
+        }
+        self.proofs = new_proofs;
+
+        let mut new_trusted = std::collections::HashMap::new();
+        for (k, v) in self.trusted_keys.drain() {
+            let norm = normalize_url(&k);
+            new_trusted.insert(norm, v);
+        }
+        self.trusted_keys = new_trusted;
+
+        let mut new_mints = Vec::new();
+        for m in self.mints.drain(..) {
+            let norm = normalize_url(&m);
+            if !new_mints.contains(&norm) {
+                new_mints.push(norm);
+            }
+        }
+        self.mints = new_mints;
     }
 
     /// Load a legacy plaintext wallet (used only by `ecash migrate`).
@@ -327,6 +401,7 @@ impl MintClient {
         Self {
             http: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
+                .pool_max_idle_per_host(0)
                 .build()
                 .unwrap_or_default(),
             url: mint_url.trim_end_matches('/').to_string(),
@@ -335,11 +410,18 @@ impl MintClient {
 
     async fn fetch_keyset(&self) -> Result<KeysetInfo> {
         let v: serde_json::Value = self.http.get(format!("{}/v1/keys", self.url)).send().await?.json().await?;
-        let ks = &v["keysets"][0];
-        let id = ks["id"].as_str().unwrap().to_string();
+        if let Some(err) = v.get("error") { return Err(anyhow!("Mint error: {}", err)); }
+        if let Some(err) = v.get("detail") { return Err(anyhow!("Mint error (detail): {}", err)); }
+        
+        let ks_array = v.get("keysets").and_then(|k| k.as_array()).ok_or_else(|| anyhow!("Missing keysets in response: {:?}", v))?;
+        if ks_array.is_empty() { return Err(anyhow!("Mint returned empty keysets")); }
+        let ks = &ks_array[0];
+        
+        let id = ks.get("id").and_then(|i| i.as_str()).ok_or_else(|| anyhow!("Missing keyset id"))?.to_string();
         let mut keys = HashMap::new();
-        for (amt_str, pk) in ks["keys"].as_object().unwrap() {
-            keys.insert(amt_str.parse()?, pk.as_str().unwrap().to_string());
+        let keys_obj = ks.get("keys").and_then(|k| k.as_object()).ok_or_else(|| anyhow!("Missing keys in keyset"))?;
+        for (amt_str, pk) in keys_obj {
+            keys.insert(amt_str.parse()?, pk.as_str().ok_or_else(|| anyhow!("Invalid pubkey"))?.to_string());
         }
         Ok(KeysetInfo { id, keys })
     }
@@ -350,14 +432,18 @@ impl MintClient {
             _ => self.http.get(format!("{}/v1/keys", self.url)).send().await?.json().await?,
         };
 
-        let ks_array = v["keysets"].as_array().ok_or_else(|| anyhow!("Invalid keys response"))?;
-        let ks = ks_array.iter().find(|k| k["id"].as_str() == Some(keyset_id))
+        if let Some(err) = v.get("error") { return Err(anyhow!("Mint error: {}", err)); }
+        if let Some(err) = v.get("detail") { return Err(anyhow!("Mint error (detail): {}", err)); }
+
+        let ks_array = v.get("keysets").and_then(|k| k.as_array()).ok_or_else(|| anyhow!("Invalid keys response: {:?}", v))?;
+        let ks = ks_array.iter().find(|k| k.get("id").and_then(|i| i.as_str()) == Some(keyset_id))
             .ok_or_else(|| anyhow!("Keyset {} not found in mint", keyset_id))?;
 
-        let id = ks["id"].as_str().unwrap().to_string();
+        let id = ks.get("id").and_then(|i| i.as_str()).unwrap().to_string();
         let mut keys = HashMap::new();
-        for (amt_str, pk) in ks["keys"].as_object().unwrap() {
-            keys.insert(amt_str.parse()?, pk.as_str().unwrap().to_string());
+        let keys_obj = ks.get("keys").and_then(|k| k.as_object()).ok_or_else(|| anyhow!("Missing keys in keyset"))?;
+        for (amt_str, pk) in keys_obj {
+            keys.insert(amt_str.parse()?, pk.as_str().ok_or_else(|| anyhow!("Invalid pubkey"))?.to_string());
         }
         Ok(KeysetInfo { id, keys })
     }
@@ -366,23 +452,42 @@ impl MintClient {
         let v: serde_json::Value = self.http.post(format!("{}/v1/mint/quote/bolt11", self.url))
             .json(&serde_json::json!({ "amount": amount_sats, "unit": "sat" })).send().await?.json().await?;
         if let Some(err) = v.get("error") { return Err(anyhow!("Mint error: {}", err)); }
-        Ok((v["quote"].as_str().unwrap().to_string(), v["request"].as_str().unwrap_or("").to_string()))
+        if let Some(err) = v.get("detail") { return Err(anyhow!("Mint error (detail): {}", err)); }
+        
+        let quote = v.get("quote").and_then(|q| q.as_str()).ok_or_else(|| anyhow!("Missing quote in response: {:?}", v))?;
+        let request = v.get("request").and_then(|r| r.as_str()).unwrap_or("");
+        
+        Ok((quote.to_string(), request.to_string()))
     }
 
     pub async fn wait_for_quote_paid(&self, quote_id: &str) -> Result<()> {
-        for _ in 0..120 {
+        for _ in 0..300 {
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-            let check: serde_json::Value = self.http.get(format!("{}/v1/mint/quote/bolt11/{}", self.url, quote_id)).send().await?.json().await?;
-            if check["state"].as_str() == Some("PAID") { return Ok(()); }
+            
+            // Ignore transient network errors (e.g. OS suspending the socket while switching apps)
+            let resp = match self.http.get(format!("{}/v1/mint/quote/bolt11/{}", self.url, quote_id)).send().await {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+            
+            if let Ok(check) = resp.json::<serde_json::Value>().await {
+                if check["state"].as_str() == Some("PAID") { 
+                    return Ok(()); 
+                }
+            }
         }
-        Err(anyhow!("Invoice payment timeout"))
+        Err(anyhow!("Invoice payment timeout after 5 minutes"))
     }
 
     async fn mint_tokens(&self, quote_id: &str, outputs: Vec<serde_json::Value>) -> Result<Vec<serde_json::Value>> {
         let v: serde_json::Value = self.http.post(format!("{}/v1/mint/bolt11", self.url))
             .json(&serde_json::json!({ "quote": quote_id, "outputs": outputs })).send().await?.json().await?;
         if let Some(err) = v.get("error") { return Err(anyhow!("Mint error: {}", err)); }
-        Ok(v["signatures"].as_array().unwrap().clone())
+        if let Some(err) = v.get("detail") { return Err(anyhow!("Mint error (detail): {}", err)); }
+        
+        let sigs = v.get("signatures").and_then(|s| s.as_array())
+            .ok_or_else(|| anyhow!("Mint response missing signatures: {:?}", v))?;
+        Ok(sigs.clone())
     }
 
     pub async fn melt_tokens(&self, proofs: &[Proof], invoice: &str, quote_id: Option<&str>, outputs: Option<Vec<serde_json::Value>>) -> Result<(bool, Vec<serde_json::Value>)> {
@@ -436,6 +541,11 @@ impl MintClient {
         }
         Ok(results)
     }
+
+    pub async fn fetch_info(&self) -> Result<serde_json::Value> {
+        let v: serde_json::Value = self.http.get(format!("{}/v1/info", self.url)).send().await?.json().await?;
+        Ok(v)
+    }
 }
 
 pub async fn estimate_melt_fee(mint_url: &str, invoice: &str) -> Result<(u64, String)> {
@@ -446,6 +556,55 @@ pub async fn estimate_melt_fee(mint_url: &str, invoice: &str) -> Result<(u64, St
     let fee = qv["fee_reserve"].as_u64().unwrap_or(0);
     let quote = qv["quote"].as_str().unwrap_or("").to_string();
     Ok((fee, quote))
+}
+
+pub async fn estimate_routing_fee_from_info(mint_url: &str, amount_sats: u64) -> u64 {
+    let client = MintClient::new(mint_url);
+    let mut base_msat = 1000; // default 1 sat
+    let mut proportional_millionths = 1000; // default 0.1%
+
+    if let Ok(info) = client.fetch_info().await {
+        if let Some(base) = extract_json_number(&info, "fee_base_msat") {
+            base_msat = base;
+        }
+        if let Some(prop) = extract_json_number(&info, "fee_proportional_millionths") {
+            proportional_millionths = prop;
+        } else if let Some(prop) = extract_json_number(&info, "fee_proportional") {
+            proportional_millionths = prop;
+        }
+    }
+
+    let base_sats = base_msat / 1000;
+    let proportional_sats = (amount_sats * proportional_millionths) / 1_000_000;
+    
+    base_sats + proportional_sats
+}
+
+fn extract_json_number(value: &serde_json::Value, key: &str) -> Option<u64> {
+    match value {
+        serde_json::Value::Object(map) => {
+            if let Some(v) = map.get(key) {
+                if let Some(n) = v.as_u64() {
+                    return Some(n);
+                }
+            }
+            for v in map.values() {
+                if let Some(n) = extract_json_number(v, key) {
+                    return Some(n);
+                }
+            }
+            None
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr {
+                if let Some(n) = extract_json_number(v, key) {
+                    return Some(n);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 struct KeysetInfo { id: String, keys: HashMap<u64, String> }
@@ -500,14 +659,19 @@ where
                 std::cmp::max(10, face_val * 3 / 100)
             },
             ReserveStrategy::Dynamic => {
-                let (_, dummy_inv) = hub_client.request_mint_quote(face_val).await?;
-                let (fee_est, _) = estimate_melt_fee(mint, &dummy_inv).await.unwrap_or((5, "".into()));
-                // Buffer = 1.5x fee + 5 sats, max 5%, min 2 sats
+                let fee_est = estimate_routing_fee_from_info(mint, face_val).await;
+                
+                // Buffer = max(5 sats, 0.5 × estimated_fee)
                 let buffer = std::cmp::max(5, fee_est / 2);
+                
+                let min_reserve = 10; // Mint APIs hard-reject external melt quotes below 10 sats
+                let max_reserve = std::cmp::max(10, face_val * 5 / 100); // 5% max
+                
                 let dynamic_res = std::cmp::min(
-                    std::cmp::max(2, fee_est + buffer),
-                    std::cmp::max(10, face_val * 5 / 100) // max 5%
+                    std::cmp::max(min_reserve, fee_est + buffer),
+                    max_reserve
                 );
+                
                 dynamic_res
             }
         };
@@ -802,11 +966,13 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
         if entry.proofs.is_empty() { continue; }
         let amt: u64 = entry.proofs.iter().map(|p| p.amount).sum();
 
-        let (_, dummy_inv) = hub_client.request_mint_quote(amt).await?;
-        let (fee_estimate, _) = estimate_melt_fee(&entry.mint, &dummy_inv).await.unwrap_or((10, "".into()));
+        let fee_estimate = estimate_routing_fee_from_info(&entry.mint, amt).await;
+        let buffer = std::cmp::max(5, fee_estimate / 2);
 
-        // Add a buffer to the fee estimate to prevent "inputs != outputs + fee" errors.
-        let safe_fee = std::cmp::max(10, fee_estimate * 2);
+        // The safe_fee should be our dynamic estimate, bounded by the max possible reserve (5%)
+        let max_reserve = std::cmp::max(10, amt * 5 / 100);
+        let safe_fee = std::cmp::max(10, std::cmp::min(fee_estimate + buffer, max_reserve));
+
         let transfer_amt = amt.saturating_sub(safe_fee);
         if transfer_amt == 0 { continue; }
 
@@ -824,9 +990,11 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
             let secret = deriv.next_secret();
             let sess = ecash_core::dhke::BlindingSession::new(&secret);
             change_outputs.push(serde_json::json!({"amount": d, "id": entry_keyset.id, "B_": sess.b_prime_hex()}));
-            change_sessions.push((sess, deriv.index));
-            deriv.index += 1;
+            change_sessions.push((sess, deriv.index - 1));
         }
+
+        state.derivation_index = deriv.index;
+        state.save_encrypted(wallet_path, passphrase)?;
 
         let (paid, change_sigs) = entry_client.melt_tokens(&entry.proofs, &inv, None, Some(change_outputs)).await?;
         
@@ -860,6 +1028,10 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
                 outputs.push(serde_json::json!({"amount": d, "id": hub_keyset.id, "B_": sess.b_prime_hex()}));
                 sessions.push((sess, index));
             }
+            
+            state.derivation_index = deriv.index;
+            state.save_encrypted(wallet_path, passphrase)?;
+            
             let sigs = hub_client.mint_tokens(&qid, outputs).await?;
             for ((sess, index), sig) in sessions.iter().zip(sigs.iter()) {
                 let amount = sig["amount"].as_u64().unwrap();
@@ -903,6 +1075,10 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
         outputs.push(serde_json::json!({"amount": d, "id": hub_keyset.id, "B_": sess.b_prime_hex()}));
         sessions.push(sess);
     }
+
+    // Advance and persist the derivation index BEFORE calling melt.
+    state.derivation_index = deriv.index;
+    state.save_encrypted(wallet_path, passphrase)?;
 
     // Save pending transaction and remove proofs from wallet balance immediately
     let tx_id = format!("tx_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
@@ -1031,6 +1207,7 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
 
     // Advance and persist the derivation index BEFORE calling melt.
     state.derivation_index = deriv.index;
+    state.save_encrypted(wallet_path, passphrase)?;
     
     // Save pending transaction and remove proofs from wallet balance immediately
     let tx_id = format!("tx_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());

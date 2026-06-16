@@ -5,17 +5,18 @@ use ecash_wallet::WalletState;
 
 pub struct AppState {
     pub passphrase: Mutex<Option<String>>,
+    pub wallet_path: std::path::PathBuf,
 }
 
 #[tauri::command]
-pub async fn is_wallet_setup() -> CommandResult<bool> {
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+pub async fn is_wallet_setup(state: State<'_, AppState>) -> CommandResult<bool> {
+    let path = state.wallet_path.clone();
     Ok(path.exists())
 }
 
 #[tauri::command]
 pub async fn unlock_wallet(passphrase: String, state: State<'_, AppState>) -> CommandResult<bool> {
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+    let path = state.wallet_path.clone();
     if !path.exists() {
         return Err(CommandError("Wallet not found".to_string()));
     }
@@ -48,7 +49,7 @@ pub async fn is_wallet_unlocked(state: State<'_, AppState>) -> CommandResult<boo
 
 #[tauri::command]
 pub async fn reset_wallet(state: State<'_, AppState>) -> CommandResult<bool> {
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+    let path = state.wallet_path.clone();
     if path.exists() {
         std::fs::remove_file(path).map_err(|e| CommandError(format!("Failed to delete wallet: {}", e)))?;
     }
@@ -59,7 +60,7 @@ pub async fn reset_wallet(state: State<'_, AppState>) -> CommandResult<bool> {
 
 #[tauri::command]
 pub async fn create_wallet(passphrase: String, state: State<'_, AppState>) -> CommandResult<crate::commands::wallet::WalletInfo> {
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+    let path = state.wallet_path.clone();
     if path.exists() {
         return Err(CommandError("Wallet already exists".to_string()));
     }
@@ -81,7 +82,7 @@ pub async fn create_wallet(passphrase: String, state: State<'_, AppState>) -> Co
 
 #[tauri::command]
 pub async fn restore_wallet(mnemonic: String, passphrase: String, state: State<'_, AppState>) -> CommandResult<crate::commands::wallet::WalletInfo> {
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+    let path = state.wallet_path.clone();
     let seed_hex = ecash_wallet::mnemonic_to_seed_hex(&mnemonic)?;
     let mut w_state = WalletState::new(seed_hex, Some(mnemonic.clone()));
     w_state.save_encrypted(&path, &passphrase)?;

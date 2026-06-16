@@ -2,10 +2,8 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useWalletStore } from '../store/wallet';
-import { CheckCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, Loader2, X } from 'lucide-react';
 import QRCode from 'react-qr-code';
-import { jsPDF } from 'jspdf';
-import 'svg2pdf.js';
 
 export const Issue = () => {
   const [sats, setSats] = useState<string>('');
@@ -73,174 +71,225 @@ export const Issue = () => {
 
   if (issuedNote) {
     return (
-      <div className="p-4 mt-8 flex flex-col h-full">
-        <div className="text-center mb-8">
-          <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold">Note Created!</h1>
-          <p className="text-gray-400 mt-2">Face value: {issuedNote.face_value} sats</p>
+      <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-8 flex flex-col items-center">
+        <div className="w-full max-w-2xl text-center mb-8 mt-4 flex flex-col items-center">
+          <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
+            <CheckCircle className="w-12 h-12 text-emerald-400" />
+          </div>
+          <h1 className="text-headline-lg font-headline-lg text-on-background mb-2">Note Created!</h1>
+          <p className="text-on-surface-variant text-lg">Face value: <span className="text-emerald-400 font-bold">{issuedNote.face_value} sats</span></p>
         </div>
         
-        <div className="bg-surface rounded-2xl p-6 border border-gray-800 flex-1">
-          <div className="text-center text-sm text-gray-500 mb-2">Your Physical Note</div>
-          <div className="bg-white p-2 rounded-xl inline-block mb-4 mx-auto w-full flex justify-center">
-             <img src={`data:image/svg+xml;base64,${issuedNote.svg_b64}`} alt="Physical Note" className="max-w-[300px] w-full" />
-          </div>
-          
-          {saveSuccess ? (
-            <div className="w-full bg-green-500/10 text-green-500 font-bold py-4 rounded-xl text-lg mt-auto text-center border border-green-500/20">
-              {saveSuccess}
+        <div className="w-full max-w-2xl bg-surface-container-high rounded-xl p-8 relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-outline-variant/30 flex flex-col space-y-6">
+          <div className="noise-overlay"></div>
+          <div className="relative z-10 flex flex-col space-y-8 w-full items-center h-full">
+            <div className="text-center font-label-caps text-label-caps text-on-surface-variant tracking-widest">YOUR PHYSICAL NOTE</div>
+            
+            <div className="bg-white p-3 rounded-xl inline-block shadow-[0_10px_40px_rgba(0,0,0,0.5)] w-full flex justify-center max-w-[500px]">
+              <img src={`data:image/svg+xml;base64,${issuedNote.svg_b64}`} alt="Physical Note" className="w-full h-auto" />
             </div>
-          ) : (
-            <button 
-              onClick={async () => {
-                setSaving(true);
-                setError('');
-                try {
-                  const svgText = atob(issuedNote.svg_b64);
-                  const parser = new DOMParser();
-                  const svgDoc = parser.parseFromString(svgText, "image/svg+xml");
-                  const svgElement = svgDoc.documentElement;
-                  
-                  const doc = new jsPDF({ orientation: 'landscape', format: [920, 420], unit: 'pt' });
-                  await doc.svg(svgElement, { x: 0, y: 0, width: 920, height: 420 });
-                  
-                  const pdfDataUri = doc.output('datauristring');
-                  const base64Data = pdfDataUri.split(',')[1];
+            
+            <div className="w-full mt-4 flex-grow flex flex-col justify-end">
+              {saveSuccess ? (
+                <div className="w-full bg-emerald-500/10 text-emerald-400 font-bold py-4 rounded-full text-lg text-center border border-emerald-500/20 shadow-inner">
+                  {saveSuccess}
+                </div>
+              ) : (
+                <button 
+                  onClick={async () => {
+                    setSaving(true);
+                    setError('');
+                    try {
+                      const { save } = await import('@tauri-apps/plugin-dialog');
+                      const { writeFile } = await import('@tauri-apps/plugin-fs');
+                      
+                      const filename = `note-${issuedNote.face_value}-sats-${issuedNote.serial}.pdf`;
+                      const savePath = await save({
+                        title: 'Save Note PDF',
+                        defaultPath: filename,
+                        filters: [{ name: 'PDF Document', extensions: ['pdf'] }]
+                      });
 
-                  const filename = `note-${issuedNote.face_value}-sats.pdf`;
-                  await invoke('save_file_to_disk', { base64Data, filename });
-                  setSaveSuccess(`Saved to Downloads as ${filename}`);
-                } catch (e: any) {
-                  setError(`Failed to save PDF: ${e}`);
-                } finally {
-                  setSaving(false);
-                }
-              }}
-              disabled={saving}
-              className="w-full bg-primary text-background font-bold py-4 rounded-xl text-lg mt-auto flex items-center justify-center disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="animate-spin w-6 h-6" /> : 'Save Note as PDF'}
-            </button>
-          )}
-          {error && <div className="text-red-400 text-sm mt-4 text-center">{error}</div>}
+                      if (savePath) {
+                        const pdfBytes = await invoke<number[]>('get_pdf_from_bin', { binB64: issuedNote.bin_b64 });
+                        await writeFile(savePath, new Uint8Array(pdfBytes));
+                        setSaveSuccess(`Successfully saved note!`);
+                        
+                        try {
+                          const { openPath } = await import('@tauri-apps/plugin-opener');
+                          await openPath(savePath);
+                        } catch (e) {
+                          console.log("Could not open file natively", e);
+                        }
+                      } else {
+                        // User cancelled
+                        setSaving(false);
+                        return;
+                      }
+                    } catch (e: any) {
+                      setError(`Failed to save PDF: ${e}`);
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  disabled={saving}
+                  className="w-full btn-gradient text-on-primary font-bold py-4 rounded-full text-lg flex items-center justify-center disabled:opacity-50 shadow-lg hover:opacity-90 active:scale-[0.98] transition-all"
+                >
+                  {saving ? <Loader2 className="animate-spin w-6 h-6" /> : 'Save Note as PDF'}
+                </button>
+              )}
+              {error && <div className="text-error text-sm mt-4 text-center bg-error/10 p-3 rounded-lg border border-error/20">{error}</div>}
+            </div>
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (invoicePayload) {
     return (
-      <div className="p-4 mt-8">
-        <h1 className="text-2xl font-bold mb-4">Pay Invoice</h1>
-        <div className="bg-surface rounded-2xl p-6 border border-gray-800 text-center">
-          <p className="text-gray-400 mb-4">Pay this invoice to fund the new note.</p>
-          <div className="bg-white p-4 rounded-xl inline-block mb-4">
-             <QRCode value={invoicePayload.invoice} size={192} />
-          </div>
-          <div className="text-2xl font-bold mb-2">{invoicePayload.total_sats} sats</div>
-          <div className="text-xs text-gray-500 mb-6 truncate">{invoicePayload.invoice}</div>
-          
-          {balance >= invoicePayload.total_sats ? (
-             <button onClick={handlePayFromWallet} disabled={loading} className="w-full bg-green-500 text-white font-bold py-4 rounded-xl text-lg flex justify-center items-center">
-               {loading ? <Loader2 className="animate-spin" /> : 'Pay from Wallet Balance'}
-             </button>
-          ) : (
-            <div className="text-red-400 text-sm">Insufficient wallet balance to auto-pay.</div>
-          )}
-          
-          {loading && <div className="mt-4 text-sm text-gray-400 flex items-center justify-center"><Loader2 className="animate-spin w-4 h-4 mr-2" /> Waiting for payment...</div>}
-          
-          {error && <div className="text-red-400 text-sm mt-4 p-4 bg-red-500/10 rounded-xl text-left font-mono">{error}</div>}
-          {debugLogs.length > 0 && (
-            <div className="bg-black/50 p-4 rounded-xl mt-4 text-xs font-mono text-gray-400 max-h-32 overflow-y-auto text-left">
-              {debugLogs.map((l, i) => <div key={i}>{l}</div>)}
-            </div>
-          )}
+      <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-8 flex flex-col items-center">
+        <div className="w-full max-w-2xl text-left mb-6">
+          <h1 className="text-headline-lg font-headline-lg text-on-background">Pay Invoice</h1>
         </div>
-      </div>
+        
+        <div className="w-full max-w-2xl bg-surface-container-high rounded-xl p-8 relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-outline-variant/30 flex flex-col space-y-6 items-center text-center">
+          <div className="noise-overlay"></div>
+          <div className="relative z-10 flex flex-col space-y-6 w-full items-center">
+            <p className="text-on-surface-variant mb-2 font-label-caps text-label-caps">Pay this invoice to fund the new note</p>
+            <div className="bg-white p-4 rounded-xl inline-block shadow-lg">
+              <QRCode value={invoicePayload.invoice} size={200} />
+            </div>
+            <div className="text-headline-lg font-headline-lg text-primary">{invoicePayload.total_sats} sats</div>
+            <div className="text-xs text-on-surface-variant mb-2 truncate w-full max-w-sm px-4 py-3 bg-surface-container-lowest rounded-lg border border-outline-variant/30 select-all shadow-inner">{invoicePayload.invoice}</div>
+            
+            {balance >= invoicePayload.total_sats ? (
+              <button onClick={handlePayFromWallet} disabled={loading} className="w-full max-w-md bg-emerald-500/20 text-emerald-400 font-bold py-4 rounded-full text-lg flex justify-center items-center hover:bg-emerald-500/30 transition-colors border border-emerald-500/30 disabled:opacity-50 mt-4">
+                {loading ? <Loader2 className="animate-spin w-6 h-6" /> : 'Pay from Wallet Balance'}
+              </button>
+            ) : (
+              <div className="text-error text-sm mt-4 bg-error/10 py-3 px-4 rounded-lg border border-error/20 w-full max-w-md font-label-caps text-label-caps">Insufficient wallet balance to auto-pay</div>
+            )}
+            
+            {loading && <div className="mt-4 text-sm text-on-surface-variant flex items-center justify-center font-label-caps text-label-caps"><Loader2 className="animate-spin w-4 h-4 mr-2" /> Waiting for payment...</div>}
+            
+            {error && <div className="text-error text-sm mt-4 p-4 bg-error/10 rounded-xl text-left font-mono w-full border border-error/20">{error}</div>}
+            {debugLogs.length > 0 && (
+              <div className="bg-surface-container-lowest p-4 rounded-xl mt-4 text-xs font-mono text-on-surface-variant max-h-32 overflow-y-auto text-left w-full border border-outline-variant/30 shadow-inner">
+                {debugLogs.map((l, i) => <div key={i}>{l}</div>)}
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
     );
   }
 
   return (
-    <div className="p-4 mt-8">
-      <h1 className="text-2xl font-bold mb-4">Issue Note</h1>
-      <div className="bg-surface rounded-2xl p-6 border border-gray-800">
-        <label className="block text-gray-400 text-sm mb-2">Amount (sats)</label>
-        <input 
-          type="number" 
-          value={sats}
-          onChange={(e) => setSats(e.target.value)}
-          className="w-full bg-background border border-gray-700 rounded-xl p-4 text-white mb-6 text-2xl font-bold text-center" 
-          placeholder="0" 
-        />
-        
-        <label className="block text-gray-400 text-sm mb-2">Mint URLs</label>
-        {mintUrls.map((url, i) => (
-          <div key={i} className="flex gap-2 mb-2">
-            <div className="w-full bg-surface-light border border-gray-700 rounded-xl p-4 text-gray-300 text-sm overflow-x-hidden truncate">{url}</div>
-            {mintUrls.length > 1 && (
-              <button onClick={() => setMintUrls(mintUrls.filter((_, idx) => idx !== i))} className="bg-red-500/20 text-red-500 px-4 rounded-xl font-bold">X</button>
-            )}
+    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-8 flex flex-col items-center">
+      <div className="w-full max-w-2xl text-left mb-6">
+        <h1 className="text-headline-lg font-headline-lg text-on-background">Issue Note</h1>
+      </div>
+      
+      <div className="w-full max-w-2xl bg-surface-container-high rounded-xl p-8 relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-outline-variant/30 flex flex-col space-y-8">
+        <div className="noise-overlay"></div>
+        <div className="relative z-10 flex flex-col space-y-8 w-full">
+          
+          <div>
+            <label className="block text-on-surface-variant text-label-caps font-label-caps mb-2">AMOUNT (SATS)</label>
+            <div className="relative glow-effect rounded-lg">
+              <input 
+                type="number" 
+                value={sats}
+                onChange={(e) => setSats(e.target.value)}
+                className="w-full bg-surface-container-lowest text-on-surface text-center font-headline-lg-mobile text-[32px] p-6 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-on-surface-variant/50 transition-all" 
+                placeholder="0" 
+              />
+            </div>
           </div>
-        ))}
-        
-        <div className="flex gap-2 mb-8 mt-2">
-          <input 
-            type="text" 
-            value={newMint}
-            onChange={(e) => setNewMint(e.target.value)}
-            className="w-full bg-background border border-gray-700 rounded-xl p-4 text-gray-300 text-sm" 
-            placeholder="Add another mint URL..."
-          />
+          
+          <div>
+            <label className="block text-on-surface-variant text-label-caps font-label-caps mb-2">MINT URLS</label>
+            <div className="space-y-2">
+              {mintUrls.map((url, i) => (
+                <div key={i} className="flex gap-2">
+                  <div className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg p-4 text-on-surface text-sm overflow-x-hidden truncate shadow-inner">{url}</div>
+                  {mintUrls.length > 1 && (
+                    <button onClick={() => setMintUrls(mintUrls.filter((_, idx) => idx !== i))} className="bg-error/10 hover:bg-error/20 text-error px-4 rounded-lg transition-colors flex items-center justify-center">
+                      <X className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex gap-2 mt-3">
+              <input 
+                type="text" 
+                value={newMint}
+                onChange={(e) => setNewMint(e.target.value)}
+                className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg p-4 text-on-surface text-sm shadow-inner focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-on-surface-variant/50" 
+                placeholder="Add another mint URL..."
+              />
+              <button 
+                onClick={() => {
+                  if (newMint) {
+                    let sanitized = newMint.trim();
+                    if (!sanitized.startsWith('http://') && !sanitized.startsWith('https://')) {
+                      sanitized = 'https://' + sanitized;
+                    }
+                    sanitized = sanitized.replace(/\/+$/, '');
+                    
+                    if (!mintUrls.includes(sanitized)) {
+                      setMintUrls([...mintUrls, sanitized]);
+                    }
+                    setNewMint('');
+                  }
+                }}
+                className="bg-surface-container-highest hover:bg-surface-bright border border-outline-variant/30 text-on-surface px-6 rounded-lg font-bold transition-colors text-sm"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-on-surface-variant text-label-caps font-label-caps mb-3">FEE RESERVE STRATEGY</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div 
+                onClick={() => setStrategy('dynamic')}
+                className={`p-4 rounded-xl border cursor-pointer transition-colors flex flex-col items-center text-center ${strategy === 'dynamic' ? 'bg-primary/10 border-primary/50 shadow-[0_0_15px_rgba(255,184,116,0.15)] text-primary' : 'bg-surface-container-lowest border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60'}`}
+              >
+                <div className="font-bold mb-1">Dynamic (Cheaper)</div>
+                <div className="text-xs opacity-80">Best for immediate use. Data-driven estimates.</div>
+              </div>
+              <div 
+                onClick={() => setStrategy('static')}
+                className={`p-4 rounded-xl border cursor-pointer transition-colors flex flex-col items-center text-center ${strategy === 'static' ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] text-amber-500' : 'bg-surface-container-lowest border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60'}`}
+              >
+                <div className="font-bold mb-1">Static (Safer)</div>
+                <div className="text-xs opacity-80">Best for long-term cold storage.</div>
+              </div>
+            </div>
+          </div>
+          
+          {error && <div className="text-error text-sm text-center bg-error/10 p-3 rounded-lg border border-error/20">{error}</div>}
+          
+          {debugLogs.length > 0 && (
+            <div className="bg-surface-container-lowest p-4 rounded-xl text-xs font-mono text-on-surface-variant max-h-32 overflow-y-auto border border-outline-variant/30 shadow-inner">
+              {debugLogs.map((l, i) => <div key={i}>{l}</div>)}
+            </div>
+          )}
+          
           <button 
-            onClick={() => {
-              if (newMint && !mintUrls.includes(newMint)) {
-                setMintUrls([...mintUrls, newMint]);
-                setNewMint('');
-              }
-            }}
-            className="bg-surface-light border border-gray-700 text-white px-6 rounded-xl font-bold"
+            onClick={handleIssue}
+            disabled={loading || !sats || mintUrls.length === 0}
+            className="w-full btn-gradient text-on-primary font-bold py-4 rounded-full text-lg flex justify-center items-center shadow-lg hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 mt-2"
           >
-            Add
+            {loading ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Note'}
           </button>
         </div>
-
-        <div className="mb-8">
-          <label className="block text-gray-400 text-sm mb-3">Fee Reserve Strategy</label>
-          <div className="grid grid-cols-2 gap-3">
-            <div 
-              onClick={() => setStrategy('dynamic')}
-              className={`p-4 rounded-xl border cursor-pointer transition-colors ${strategy === 'dynamic' ? 'bg-primary/10 border-primary text-primary' : 'bg-surface-light border-gray-700 text-gray-400 hover:border-gray-500'}`}
-            >
-              <div className="font-bold mb-1">Dynamic (Cheaper)</div>
-              <div className="text-xs opacity-80">Best for immediate use. Data-driven estimates.</div>
-            </div>
-            <div 
-              onClick={() => setStrategy('static')}
-              className={`p-4 rounded-xl border cursor-pointer transition-colors ${strategy === 'static' ? 'bg-amber-500/10 border-amber-500 text-amber-500' : 'bg-surface-light border-gray-700 text-gray-400 hover:border-gray-500'}`}
-            >
-              <div className="font-bold mb-1">Static (Safer)</div>
-              <div className="text-xs opacity-80">Best for long-term cold storage.</div>
-            </div>
-          </div>
-        </div>
-        
-        {error && <div className="text-red-400 text-sm mb-4">{error}</div>}
-        
-        {debugLogs.length > 0 && (
-          <div className="bg-black/50 p-4 rounded-xl mb-4 text-xs font-mono text-gray-400 max-h-32 overflow-y-auto">
-            {debugLogs.map((l, i) => <div key={i}>{l}</div>)}
-          </div>
-        )}
-        
-        <button 
-          onClick={handleIssue}
-          disabled={loading || !sats || mintUrls.length === 0}
-          className="w-full bg-primary text-background font-bold py-4 rounded-xl text-lg flex justify-center items-center disabled:opacity-50"
-        >
-          {loading ? <Loader2 className="animate-spin" /> : 'Create Note'}
-        </button>
       </div>
-    </div>
+    </main>
   );
 };

@@ -4,23 +4,29 @@ mod error;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
-        .manage(commands::auth::AppState {
-            passphrase: std::sync::Mutex::new(None),
+        .setup(|app| {
+            use tauri::Manager;
+            let wallet_path = app.path().app_data_dir().unwrap().join("gui-wallet.json");
+            app.manage(commands::auth::AppState {
+                passphrase: std::sync::Mutex::new(None),
+                wallet_path,
+            });
+            Ok(())
         })
-        .plugin(tauri_plugin_stronghold::Builder::new(|_pass| todo!()).build())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init());
         
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        builder = builder.plugin(tauri_plugin_biometric::init());
-    }
+    let builder = builder.plugin(tauri_plugin_biometric::init());
 
     builder.invoke_handler(tauri::generate_handler![
             commands::wallet::wallet_info,
             commands::wallet::get_balance,
             commands::wallet::get_recovery_words,
             commands::issue::issue_note,
-            commands::issue::save_file_to_disk,
+            commands::issue::get_pdf_from_bin,
+            commands::history::get_note_pdf,
             commands::verify::decode_bin,
             commands::verify::verify_note,
             commands::redeem::redeem_note,

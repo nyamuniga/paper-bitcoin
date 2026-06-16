@@ -6,7 +6,7 @@ use crate::commands::auth::AppState;
 
 #[tauri::command]
 pub async fn pay_invoice(invoice: String, state: State<'_, AppState>) -> CommandResult<u64> {
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+    let path = state.wallet_path.clone();
     
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();

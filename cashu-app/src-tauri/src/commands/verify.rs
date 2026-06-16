@@ -9,7 +9,7 @@ pub async fn decode_bin(bin_b64: String) -> CommandResult<serde_json::Value> {
     let bin_data = crate::utils::decode_qr_payload(&bin_b64).map_err(|e| anyhow::anyhow!("Invalid QR payload: {}", e))?;
     
     // Try decoding as Full PhysicalNote (Private/Redemption QR)
-    if let Ok(note) = bincode::deserialize::<ecash_core::types::PhysicalNote>(&bin_data) {
+    if let Ok(note) = ecash_core::compact::decode_full_note(&bin_data) {
         return Ok(serde_json::json!({
             "type": "full",
             "amount_sats": note.amount_sats,
@@ -20,12 +20,12 @@ pub async fn decode_bin(bin_b64: String) -> CommandResult<serde_json::Value> {
     }
     
     // Try decoding as PublicNoteData (Public/Verification QR)
-    if let Ok(pub_data) = bincode::deserialize::<ecash_core::types::PublicNoteData>(&bin_data) {
+    if let Ok(dec) = ecash_core::compact::decode_public_data(&bin_data) {
         return Ok(serde_json::json!({
             "type": "public",
-            "amount_sats": pub_data.face_value_sats,
-            "validation_hash": pub_data.validation_hash,
-            "public_data": pub_data
+            "amount_sats": dec.face_value_sats,
+            "validation_hash": dec.data.validation_hash,
+            "public_data": dec.data
         }));
     }
 
@@ -37,15 +37,15 @@ pub async fn verify_note(bin_b64: String, state: State<'_, AppState>) -> Command
     let bin_data = crate::utils::decode_qr_payload(&bin_b64).map_err(|e| anyhow::anyhow!("Invalid QR payload: {}", e))?;
     // In verify_note, we must accept EITHER the full note OR the public note data
     // because verification only requires public data!
-    let pub_data = if let Ok(note) = bincode::deserialize::<ecash_core::types::PhysicalNote>(&bin_data) {
+    let pub_data = if let Ok(note) = ecash_core::compact::decode_full_note(&bin_data) {
         note.public_data
-    } else if let Ok(pub_data) = bincode::deserialize::<ecash_core::types::PublicNoteData>(&bin_data) {
-        pub_data
+    } else if let Ok(dec) = ecash_core::compact::decode_public_data(&bin_data) {
+        dec.data
     } else {
         return Err(crate::error::CommandError("Could not decode verification payload.".to_string()));
     };
 
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+    let path = state.wallet_path.clone();
     
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();

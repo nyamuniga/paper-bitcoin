@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { RefreshCw, AlertCircle, CheckCircle, XCircle, Download, FileText } from 'lucide-react';
+import { RefreshCw, AlertCircle, CheckCircle, XCircle, Download, FileText, ArrowDown, ArrowUp } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { jsPDF } from 'jspdf';
-import 'svg2pdf.js';
 import { useWalletStore } from '../store/wallet';
 
 interface Transaction {
@@ -66,55 +64,64 @@ export default function History() {
       toast.error(e.toString(), { id: txId });
     }
   };
-  const handleDownloadNote = async (txId: string, amount: number) => {
+
+  const handleDownloadNote = async (txId: string, amount: number, serial?: string) => {
     try {
       toast.loading('Generating PDF...', { id: txId });
-      const svgBase64 = await invoke<string>('get_note_svg', { txId });
+      const filename = serial ? `note-${amount}-sats-${serial}.pdf` : `note-${amount}-sats.pdf`;
       
-      const svgText = atob(svgBase64);
-      const parser = new DOMParser();
-      const svgDoc = parser.parseFromString(svgText, "image/svg+xml");
-      const svgElement = svgDoc.documentElement;
-      
-      const doc = new jsPDF({ orientation: 'landscape', format: [920, 420], unit: 'pt' });
-      await doc.svg(svgElement, { x: 0, y: 0, width: 920, height: 420 });
-      
-      const pdfDataUri = doc.output('datauristring');
-      const base64Data = pdfDataUri.split(',')[1];
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const { writeFile } = await import('@tauri-apps/plugin-fs');
+      const savePath = await save({
+        title: 'Save Note PDF',
+        defaultPath: filename,
+        filters: [{ name: 'PDF Document', extensions: ['pdf'] }]
+      });
 
-      const filename = `note-${amount}-sats.pdf`;
-      const savePath = await invoke<string>('save_file_to_disk', { base64Data, filename });
-      toast.success(`Saved to ${savePath}`, { id: txId, duration: 5000 });
+      if (savePath) {
+        const pdfBytes = await invoke<number[]>('get_note_pdf', { txId });
+        await writeFile(savePath, new Uint8Array(pdfBytes));
+        toast.success(`Successfully saved note!`, { id: txId, duration: 5000 });
+        
+        try {
+          const { openPath } = await import('@tauri-apps/plugin-opener');
+          await openPath(savePath);
+        } catch (e) {
+          console.log("Could not open file natively", e);
+        }
+      } else {
+        toast.dismiss(txId);
+      }
     } catch (e: any) {
       toast.error(`Failed to save: ${e}`, { id: txId });
     }
   };
 
   return (
-    <div className="flex-1 p-6 overflow-y-auto">
-      <div className="flex items-center justify-between mb-8">
+    <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-8">
+      <div className="flex justify-between items-end mb-8">
         <div>
-          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-blue-500">
+          <h1 className="text-headline-lg-mobile md:text-headline-lg font-headline-lg-mobile md:font-headline-lg text-primary mb-2">
             Transaction History
           </h1>
-          <p className="text-slate-400 mt-2 text-sm">Track your past and pending payments.</p>
+          <p className="text-on-surface-variant text-body-md font-body-md">Track your past and pending payments.</p>
         </div>
         <button
           onClick={fetchHistory}
-          className="p-2 bg-slate-800 text-slate-300 hover:text-white rounded-xl hover:bg-slate-700 transition-colors"
+          className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface hover:bg-surface-bright transition-colors"
         >
           <RefreshCw className="w-5 h-5" />
         </button>
       </div>
 
       {loading ? (
-        <div className="text-center py-10 text-slate-400">Loading...</div>
+        <div className="text-center py-10 text-on-surface-variant">Loading...</div>
       ) : transactions.length === 0 ? (
-        <div className="text-center py-10 text-slate-500 bg-slate-800/30 rounded-2xl border border-slate-800/50">
+        <div className="text-center py-10 text-on-surface-variant bg-surface-container-high rounded-xl border border-outline-variant/10">
           No transactions yet.
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-card-gap">
           {transactions.map((tx) => {
             const isMint = 'Mint' in tx.tx_type;
             const isIssue = 'Issue' in tx.tx_type;
@@ -122,92 +129,100 @@ export default function History() {
             const quoteId = isMint ? tx.tx_type.Mint.quote_id : (isMelt ? tx.tx_type.Melt.quote_id : '');
 
             return (
-              <div key={tx.id} className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 flex flex-col gap-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${isMint ? 'bg-emerald-500/10 text-emerald-400' : isIssue ? 'bg-indigo-500/10 text-indigo-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                      {isMint ? <CheckCircle className="w-5 h-5" /> : isIssue ? <FileText className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+              <div key={tx.id} className={`obsidian-card rounded-xl p-5 border group ${isMint && tx.status === 'Success' ? 'border-emerald-900/30' : 'border-surface-container-high/50'}`}>
+                {isMint && tx.status === 'Success' && (
+                  <>
+                    <div className="absolute inset-0 bg-emerald-900/5 mix-blend-screen pointer-events-none"></div>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                  </>
+                )}
+                <div className="noise-overlay"></div>
+                <div className="relative z-10">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
+                        isMint ? 'bg-emerald-900/30 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 
+                        isIssue ? 'bg-primary-container/20 border-primary/20' : 
+                        'bg-error-container/20 border-error/20'
+                      }`}>
+                        {isMint ? <ArrowDown className="text-emerald-400 w-4 h-4" /> : 
+                         isIssue ? <FileText className="text-primary w-4 h-4" /> : 
+                         <ArrowUp className="text-error w-4 h-4" />}
+                      </div>
+                      <div>
+                        <h3 className="text-body-md font-body-md font-semibold text-on-surface">
+                          {isMint ? 'Received / Mint' : isIssue ? 'Issued Note' : 'Sent / Melt'}
+                        </h3>
+                        <p className="text-label-caps font-label-caps text-on-surface-variant mt-1 max-w-[200px] truncate" title={tx.mint_url}>
+                          {tx.mint_url || 'Local Wallet'}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <div className="font-semibold text-white">
-                        {isMint ? 'Received / Mint' : isIssue ? 'Issued Note' : 'Sent / Melt'}
-                      </div>
-                      <div className="text-xs text-slate-400 truncate max-w-[200px]">
-                        {tx.mint_url}
-                      </div>
+                    <div className="text-right">
+                      <span className={`text-body-md font-body-md font-bold block ${isMint ? 'text-emerald-400' : isIssue ? 'text-primary' : 'text-on-surface'}`}>
+                        {isMint ? '+' : isIssue ? '' : '-'}{tx.amount} sats
+                      </span>
+                      {tx.fee > 0 && <span className="text-label-caps font-label-caps text-on-surface-variant mt-1 block">Fee: {tx.fee} sats</span>}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className={`font-bold ${isMint ? 'text-emerald-400' : isIssue ? 'text-indigo-400' : 'text-white'}`}>
-                      {isMint ? '+' : isIssue ? '' : '-'}{tx.amount} sats
-                    </div>
-                    {tx.fee > 0 && <div className="text-xs text-slate-500">Fee: {tx.fee} sats</div>}
-                  </div>
-                </div>
 
-                <div className="flex justify-between items-center bg-slate-900/50 p-3 rounded-xl border border-slate-800">
-                  <div className="flex items-center gap-2">
-                    {tx.status === 'Pending' && <AlertCircle className="w-4 h-4 text-amber-500" />}
-                    {tx.status === 'Success' && <CheckCircle className="w-4 h-4 text-emerald-500" />}
-                    {tx.status === 'Failed' && <XCircle className="w-4 h-4 text-slate-500" />}
-                    {tx.status === 'FailedMintError' && <AlertCircle className="w-4 h-4 text-rose-500" />}
-                    
-                    <span className={`text-sm font-medium ${
+                  <div className={`divider-dashed my-3 ${isMint && tx.status === 'Success' ? 'border-emerald-900/50' : ''}`}></div>
+
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-label-caps font-label-caps">
+                    <div className={`flex items-center gap-2 w-full md:w-auto justify-between md:justify-start ${
                       tx.status === 'Pending' ? 'text-amber-500' :
-                      tx.status === 'Success' ? 'text-emerald-500' :
+                      tx.status === 'Success' ? 'text-emerald-400' :
                       tx.status === 'FailedMintError' ? 'text-rose-500' :
-                      'text-slate-400'
+                      'text-on-surface-variant'
                     }`}>
-                      {tx.status === 'FailedMintError' ? 'Mint Error' : tx.status}
-                    </span>
-                  </div>
+                      <div className="flex items-center gap-2">
+                        {tx.status === 'Pending' && <AlertCircle className="w-4 h-4" />}
+                        {tx.status === 'Success' && <CheckCircle className="w-4 h-4" />}
+                        {tx.status === 'Failed' && <XCircle className="w-4 h-4" />}
+                        {tx.status === 'FailedMintError' && <AlertCircle className="w-4 h-4" />}
+                        <span>{tx.status === 'FailedMintError' ? 'Mint Error' : tx.status}</span>
+                      </div>
+                      <span className="text-on-surface-variant md:hidden">
+                        {new Date(tx.timestamp * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </span>
+                    </div>
 
-                  <div className="text-xs text-slate-500">
-                    {new Date(tx.timestamp * 1000).toLocaleString()}
-                  </div>
-                </div>
-
-                {tx.status === 'Pending' && (
-                  <div className="flex gap-2 mt-1">
-                    {isMint ? (
-                      <button
-                        onClick={() => handleRetryMint(tx.id)}
-                        className="flex-1 bg-teal-500/20 text-teal-400 hover:bg-teal-500/30 p-2 rounded-xl text-sm font-medium transition-colors"
-                      >
-                        Retry Mint
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleCheckMelt(tx.id)}
-                        className="flex-1 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 p-2 rounded-xl text-sm font-medium transition-colors"
-                      >
-                        Check Status & Refund
+                    {isIssue && tx.status === 'Success' && (
+                      <button onClick={() => handleDownloadNote(tx.id, tx.amount, tx.tx_type?.Issue?.note?.serial)} className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-colors border border-outline-variant/30 text-label-caps font-label-caps">
+                        <Download className="w-4 h-4" /> Download SVG / PDF
                       </button>
                     )}
+
+                    {tx.status === 'Pending' && (
+                      <div className="flex gap-2 w-full md:w-auto">
+                        {isMint ? (
+                          <button onClick={() => handleRetryMint(tx.id)} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-teal-500/20 text-teal-400 hover:bg-teal-500/30 transition-colors border border-teal-500/30 text-label-caps font-label-caps">
+                            Retry Mint
+                          </button>
+                        ) : (
+                          <button onClick={() => handleCheckMelt(tx.id)} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors border border-amber-500/30 text-label-caps font-label-caps">
+                            Check Status & Refund
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {tx.status === 'FailedMintError' && (
+                      <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl text-xs text-rose-300 w-full md:w-auto">
+                        The mint marked your proofs as spent but the invoice was not paid. Contact the mint operator with Quote ID: <span className="font-mono bg-rose-950 px-1 rounded">{quoteId}</span>
+                      </div>
+                    )}
+
+                    <span className="text-on-surface-variant hidden md:block">
+                      {new Date(tx.timestamp * 1000).toLocaleString()}
+                    </span>
                   </div>
-                )}
-                
-                {tx.status === 'FailedMintError' && (
-                  <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl text-xs text-rose-300">
-                    The mint marked your proofs as spent but the invoice was not paid. Contact the mint operator with Quote ID: <span className="font-mono bg-rose-950 px-1 rounded">{quoteId}</span>
-                  </div>
-                )}
-                
-                {isIssue && tx.status === 'Success' && (
-                  <div className="flex mt-1">
-                    <button
-                      onClick={() => handleDownloadNote(tx.id, tx.amount)}
-                      className="w-full flex justify-center items-center gap-2 bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 p-2 rounded-xl text-sm font-bold transition-colors"
-                    >
-                      <Download className="w-4 h-4" /> Download SVG / PDF
-                    </button>
-                  </div>
-                )}
+                </div>
               </div>
             );
           })}
         </div>
       )}
-    </div>
+    </main>
   );
 }

@@ -24,3 +24,14 @@ qr_code_data_compression.md
 .idea/
 *.swp
 *.swo
+
+# Secrets and credentials
+.env
+.env.*
+wallet.json
+*.pem
+*.key
+
+# Local scratch and test files
+scratch*
+test_*

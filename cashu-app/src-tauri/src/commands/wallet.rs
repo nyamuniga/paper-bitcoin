@@ -1,6 +1,6 @@
 use crate::error::{CommandError, CommandResult};
 use serde::{Deserialize, Serialize};
-use ecash_wallet::{WalletState, generate_mnemonic};
+use ecash_wallet::WalletState;
 
 use tauri::State;
 use crate::commands::auth::AppState;
@@ -15,7 +15,7 @@ pub struct WalletInfo {
 
 #[tauri::command]
 pub async fn wallet_info(state: State<'_, AppState>) -> CommandResult<WalletInfo> {
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+    let path = state.wallet_path.clone();
     if !path.exists() {
         return Ok(WalletInfo {
             is_initialized: false,
@@ -32,17 +32,20 @@ pub async fn wallet_info(state: State<'_, AppState>) -> CommandResult<WalletInfo
 
     let w_state = WalletState::load_encrypted(&path, &passphrase)?;
     
+    let balances = w_state.balance_by_mint();
+    
+    
     Ok(WalletInfo {
         is_initialized: true,
         balance_sats: w_state.total_balance(),
         mnemonic: None, // Don't return mnemonic normally
-        mint_balances: w_state.balance_by_mint(),
+        mint_balances: balances,
     })
 }
 
 #[tauri::command]
 pub async fn get_balance(state: State<'_, AppState>) -> CommandResult<u64> {
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+    let path = state.wallet_path.clone();
     if !path.exists() {
         return Ok(0);
     }
@@ -58,7 +61,7 @@ pub async fn get_balance(state: State<'_, AppState>) -> CommandResult<u64> {
 
 #[tauri::command]
 pub async fn get_recovery_words(state: State<'_, AppState>) -> CommandResult<Vec<String>> {
-    let path = WalletState::default_path().with_file_name("gui-wallet.json");
+    let path = state.wallet_path.clone();
     
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();
