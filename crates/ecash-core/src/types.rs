@@ -232,8 +232,9 @@ pub struct PhysicalNote {
     pub serial: String,
     /// SHA-256 integrity hash (displayed on front of note).
     pub validation_hash: String,
-    /// Unix timestamp of issuance.
-    pub issued_at: u64,
+    /// Bitcoin block height when issued (replaces timestamp).
+    #[serde(alias = "issued_at", default)]
+    pub block_height: u64,
     /// Strategy used for the fee reserve ('static' or 'dynamic').
     #[serde(default)]
     pub fee_strategy: String,

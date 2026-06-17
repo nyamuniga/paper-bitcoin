@@ -18,15 +18,14 @@ const BLANK_NOTE_JPG: &[u8] = include_bytes!("../assets/blank-note.jpg");
 /// The **public QR** encodes a compact binary payload (see `ecash_core::compact`).
 /// The **private QR** encodes the JSON private seed (unchanged).
 pub fn generate_note_svg(note: &PhysicalNote) -> String {
-    let public_bin = ecash_core::compact::encode_public_data(&note.public_data, note.amount_sats, note.issued_at);
-    let full_note_bin = ecash_core::compact::encode_full_note(note);
+    let public_bin = ecash_core::compact::encode_public_data(&note.public_data, note.amount_sats, note.block_height);    let full_note_bin = ecash_core::compact::encode_full_note(note);
 
     let pub_qr = qr_bin(&public_bin);
     let priv_qr = qr_bin(&full_note_bin);
 
     let bg_b64 = base64::engine::general_purpose::STANDARD.encode(BLANK_NOTE_JPG);
 
-    let issued = fmt_ts(note.issued_at);
+    let issued = note.block_height.to_string();
     let (amount_num, amount_unit) = fmt_amount(note.amount_sats);
     let full_hash = &note.validation_hash;
 
@@ -107,14 +106,7 @@ fn fmt_amount(sats: u64) -> (String, String) {
     }
 }
 
-fn fmt_ts(ts: u64) -> String {
-    let days_since_epoch = ts / 86400;
-    let year = 1970 + days_since_epoch / 365;
-    let doy = days_since_epoch % 365;
-    let month = doy / 30 + 1;
-    let day = doy % 30 + 1;
-    format!("{:04}-{:02}-{:02}", year, month, day)
-}
+// Timestamp formatting removed since we use block height
 
 fn truncate(s: &str, n: usize) -> String {
     if s.len() <= n {
@@ -151,7 +143,7 @@ fn build_svg(
     .lbl {{ font: 12px 'Courier New', monospace; fill:#424242; font-weight:bold; letter-spacing:1px; }}
     .val {{ font: bold 16px 'Courier New', monospace; fill:#212121; }}
     .ser {{ font: bold 22px 'Courier New', monospace; fill:#B71C1C; letter-spacing:4px; }}
-    .link{{ font: 14px 'Courier New', monospace; fill:#1565C0; text-decoration:none; }}
+    .link{{ font: 14px 'Courier New', monospace; fill:#212121; text-decoration:none; }}
     .wlbl{{ font: bold 18px 'Courier New', monospace; fill:#FFECB3; letter-spacing:1px; }}
     .wsub{{ font: bold 10px 'Courier New', monospace; fill:#5D4037; }}
     .warn{{ font: bold 12px 'Courier New', monospace; fill:#B71C1C; }}
@@ -198,14 +190,14 @@ fn build_svg(
 <text x="100" y="290" class="lbl">SERIAL NUMBER</text>
 <text x="100" y="310" class="ser">{serial}</text>
 
-<text x="100" y="340" class="lbl">ISSUED DATE</text>
+<text x="100" y="340" class="lbl">BLOCK HEIGHT</text>
 <text x="100" y="355" class="val">{issued}</text>
 
 <text x="215" y="340" class="lbl">KEYSET ID</text>
 <text x="215" y="355" class="val">{keyset_id}</text>
 
-<text x="100" y="385" class="lbl">MINT ENDPOINT</text>
-<text x="100" y="400" class="link">{mint_url}</text>
+<text x="100" y="380" class="lbl">MINT ENDPOINT</text>
+<text x="100" y="395" class="link">{mint_url}</text>
 
 <!-- Public QR Code -->
 <image href="data:image/svg+xml;base64,{pub_qr}" x="483" y="200" width="144" height="144"/>

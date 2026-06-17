@@ -5,7 +5,7 @@ fn main() {
     let note = PhysicalNote {
         serial: "abcdef1234567890".to_string(),
         amount_sats: 100,
-        issued_at: 1234567890,
+        block_height: 1234567890,
         validation_hash: "hash0000hash0000hash0000hash0000".to_string(),
         mint_urls: vec!["https://mint.minibits.cash/Bitcoin".to_string()],
         fee_strategy: "dynamic".to_string(),

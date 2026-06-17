@@ -936,12 +936,19 @@ pub async fn resume_issue_note(
     let validation_hash = compute_validation_hash(&public_entries);
     let serial = serial_from_hash(&validation_hash);
 
+    let mut block_height = 0;
+    if let Ok(resp) = reqwest::get("https://mempool.space/api/blocks/tip/height").await {
+        if let Ok(text) = resp.text().await {
+            block_height = text.trim().parse::<u64>().unwrap_or(0);
+        }
+    }
+
     let note = PhysicalNote {
         amount_sats: original_amount,
         mint_urls: issue_data.allocations.iter().map(|a| a.0.to_string()).collect(),
         serial,
         validation_hash: validation_hash.clone(),
-        issued_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        block_height,
         fee_strategy: issue_data.fee_strategy.clone(),
         public_data: PublicNoteData {
             entries: public_entries,

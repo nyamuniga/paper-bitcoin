@@ -7,7 +7,7 @@
 //!   magic:            2 bytes   (0xEC, 0xA5)
 //!   version:          1 byte    (0x01)
 //!   face_value_sats:  4 bytes   (u32 LE)
-//!   issued_at:        4 bytes   (u32 LE)
+//!   block_height:     4 bytes   (u32 LE)
 //!   validation_hash:  32 bytes  (raw SHA-256)
 //!   num_mints:        1 byte
 //!
@@ -42,14 +42,14 @@ const VERSION: u8 = 0x03;
 /// # Panics
 /// Panics if any hex field is not valid hex or not the expected length (these
 /// are all internal invariants guaranteed when a note is issued).
-pub fn encode_public_data(data: &PublicNoteData, face_value_sats: u64, issued_at: u64) -> Vec<u8> {
+pub fn encode_public_data(data: &PublicNoteData, face_value_sats: u64, block_height: u64) -> Vec<u8> {
     let mut buf = Vec::with_capacity(256);
 
     // Header
     buf.extend_from_slice(&MAGIC);
     buf.push(VERSION);
     buf.extend_from_slice(&(face_value_sats as u32).to_le_bytes());
-    buf.extend_from_slice(&(issued_at as u32).to_le_bytes());
+    buf.extend_from_slice(&(block_height as u32).to_le_bytes());
     buf.extend_from_slice(&hex_to_bytes32(&data.validation_hash));
     buf.push(data.entries.len() as u8);
 
@@ -115,7 +115,7 @@ impl std::fmt::Display for DecodeError {
 pub struct DecodedPublicData {
     pub data: PublicNoteData,
     pub face_value_sats: u64,
-    pub issued_at: u64,
+    pub block_height: u64,
 }
 
 fn decode_public_internal<'a>(r: &mut Reader<'a>) -> Result<DecodedPublicData, DecodeError> {
@@ -129,7 +129,7 @@ fn decode_public_internal<'a>(r: &mut Reader<'a>) -> Result<DecodedPublicData, D
         return Err(DecodeError::UnsupportedVersion(version));
     }
     let face_value_sats = u32::from_le_bytes(r.read(4)?.try_into().unwrap()) as u64;
-    let issued_at = u32::from_le_bytes(r.read(4)?.try_into().unwrap()) as u64;
+    let block_height = u32::from_le_bytes(r.read(4)?.try_into().unwrap()) as u64;
     let validation_hash = hex::encode(r.read(32)?);
     let num_mints = r.read(1)?[0] as usize;
 
@@ -183,7 +183,7 @@ fn decode_public_internal<'a>(r: &mut Reader<'a>) -> Result<DecodedPublicData, D
             face_value_sats,
         },
         face_value_sats,
-        issued_at,
+        block_height,
     })
 }
 
@@ -274,7 +274,7 @@ fn hex_to_bytes33(s: &str) -> [u8; 33] {
 use crate::types::{PhysicalNote, PrivateNoteData};
 
 pub fn encode_full_note(note: &PhysicalNote) -> Vec<u8> {
-    let mut buf = encode_public_data(&note.public_data, note.amount_sats, note.issued_at);
+    let mut buf = encode_public_data(&note.public_data, note.amount_sats, note.block_height);
     buf.push(note.serial.len() as u8);
     buf.extend_from_slice(note.serial.as_bytes());
     buf.extend_from_slice(&hex_to_bytes32(&note.private_data.master_seed_hex));
@@ -287,7 +287,7 @@ pub fn encode_full_note(note: &PhysicalNote) -> Vec<u8> {
 
 pub fn decode_full_note(bytes: &[u8]) -> Result<PhysicalNote, DecodeError> {
     let mut r = Reader::new(bytes);
-    let DecodedPublicData { data, face_value_sats, issued_at } = decode_public_internal(&mut r)?;
+    let DecodedPublicData { data, face_value_sats, block_height } = decode_public_internal(&mut r)?;
     
     let serial_len = r.read(1)?[0] as usize;
     let serial = String::from_utf8(r.read(serial_len)?.to_vec()).map_err(|_| DecodeError::InvalidUtf8)?;
@@ -303,7 +303,7 @@ pub fn decode_full_note(bytes: &[u8]) -> Result<PhysicalNote, DecodeError> {
 
     Ok(PhysicalNote {
         amount_sats: face_value_sats,
-        issued_at,
+        block_height,
         serial,
         mint_urls: data.entries.iter().map(|e| e.mint.clone()).collect(),
         validation_hash: data.validation_hash.clone(),

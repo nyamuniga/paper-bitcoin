@@ -378,7 +378,7 @@ async fn cmd_issue(
     let public_bin = ecash_core::compact::encode_public_data(
         &note.public_data,
         note.amount_sats,
-        note.issued_at,
+        note.block_height,
     );
     std::fs::write(&json_path, serde_json::to_string_pretty(&note)?)?;
     std::fs::write(&svg_path, generate_note_svg(&note))?;
@@ -716,7 +716,7 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
                         let public_bin = ecash_core::compact::encode_public_data(
                             &note.public_data,
                             note.amount_sats,
-                            note.issued_at,
+                            note.block_height,
                         );
                         std::fs::write(&json_path, serde_json::to_string_pretty(&note).unwrap()).ok();
                         std::fs::write(&svg_path, generate_note_svg(&note)).ok();
