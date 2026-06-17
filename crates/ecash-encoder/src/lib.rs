@@ -50,6 +50,13 @@ pub fn generate_note_svg(note: &PhysicalNote) -> String {
         "UNKNOWN".to_string()
     };
 
+    let strategy = note.fee_strategy.to_lowercase();
+    let amt_color = if strategy == "static" {
+        "#793D1B" // RGB(121,61,27) for Static strategy
+    } else {
+        "#33691E" // Green for Dynamic strategy
+    };
+
     build_svg(
         &bg_b64,
         &amount_num,
@@ -61,6 +68,7 @@ pub fn generate_note_svg(note: &PhysicalNote) -> String {
         full_hash,
         &pub_qr,
         &priv_qr,
+        amt_color,
     )
 }
 
@@ -118,7 +126,6 @@ fn truncate(s: &str, n: usize) -> String {
 
 // ─── SVG template ────────────────────────────────────────────────────────────
 
-#[allow(clippy::too_many_arguments)]
 fn build_svg(
     bg_b64: &str,
     amount_num: &str,
@@ -130,6 +137,7 @@ fn build_svg(
     full_hash: &str,
     pub_qr: &str,
     priv_qr: &str,
+    amt_color: &str,
 ) -> String {
     format!(
         r##"<?xml version="1.0" encoding="UTF-8"?>
@@ -138,8 +146,8 @@ fn build_svg(
   <style>
     .hd  {{ font: bold 32px 'Georgia', serif; fill:#3E2723; }}
     .sub {{ font: 14px 'Georgia', serif; fill:#5D4037; letter-spacing:1px; }}
-    .amt-num {{ font: bold 68px 'Georgia', serif; fill:#33691E; }}
-    .amt-txt {{ font: bold 36px 'Georgia', serif; fill:#33691E; letter-spacing:2px; }}
+    .amt-num {{ font: bold 68px 'Georgia', serif; fill:{amt_color}; }}
+    .amt-txt {{ font: bold 36px 'Georgia', serif; fill:{amt_color}; letter-spacing:2px; }}
     .lbl {{ font: 12px 'Courier New', monospace; fill:#424242; font-weight:bold; letter-spacing:1px; }}
     .val {{ font: bold 16px 'Courier New', monospace; fill:#212121; }}
     .ser {{ font: bold 22px 'Courier New', monospace; fill:#B71C1C; letter-spacing:4px; }}
@@ -172,9 +180,11 @@ fn build_svg(
 <g transform="translate(627, 43) scale(2)">
   <path fill="#3E2723" d="M28.4,15.7c-0.2-1.3-1-2.1-2.7-2.6v-3.2h-2.5v3.1c-0.6-0.1-1.3-0.3-2-0.5v-3h-2.5v3.1 c-0.6-0.1-1.1-0.3-1.6-0.4l0-0.1h-3.4l0.7,2.8c0.4,0.1,0.7,0.2,1,0.3c0.3,0.1,0.5,0.4,0.4,0.8l-1.3,5.4c-0.1,0.1-0.2,0.1-0.4,0.1 c-0.3-0.1-0.6-0.2-1-0.3l-0.7,2.8h3.3c0.6,0.2,1.2,0.3,1.8,0.5v3.1h2.5v-3.2c0.7,0.2,1.3,0.3,2,0.5v3.1h2.5v-3.3 c2.3-0.5,3.9-1.4,4.2-3.7c0.2-1.8-0.5-2.8-1.7-3.4C28,20,28.6,18.8,28.4,15.7z M25.1,22.8c-0.3,2-2.4,1.4-3.1,1.2v-4.8 C22.7,19.3,25.4,19.9,25.1,22.8z M24.6,16c-0.3,1.8-2.1,1.3-2.6,1.1v-4.2C22.6,13,25,13.6,24.6,16z"/>
 </g>
-<text font-size="7" font-weight="bold" fill="#3E2723" font-family="'Courier New', monospace" letter-spacing="1">
-  <textPath href="#rightCirclePath" startOffset="50%" text-anchor="middle">DECENTRALIZED &#183; SOUND &#183; COIN</textPath>
-</text>
+<g transform="translate(27, 0)">
+  <text font-size="7" font-weight="bold" fill="#3E2723" font-family="'Courier New', monospace" letter-spacing="1">
+    <textPath href="#rightCirclePath" startOffset="50%" text-anchor="middle">DECENTRALIZED &#183; SOUND &#183; MONEY</textPath>
+  </text>
+</g>
 
 <!-- Title & Header -->
 <text x="175" y="85" class="hd">RESERVE BANK OF ECASH</text>
@@ -202,7 +212,7 @@ fn build_svg(
 <text x="555" y="375" text-anchor="middle" class="lbl">SCAN TO VERIFY</text>
 
 <!-- Vertical Hash -->
-<text x="695" y="505" class="lbl" font-size="7" fill="#5D4037" transform="rotate(-90 695 505)">HASH: {full_hash}</text>
+<text x="695" y="555" class="lbl" font-size="7" fill="#5D4037" transform="rotate(-90 695 535)">HASH: {full_hash}</text>
 
 <!-- Right Stub (x > 750) -->
 <!-- Red Box for SECRETS BELOW -->
@@ -236,5 +246,6 @@ fn build_svg(
         full_hash = full_hash,
         pub_qr = pub_qr,
         priv_qr = priv_qr,
+        amt_color = amt_color,
     )
 }

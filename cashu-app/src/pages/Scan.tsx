@@ -64,7 +64,7 @@ export const Scan = () => {
     setRedeeming(true);
     setError(null);
     try {
-      await invoke('redeem_note', { binB64, invoice });
+      await invoke('redeem_note', { binB64, invoice: invoice.trim() });
       setRedeemSuccess(true);
       await refreshWallet();
     } catch (e: any) {

@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use ecash_core::{
     derivation::TokenDerivation,
     dhke::{compute_validation_hash, point_from_hex, BlindingSession},
-    types::{Amount, CashuToken, PhysicalNote, PrivateNoteData, Proof, PublicNoteData, TokenEntry, Transaction, TransactionType, MintTransactionData, MeltTransactionData, TransactionStatus},
+    types::{Amount, CashuToken, PhysicalNote, PrivateNoteData, Proof, PublicNoteData, TokenEntry, Transaction, TransactionType, MeltTransactionData, TransactionStatus},
 };
 
 pub const DEFAULT_MINT_URL: &str = "https://mint.minibits.cash/Bitcoin";
@@ -83,31 +83,41 @@ impl WalletState {
             .cloned();
 
         let normalize_url = |url: &str| -> String {
-            let mut clean = url.trim().to_lowercase();
+            let mut clean = url.trim().to_string();
             // Remove any trailing slashes or /v1
             clean = clean.trim_end_matches('/').to_string();
-            if clean.ends_with("/v1") {
-                clean = clean.trim_end_matches("/v1").to_string();
+            if clean.to_lowercase().ends_with("/v1") {
+                clean = clean[..clean.len() - 3].to_string();
             }
             clean = clean.trim_end_matches('/').to_string();
 
-            let with_scheme = if !clean.starts_with("http://") && !clean.starts_with("https://") {
-                format!("https://{}", clean.trim_start_matches("https://").trim_start_matches("http://"))
+            let clean_lower = clean.to_lowercase();
+            let with_scheme = if !clean_lower.starts_with("http://") && !clean_lower.starts_with("https://") {
+                // If it starts with http:// or https:// but mixed case, we'd need to strip it.
+                // We assume the user just pasted the host if it lacks the scheme.
+                // If they pasted Http://... we handle it below.
+                if clean_lower.starts_with("http://") {
+                    format!("https://{}", &clean[7..])
+                } else if clean_lower.starts_with("https://") {
+                    clean
+                } else {
+                    format!("https://{}", clean)
+                }
             } else {
                 clean
             };
             
             if let Ok(parsed) = reqwest::Url::parse(&with_scheme) {
-                let host = parsed.host_str().unwrap_or("");
+                let host = parsed.host_str().unwrap_or("").to_lowercase();
                 // Rescue garbage URLs created by accidental 'https://' inputs
                 if host == "https" || host == "http" || host.is_empty() {
                     if let Some(ref fb) = fallback_mint {
                         // Recursively normalize the fallback to ensure it's clean
-                        let mut fb_clean = fb.trim().to_lowercase();
+                        let mut fb_clean = fb.trim().to_string();
                         fb_clean = fb_clean.trim_end_matches('/').to_string();
-                        if fb_clean.ends_with("/v1") { fb_clean = fb_clean.trim_end_matches("/v1").to_string(); }
+                        if fb_clean.to_lowercase().ends_with("/v1") { fb_clean = fb_clean[..fb_clean.len()-3].to_string(); }
                         fb_clean = fb_clean.trim_end_matches('/').to_string();
-                        if !fb_clean.starts_with("http") { fb_clean = format!("https://{}", fb_clean); }
+                        if !fb_clean.to_lowercase().starts_with("http") { fb_clean = format!("https://{}", fb_clean); }
                         return fb_clean;
                     }
                     return with_scheme;
@@ -117,6 +127,10 @@ impl WalletState {
                 let mut norm = format!("https://{}", host);
                 if let Some(port) = parsed.port() {
                     norm.push_str(&format!(":{}", port));
+                }
+                let path = parsed.path();
+                if path != "/" && !path.is_empty() {
+                    norm.push_str(path);
                 }
                 norm
             } else {
@@ -641,37 +655,58 @@ pub async fn prepare_issue_multimint_note(
     strategy: ReserveStrategy,
 ) -> Result<(String, String, String, u64)> {
     let hub_mint = allocations[0].0;
-    let hub_client = MintClient::new(hub_mint);
-    let mut actual_allocations = Vec::new();
     let mut total_face_value = 0;
 
+    let mut fee_futures = Vec::new();
     for &(mint, face_val) in allocations {
         if face_val == 0 { continue; }
         total_face_value += face_val;
         
-        let reserve = match strategy {
-            ReserveStrategy::Static => std::cmp::max(10, face_val * 3 / 100),
-            ReserveStrategy::Dynamic => {
-                let fee_est = estimate_routing_fee_from_info(mint, face_val).await;
-                let buffer = std::cmp::max(5, fee_est / 2);
-                let min_reserve = 10;
-                let max_reserve = std::cmp::max(10, face_val * 5 / 100);
-                std::cmp::min(std::cmp::max(min_reserve, fee_est + buffer), max_reserve)
-            }
-        };
-        actual_allocations.push((mint, face_val + reserve));
+        let mint = mint.to_string();
+        fee_futures.push(async move {
+            let reserve = match strategy {
+                ReserveStrategy::Static => std::cmp::max(10, face_val * 3 / 100),
+                ReserveStrategy::Dynamic => {
+                    let fee_est = estimate_routing_fee_from_info(&mint, face_val).await;
+                    let buffer = std::cmp::max(5, fee_est / 2);
+                    let min_reserve = 10;
+                    let max_reserve = std::cmp::max(10, face_val * 5 / 100);
+                    std::cmp::min(std::cmp::max(min_reserve, fee_est + buffer), max_reserve)
+                }
+            };
+            (mint, face_val + reserve)
+        });
+    }
+
+    let actual_allocations = futures::future::join_all(fee_futures).await;
+
+    let mut quote_futures = Vec::new();
+    let hub_mint_str = hub_mint.to_string();
+
+    for (mint, amt) in actual_allocations.iter().skip(1) {
+        let mint = mint.clone();
+        let amt = *amt;
+        let hub_mint_str = hub_mint_str.clone();
+        
+        quote_futures.push(async move {
+            let client = MintClient::new(&mint);
+            let (qid, inv) = client.request_mint_quote(amt).await?;
+            let (fee, _) = estimate_melt_fee(&hub_mint_str, &inv).await?;
+            Ok::<_, anyhow::Error>((mint, amt, qid, inv, fee))
+        });
     }
 
     let mut other_quotes = Vec::new();
     let mut total_hub_needed = actual_allocations[0].1;
 
-    for (mint, amt) in &actual_allocations[1..] {
-        let client = MintClient::new(mint);
-        let (qid, inv) = client.request_mint_quote(*amt).await?;
-        let (fee, _) = estimate_melt_fee(hub_mint, &inv).await?;
-        other_quotes.push((mint.to_string(), *amt, qid, inv, fee));
+    let quote_results = futures::future::join_all(quote_futures).await;
+    for res in quote_results {
+        let (mint, amt, qid, inv, fee) = res?;
+        other_quotes.push((mint, amt, qid, inv, fee));
         total_hub_needed += amt + fee;
     }
+
+    let hub_client = MintClient::new(hub_mint);
 
     let (hub_qid, hub_inv) = hub_client.request_mint_quote(total_hub_needed).await?;
 
@@ -795,6 +830,8 @@ pub async fn resume_issue_note(
     entries.push(TokenEntry { mint: issue_data.hub_mint.clone(), proofs: hub_main_proofs });
     proofs_idx += hub_main_len;
 
+    let mut child_futures = Vec::new();
+
     for (mint, amt, qid, inv, fee) in &issue_data.child_quotes {
         let subset_len = Amount::from_sat(amt + fee).split_into_powers_of_2().len();
         let melt_proofs = hub_all_proofs[proofs_idx..proofs_idx + subset_len].to_vec();
@@ -818,54 +855,74 @@ pub async fn resume_issue_note(
         if let Some(hub_proofs) = state.proofs.get_mut(&issue_data.hub_mint) {
             hub_proofs.retain(|p| !melt_proofs.iter().any(|mp| mp.id == p.id && mp.secret == p.secret));
         }
-        state.save_encrypted(wallet_path, passphrase)?;
 
-        let melt_res = hub_client.melt_tokens(&melt_proofs, inv, None, None).await;
-        if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id_melt) {
-            match melt_res {
-                Ok(_) => tx.status = TransactionStatus::Success,
-                Err(e) => return Err(anyhow!("Melt error during issuance: {}. Check History.", e)),
-            }
-        }
-        state.save_encrypted(wallet_path, passphrase)?;
-
-        let client = MintClient::new(mint);
-        let keyset = client.fetch_keyset().await?;
-        state.trusted_keys.insert(mint.to_string(), keyset.keys.clone());
         let denoms = Amount::from_sat(*amt).split_into_powers_of_2();
-
         let mut b_sess = Vec::new();
         let mut b_out = Vec::new();
         for &d in &denoms {
             let index = note_deriv.index;
             let secret = note_deriv.next_secret();
             let sess = BlindingSession::new(&secret);
-            b_out.push(serde_json::json!({"amount": d, "id": keyset.id, "B_": sess.b_prime_hex()}));
+            // We use a dummy keyset id for now, it will be overridden if we fetch keyset
+            b_out.push(serde_json::json!({"amount": d, "id": "placeholder", "B_": sess.b_prime_hex()}));
             b_sess.push((sess, index));
         }
 
-        let b_sigs = match client.mint_tokens(qid, b_out).await {
-            Ok(s) => s,
-            Err(e) => return Err(anyhow!("Child mint error. Your funds are at the mint. Check History to retry. Error: {}", e)),
-        };
+        let hub_mint_url = issue_data.hub_mint.clone();
+        let inv_clone = inv.clone();
+        let qid_clone = qid.clone();
+        let mint_clone = mint.clone();
 
-        let mut b_proofs = Vec::new();
-        for ((sess, index), sig) in b_sess.iter().zip(b_sigs.iter()) {
-            let amount = sig["amount"].as_u64().unwrap();
-            let sig_id = sig["id"].as_str().unwrap_or(&keyset.id);
-            let c_prime = point_from_hex(sig["C_"].as_str().unwrap()).unwrap();
-            let mint_pk = point_from_hex(keyset.keys.get(&amount).unwrap()).unwrap();
-            let dleq = parse_dleq(sig);
-            let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
-            proof.derivation_index = *index;
-            b_proofs.push(proof);
+        child_futures.push(async move {
+            let h_client = MintClient::new(&hub_mint_url);
+            h_client.melt_tokens(&melt_proofs, &inv_clone, None, None).await.map_err(|e| (tx_id_melt.clone(), anyhow!("Melt error during issuance: {}", e)))?;
+
+            let client = MintClient::new(&mint_clone);
+            let keyset = client.fetch_keyset().await.map_err(|e| (tx_id_melt.clone(), e))?;
+            
+            // update keyset id in b_out
+            let mut final_b_out = b_out.clone();
+            for out in &mut final_b_out {
+                if let Some(obj) = out.as_object_mut() {
+                    obj.insert("id".to_string(), serde_json::json!(keyset.id));
+                }
+            }
+
+            let b_sigs = client.mint_tokens(&qid_clone, final_b_out).await.map_err(|e| (tx_id_melt.clone(), anyhow!("Child mint error. Your funds are at the mint. Error: {}", e)))?;
+
+            let mut b_proofs = Vec::new();
+            for ((sess, index), sig) in b_sess.iter().zip(b_sigs.iter()) {
+                let amount = sig["amount"].as_u64().unwrap();
+                let sig_id = sig["id"].as_str().unwrap_or(&keyset.id);
+                let c_prime = point_from_hex(sig["C_"].as_str().unwrap()).unwrap();
+                let mint_pk = point_from_hex(keyset.keys.get(&amount).unwrap()).unwrap();
+                let dleq = parse_dleq(sig);
+                let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
+                proof.derivation_index = *index;
+                b_proofs.push(proof);
+            }
+            Ok::<_, (String, anyhow::Error)>((tx_id_melt, mint_clone, keyset.keys, b_proofs))
+        });
+    }
+
+    state.save_encrypted(wallet_path, passphrase)?;
+
+    let child_results = futures::future::join_all(child_futures).await;
+    for res in child_results {
+        match res {
+            Ok((tx_id_melt, mint, keys, b_proofs)) => {
+                if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id_melt) {
+                    tx.status = TransactionStatus::Success;
+                }
+                state.trusted_keys.insert(mint.clone(), keys);
+                state.proofs.entry(mint.clone()).or_default().extend(b_proofs.clone());
+                if !state.mints.contains(&mint) { state.mints.push(mint.clone()); }
+                entries.push(TokenEntry { mint, proofs: b_proofs });
+            }
+            Err((_tx_id_melt, e)) => {
+                return Err(anyhow!("Concurrent issuance failed: {}", e));
+            }
         }
-
-        state.proofs.entry(mint.to_string()).or_default().extend(b_proofs.clone());
-        if !state.mints.contains(&mint.to_string()) { state.mints.push(mint.to_string()); }
-        state.save_encrypted(wallet_path, passphrase)?;
-
-        entries.push(TokenEntry { mint: mint.to_string(), proofs: b_proofs });
     }
 
     for entry in &entries {
@@ -1021,26 +1078,43 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
     }
     let mut hub_proofs: Vec<_> = unique.into_values().collect();
 
+    let mut quote_futures = Vec::new();
+    let hub_mint_str = hub_mint.to_string();
     for entry in &token.token[1..] {
         if entry.proofs.is_empty() { continue; }
-        let amt: u64 = entry.proofs.iter().map(|p| p.amount).sum();
+        let entry = entry.clone();
+        let hub_mint_str = hub_mint_str.clone();
+        quote_futures.push(async move {
+            let amt: u64 = entry.proofs.iter().map(|p| p.amount).sum();
+            let fee_estimate = estimate_routing_fee_from_info(&entry.mint, amt).await;
+            let buffer = std::cmp::max(5, fee_estimate / 2);
+            let max_reserve = std::cmp::max(10, amt * 5 / 100);
+            let safe_fee = std::cmp::max(10, std::cmp::min(fee_estimate + buffer, max_reserve));
+            let transfer_amt = amt.saturating_sub(safe_fee);
 
-        let fee_estimate = estimate_routing_fee_from_info(&entry.mint, amt).await;
-        let buffer = std::cmp::max(5, fee_estimate / 2);
+            if transfer_amt == 0 {
+                return Ok::<_, anyhow::Error>(None);
+            }
 
-        // The safe_fee should be our dynamic estimate, bounded by the max possible reserve (5%)
-        let max_reserve = std::cmp::max(10, amt * 5 / 100);
-        let safe_fee = std::cmp::max(10, std::cmp::min(fee_estimate + buffer, max_reserve));
+            let hub_client = MintClient::new(&hub_mint_str);
+            let (qid, inv) = hub_client.request_mint_quote(transfer_amt).await?;
 
-        let transfer_amt = amt.saturating_sub(safe_fee);
-        if transfer_amt == 0 { continue; }
+            let entry_client = MintClient::new(&entry.mint);
+            let entry_keyset = entry_client.fetch_keyset().await?;
+            
+            Ok(Some((entry, amt, safe_fee, transfer_amt, qid, inv, entry_keyset)))
+        });
+    }
 
-        let (qid, inv) = hub_client.request_mint_quote(transfer_amt).await?;
+    let mut prepared_transfers = Vec::new();
+    for res in futures::future::join_all(quote_futures).await {
+        if let Some(data) = res? {
+            prepared_transfers.push(data);
+        }
+    }
 
-        // Prepare change outputs to absorb the safe_fee buffer
-        let entry_client = MintClient::new(&entry.mint);
-        let entry_keyset = entry_client.fetch_keyset().await?;
-        
+    let mut execution_futures = Vec::new();
+    for (entry, _amt, safe_fee, transfer_amt, qid, inv, entry_keyset) in prepared_transfers {
         let change_denoms = generate_change_denoms(safe_fee);
         let mut change_sessions = Vec::new();
         let mut change_outputs = Vec::new();
@@ -1052,57 +1126,67 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
             change_sessions.push((sess, deriv.index - 1));
         }
 
-        state.derivation_index = deriv.index;
-        state.save_encrypted(wallet_path, passphrase)?;
+        let denoms = Amount::from_sat(transfer_amt).split_into_powers_of_2();
+        let mut sessions = Vec::new();
+        let mut outputs = Vec::new();
+        for &d in &denoms {
+            let index = deriv.index;
+            let secret = deriv.next_secret();
+            let sess = BlindingSession::new(&secret);
+            outputs.push(serde_json::json!({"amount": d, "id": hub_keyset.id, "B_": sess.b_prime_hex()}));
+            sessions.push((sess, index));
+        }
 
-        let (paid, change_sigs) = entry_client.melt_tokens(&entry.proofs, &inv, None, Some(change_outputs)).await?;
+        let hub_mint_str = hub_mint.to_string();
+        let hub_keys = hub_keyset.keys.clone();
+        let hub_keyset_id = hub_keyset.id.clone();
         
-        if paid {
-            // Reclaim any change left over from the fee buffer
+        execution_futures.push(async move {
+            let entry_client = MintClient::new(&entry.mint);
+            let (paid, change_sigs) = entry_client.melt_tokens(&entry.proofs, &inv, None, Some(change_outputs)).await?;
+            
             let mut reclaimed_proofs = Vec::new();
-            for (sess_info, sig) in change_sessions.iter().zip(change_sigs.iter()) {
-                let (sess, idx) = sess_info;
-                let amount = sig["amount"].as_u64().unwrap();
-                let sig_id = sig["id"].as_str().unwrap_or(&entry_keyset.id);
-                let c_prime = ecash_core::dhke::point_from_hex(sig["C_"].as_str().unwrap()).unwrap();
-                let mint_pk = ecash_core::dhke::point_from_hex(entry_keyset.keys.get(&amount).unwrap()).unwrap();
-                let dleq = parse_dleq(sig);
-                let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
-                proof.derivation_index = *idx;
-                reclaimed_proofs.push(proof);
-            }
-            if !reclaimed_proofs.is_empty() {
-                state.proofs.entry(entry.mint.clone()).or_default().extend(reclaimed_proofs);
-            }
-        }
+            let mut new_hub_proofs = Vec::new();
 
-        if paid {
-            let denoms = Amount::from_sat(transfer_amt).split_into_powers_of_2();
-            let mut sessions = Vec::new();
-            let mut outputs = Vec::new();
-            for &d in &denoms {
-                let index = deriv.index;
-                let secret = deriv.next_secret();
-                let sess = BlindingSession::new(&secret);
-                outputs.push(serde_json::json!({"amount": d, "id": hub_keyset.id, "B_": sess.b_prime_hex()}));
-                sessions.push((sess, index));
+            if paid {
+                for (sess_info, sig) in change_sessions.iter().zip(change_sigs.iter()) {
+                    let (sess, idx) = sess_info;
+                    let amount = sig["amount"].as_u64().unwrap();
+                    let sig_id = sig["id"].as_str().unwrap_or(&entry_keyset.id);
+                    let c_prime = ecash_core::dhke::point_from_hex(sig["C_"].as_str().unwrap()).unwrap();
+                    let mint_pk = ecash_core::dhke::point_from_hex(entry_keyset.keys.get(&amount).unwrap()).unwrap();
+                    let dleq = parse_dleq(sig);
+                    let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
+                    proof.derivation_index = *idx;
+                    reclaimed_proofs.push(proof);
+                }
+
+                let hub_client = MintClient::new(&hub_mint_str);
+                let sigs = hub_client.mint_tokens(&qid, outputs).await?;
+                for ((sess, index), sig) in sessions.iter().zip(sigs.iter()) {
+                    let amount = sig["amount"].as_u64().unwrap();
+                    let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset_id);
+                    let c_prime = point_from_hex(sig["C_"].as_str().unwrap()).unwrap();
+                    let mint_pk = point_from_hex(hub_keys.get(&amount).unwrap()).unwrap();
+                    let dleq = parse_dleq(sig);
+                    let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
+                    proof.derivation_index = *index;
+                    new_hub_proofs.push(proof);
+                }
             }
-            
-            state.derivation_index = deriv.index;
-            state.save_encrypted(wallet_path, passphrase)?;
-            
-            let sigs = hub_client.mint_tokens(&qid, outputs).await?;
-            for ((sess, index), sig) in sessions.iter().zip(sigs.iter()) {
-                let amount = sig["amount"].as_u64().unwrap();
-                let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id);
-                let c_prime = point_from_hex(sig["C_"].as_str().unwrap()).unwrap();
-                let mint_pk = point_from_hex(hub_keyset.keys.get(&amount).unwrap()).unwrap();
-                let dleq = parse_dleq(sig);
-                let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
-                proof.derivation_index = *index;
-                hub_proofs.push(proof);
-            }
+            Ok::<_, anyhow::Error>((entry.mint, reclaimed_proofs, new_hub_proofs))
+        });
+    }
+
+    state.derivation_index = deriv.index;
+    state.save_encrypted(wallet_path, passphrase)?;
+
+    for res in futures::future::join_all(execution_futures).await {
+        let (mint, reclaimed, new_hub) = res?;
+        if !reclaimed.is_empty() {
+            state.proofs.entry(mint).or_default().extend(reclaimed);
         }
+        hub_proofs.extend(new_hub);
     }
 
     state.derivation_index = deriv.index;

@@ -1,6 +1,5 @@
 use ecash_core::types::*;
 use ecash_encoder::generate_note_svg;
-use std::collections::HashMap;
 
 fn main() {
     let note = PhysicalNote {

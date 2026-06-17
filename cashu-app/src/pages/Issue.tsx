@@ -65,12 +65,14 @@ export const Issue = () => {
         setInvoicePayload(null);
         await refreshWallet();
       } catch (e: any) {
-        if (e.toString().includes('not paid yet')) {
-          // Poll again in 2 seconds
+        const errMsg = e.toString();
+        addLog("check_issue_status error: " + errMsg);
+        
+        if (errMsg.includes('not paid') || errMsg.includes('Concurrent issuance failed') || errMsg.includes('already spent') || errMsg.includes('timeout') || errMsg.includes('error')) {
+          // Keep polling for a bit since Lightning settlements or mint processing can be slow
           timeoutId = setTimeout(pollStatus, 2000);
         } else {
-          addLog("check_issue_status error: " + e.toString());
-          setError("Status check failed. " + e.toString());
+          setError("Status check failed. " + errMsg);
           setLoading(false);
         }
       }
@@ -253,16 +255,15 @@ export const Issue = () => {
               {mintUrls.map((url, i) => (
                 <div key={i} className="flex gap-2">
                   <div className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg p-4 text-on-surface text-sm overflow-x-hidden truncate shadow-inner">{url}</div>
-                  {mintUrls.length > 1 && (
-                    <button onClick={() => setMintUrls(mintUrls.filter((_, idx) => idx !== i))} className="bg-error/10 hover:bg-error/20 text-error px-4 rounded-lg transition-colors flex items-center justify-center">
-                      <X className="w-5 h-5" />
-                    </button>
-                  )}
+                  <button onClick={() => setMintUrls(mintUrls.filter((_, idx) => idx !== i))} className="bg-error/10 hover:bg-error/20 text-error px-4 rounded-lg transition-colors flex items-center justify-center">
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
               ))}
             </div>
             
-            <div className="flex gap-2 mt-3">
+            {mintUrls.length < 3 && (
+              <div className="flex gap-2 mt-3">
               <input 
                 type="text" 
                 value={newMint}
@@ -290,6 +291,10 @@ export const Issue = () => {
                 Add
               </button>
             </div>
+            )}
+            {mintUrls.length >= 3 && (
+              <div className="mt-3 text-xs text-on-surface-variant text-center font-label-caps">Maximum of 3 mints allowed</div>
+            )}
           </div>
 
           <div>

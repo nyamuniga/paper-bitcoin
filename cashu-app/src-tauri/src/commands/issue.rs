@@ -1,6 +1,5 @@
 use crate::error::CommandResult;
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
 use ecash_wallet::WalletState;
 
 #[derive(Debug, Serialize, Deserialize)]
