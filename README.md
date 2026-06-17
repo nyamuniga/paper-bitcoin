@@ -18,7 +18,28 @@ Paper notes with tamper-evident seals represent redeemable Bitcoin value. Tokens
 └──────────┘               └──────────┘
 ```
 
+## Real-World Applications
+
+Physical eCash bridges the gap between the abstract Lightning Network and tangible human cash. Some immediate use cases include:
+- **The Ultimate Onboarding & Gifting Tool:** Hand someone a beautifully printed $10 Bitcoin note in a birthday card. They don't need an app or knowledge of Lightning to hold the value. They can scan it to claim the funds whenever they are ready.
+- **Tipping:** Leave a 5,000 satoshi physical tip at a restaurant for a waiter who doesn't have a wallet yet.
+- **Offline Circular Economies:** In places like farmers' markets or areas with spotty internet, a physical note can trade hands 50 times completely offline with zero fees and instant settlement. Only the final merchant needs to scan it.
+- **Event "Drink Tickets":** Conferences can issue physical multi-mint notes as tickets. Vendors accept them physically and sweep them into their Lightning nodes at the end of the night, without having to trust the conference organizers.
+- **Privacy-Preserving Cash:** When you hand someone a physical eCash note, there is zero digital footprint of that specific transaction. It is the ultimate privacy tool. A privacy advocate could issue a bunch of notes using their home node, go to a meetup, and trade them for goods with zero on-chain or Lightning surveillance possible until the final redemption.
+
 ## Quick Start
+
+You can run the system purely from the command line, or use the modern Tauri desktop/mobile app.
+
+### Running the App (Frontend UI)
+
+```bash
+cd cashu-app
+npm install
+npm run tauri dev
+```
+
+### Running the CLI
 
 ```bash
 # Build
@@ -51,11 +72,12 @@ cargo run -p ecash-cli -- issue 1000
 | `ecash-core` | Cashu NUT-00 DHKE blind signatures + shared types |
 | `ecash-mint` | Mock Cashu mint HTTP server (axum, auto-pays LN) |
 | `ecash-wallet` | Multi-mint wallet client + proof management |
-| `ecash-encoder` | Physical note SVG generator with dual QR codes |
+| `ecash-encoder` | Physical note SVG generator (encodes block height + QR) |
 | `ecash-verifier` | Offline integrity & format verifier |
 | `ecash-cli` | End-to-end CLI (`ecash` binary) |
+| `cashu-app` | Native Tauri React frontend (Desktop/Mobile) with QR scanning |
 
-## Security Notes
+## Security & Architecture Notes
 
 - This is a **prototype**. Cryptographic code has not been audited.
 - The mock mint uses a fixed seed `[0u8; 32]`. Use a random seed in production.

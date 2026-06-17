@@ -34,14 +34,15 @@ The prototype implements a Chaumian ecash protocol where physical notes (paper v
 │                             │                                               │
 │                     ┌───────▼───────┐                                       │
 │                     │  Wallet Core  │  ◄── Multi-mint balance distributor   │
-│                     │  (cdk crate)  │                                       │
+│                     │ (ecash-wallet)│      with robust transaction states   │
 │                     └───────┬───────┘                                       │
 │                             │                                               │
 │              ┌──────────────┼────────────────┐                              │
 │              │              │                │                              │
 │       ┌──────▼──────┐ ┌──────▼──────┐ ┌──────▼──────┐                       │
-│       │TokenEncoder │ │NotePrinter  │ │Verifier     │                       │
-│       │(blind sign) │ │(QR/hexcode) │ │(Offline)    │                       │
+│       │ GUI Desktop │ │ ecash-cli   │ │ ecash-      │                       │
+│       │ / Mobile App│ │ / Print     │ │ verifier    │                       │
+│       │ (Tauri+React) │ │ (Terminal)  │ │ (Offline)   │                       │
 │       └─────────────┘ └─────────────┘ └──────┬──────┘                       │
 │                                               │                              │
 │                                        ┌──────▼──────┐                       │
@@ -399,6 +400,7 @@ impl PhysicalTokenLifecycle {
 | Public Token Hash | Front, visible | Hex + QR | 64 chars |
 | Amount | Front, visible | Text + Number | 1-10 chars |
 | Serial Number | Front, visible | Alphanumeric | 12 chars |
+| Block Height | Front, visible | Integer | 4-8 chars |
 | **Private Redemption Key** | Under seal | QR + Text | 64 chars |
 | Validation Hash (full) | Under seal | Hex | 64 chars |
 
@@ -548,7 +550,7 @@ pub struct SignedRedemptionRequest {
     pub note_hash: [u8; 32],
     pub private_key: String,      // from under seal
     pub verifier_signature: Vec<u8>, // signed with device's private key
-    pub timestamp: u64,
+    pub block_height: u32,
     pub mint_url: MintUrl,
 }
 
@@ -574,10 +576,7 @@ impl OfflineVerifier {
             note_hash,
             private_key: scanned_private_key.to_string(),
             verifier_signature: signature,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            block_height: 840_000, // Syncs via SPV or predefined
             mint_url: public_data.mint_url.clone(),
         })
     }

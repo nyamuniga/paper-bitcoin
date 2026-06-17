@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { CheckCircle, Loader2, X } from 'lucide-react';
@@ -17,6 +17,8 @@ export const Issue = () => {
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
+
+  const isCheckingRef = useRef(false);
 
   const addLog = (msg: string) => setDebugLogs(p => [...p, msg]);
 
@@ -58,13 +60,21 @@ export const Issue = () => {
 
     const pollStatus = async () => {
       if (!isPolling) return;
+      if (isCheckingRef.current) {
+        // Wait and try again if a check is already in progress
+        timeoutId = setTimeout(pollStatus, 1000);
+        return;
+      }
+      isCheckingRef.current = true;
       try {
         const res = await invoke('check_issue_status', { txId: invoicePayload.tx_id });
+        if (!isPolling) return;
         addLog("check_issue_status returned success!");
         setIssuedNote(res);
         setInvoicePayload(null);
         await refreshWallet();
       } catch (e: any) {
+        if (!isPolling) return;
         const errMsg = e.toString();
         addLog("check_issue_status error: " + errMsg);
         
@@ -75,6 +85,8 @@ export const Issue = () => {
           setError("Status check failed. " + errMsg);
           setLoading(false);
         }
+      } finally {
+        isCheckingRef.current = false;
       }
     };
 
