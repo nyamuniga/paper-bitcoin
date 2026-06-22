@@ -687,10 +687,21 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
                     allocations.push((*url, amt));
                 }
 
+                let strategy_options = vec![
+                    "Static (Higher compatibility)",
+                    "Dynamic (Lower fees)",
+                ];
+                let strategy_ans = Select::new("Fee Reserve Strategy:", strategy_options).prompt()?;
+                let strategy = if strategy_ans.starts_with("Static") {
+                    ecash_wallet::ReserveStrategy::Static
+                } else {
+                    ecash_wallet::ReserveStrategy::Dynamic
+                };
+
                 let pb_clone = std::sync::Arc::new(std::sync::Mutex::new(None::<ProgressBar>));
                 let pb_ref = pb_clone.clone();
 
-                match issue_multimint_note(&mut state, wallet_path, &passphrase, &allocations, ecash_wallet::ReserveStrategy::Static, |hub_mint, inv: String, total_sats| async move {
+                match issue_multimint_note(&mut state, wallet_path, &passphrase, &allocations, strategy, |hub_mint, inv: String, total_sats| async move {
                     pb.finish_and_clear();
                     println!("\n{}", "==================================================".cyan());
                     println!("{} {}", "⚡ Lightning Invoice for".bold(), hub_mint);
