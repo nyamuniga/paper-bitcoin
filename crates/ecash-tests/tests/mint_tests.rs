@@ -150,8 +150,8 @@ async fn test_multi_mint_issuance_integration() {
     let (tx_id, returned_hub, _, total) = prepare_issue_multimint_note(&mut state, &wallet_path, passphrase, &allocations, ReserveStrategy::Static).await.unwrap();
     
     assert_eq!(returned_hub, hub_url);
-    // 64 + 64 + 10 reserve = 138
-    assert_eq!(total, 138);
+    // Hub (64+10) + Child (64+10) + melt fee (10) = 158
+    assert_eq!(total, 158);
 
     // Call resume
     let note = resume_issue_note(&mut state, &wallet_path, passphrase, &tx_id).await.expect("resume_issue_note failed");
