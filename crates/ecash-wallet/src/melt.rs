@@ -115,7 +115,7 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let mut deriv = TokenDerivation::from_hex(&state.seed_hex)?;
     deriv.index = state.derivation_index;
 
-    let mut hub_proofs = token.token[0].proofs.clone();
+    let hub_proofs = token.token[0].proofs.clone();
 
     // We DO NOT drain existing_proofs here. The physical note contains exactly enough
     // face value + fee reserve to pay its own invoice. Mixing wallet proofs with note proofs
