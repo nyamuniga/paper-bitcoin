@@ -167,14 +167,14 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let mut execution_futures = Vec::new();
     for (entry, _amt, safe_fee, transfer_amt, qid, inv, entry_keyset) in prepared_transfers {
         let change_denoms = generate_change_denoms(safe_fee);
-        let mut change_sessions = HashMap::new();
+        let mut change_sessions = Vec::new();
         let mut change_outputs = Vec::new();
         
         for &d in &change_denoms {
             let secret = deriv.next_secret();
             let sess = ecash_core::dhke::BlindingSession::new(&secret);
             change_outputs.push(serde_json::json!({"amount": d, "id": entry_keyset.id, "B_": sess.b_prime_hex()}));
-            change_sessions.insert(d, (sess, deriv.index - 1));
+            change_sessions.push((sess, deriv.index - 1));
         }
 
         let denoms = ecash_core::types::split_into_powers_of_2(transfer_amt);
@@ -200,19 +200,18 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
             let mut new_hub_proofs = Vec::new();
 
             if paid {
-                for sig in change_sigs.iter() {
+                for (sess_info, sig) in change_sessions.iter().zip(change_sigs.iter()) {
+                    let (sess, idx) = sess_info;
                     let amount = sig["amount"].as_u64().ok_or_else(|| anyhow!("Missing amount in signature"))?;
-                    if let Some((sess, idx)) = change_sessions.get(&amount) {
-                        let sig_id = sig["id"].as_str().unwrap_or(&entry_keyset.id);
-                        let c_prime_str = sig["C_"].as_str().ok_or_else(|| anyhow!("Missing C_ in signature"))?;
-                        let c_prime = ecash_core::dhke::point_from_hex(c_prime_str).context("Invalid C_")?;
-                        let mint_pk_str = entry_keyset.keys.get(&amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", amount))?;
-                        let mint_pk = ecash_core::dhke::point_from_hex(mint_pk_str).context("Invalid mint pk")?;
-                        let dleq = parse_dleq(sig);
-                        let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
-                        proof.derivation_index = *idx;
-                        reclaimed_proofs.push(proof);
-                    }
+                    let sig_id = sig["id"].as_str().unwrap_or(&entry_keyset.id);
+                    let c_prime_str = sig["C_"].as_str().ok_or_else(|| anyhow!("Missing C_ in signature"))?;
+                    let c_prime = ecash_core::dhke::point_from_hex(c_prime_str).context("Invalid C_")?;
+                    let mint_pk_str = entry_keyset.keys.get(&amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", amount))?;
+                    let mint_pk = ecash_core::dhke::point_from_hex(mint_pk_str).context("Invalid mint pk")?;
+                    let dleq = parse_dleq(sig);
+                    let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
+                    proof.derivation_index = *idx;
+                    reclaimed_proofs.push(proof);
                 }
 
                 let hub_client = MintClient::new(&hub_mint_str);
@@ -266,13 +265,14 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
 
     let max_change = total_hub_sats.saturating_sub(required_amt);
     let change_denoms = generate_change_denoms(max_change);
-    let mut sessions = HashMap::new();
+    let mut sessions = Vec::new();
     let mut outputs = Vec::new();
     for &d in &change_denoms {
+        let index = deriv.index;
         let secret = deriv.next_secret();
         let sess = BlindingSession::new(&secret);
         outputs.push(serde_json::json!({"amount": d, "id": hub_keyset.id, "B_": sess.b_prime_hex()}));
-        sessions.insert(d, sess);
+        sessions.push((d, sess, index));
     }
 
     // Advance and persist the derivation index BEFORE calling melt.
@@ -295,7 +295,6 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
     };
     
     state.transactions.push(pending_tx);
-    state.proofs.remove(&hub_mint.to_string());
     state.save_encrypted(wallet_path, passphrase).ok();
 
     let melt_result = hub_client.melt_tokens(&hub_proofs, external_invoice, Some(&quote_id), Some(outputs)).await;
@@ -311,17 +310,22 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let mut new_proofs = Vec::new();
     for sig in change_sigs.iter() {
         let amount = sig["amount"].as_u64().ok_or_else(|| anyhow!("Missing amount in signature"))?;
-        if let Some(sess) = sessions.get(&amount) {
-            let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id);
-            let c_prime_str = sig["C_"].as_str().ok_or_else(|| anyhow!("Missing C_ in signature"))?;
-            let c_prime = point_from_hex(c_prime_str).context("Invalid C_")?;
-            let mint_pk_str = hub_keyset.keys.get(&amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", amount))?;
-            let mint_pk = point_from_hex(mint_pk_str).context("Invalid mint pk")?;
-            let dleq = parse_dleq(sig);
-            let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
-            proof.derivation_index = deriv.index;
-            new_proofs.push(proof);
-        }
+        let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id);
+        
+        // Find the session that generated the B_ for this exact amount to prevent incorrect unblinding
+        let session_idx = sessions.iter().position(|(d, _, _)| *d == amount)
+            .ok_or_else(|| anyhow!("Mint returned change for unknown denomination {}", amount))?;
+        let (_, sess, index) = sessions.remove(session_idx);
+
+        let c_prime_str = sig["C_"].as_str().ok_or_else(|| anyhow!("Missing C_ in signature"))?;
+        let c_prime = point_from_hex(c_prime_str).context("Invalid C_")?;
+        let mint_pk_str = hub_keyset.keys.get(&amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", amount))?;
+        let mint_pk = point_from_hex(mint_pk_str).context("Invalid mint pk")?;
+        let dleq = parse_dleq(sig);
+        
+        let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
+        proof.derivation_index = index;
+        new_proofs.push(proof);
     }
     
     if !new_proofs.is_empty() {
@@ -397,7 +401,7 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     }
 
     let hub_mint = selected_mint.ok_or_else(|| anyhow!("Payment failed.\n{}", mint_errors.join("\n")))?;
-    let hub_proofs = state.proofs.get(&hub_mint).ok_or_else(|| anyhow!("No proofs for hub mint"))?.clone();
+    let hub_proofs = state.proofs.get_mut(&hub_mint).ok_or_else(|| anyhow!("No proofs for hub mint"))?.drain(..).collect::<Vec<_>>();
     let hub_client = MintClient::new(&hub_mint);
     let hub_keyset = hub_client.fetch_keyset().await?;
 
@@ -408,13 +412,14 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let max_change = total_hub_sats.saturating_sub(required_amt);
     let change_denoms = generate_change_denoms(max_change);
 
-    let mut sessions = HashMap::new();
+    let mut sessions = Vec::new();
     let mut outputs = Vec::new();
     for &d in &change_denoms {
+        let index = deriv.index;
         let secret = deriv.next_secret();
         let sess = BlindingSession::new(&secret);
         outputs.push(serde_json::json!({"amount": d, "id": hub_keyset.id, "B_": sess.b_prime_hex()}));
-        sessions.insert(d, sess);
+        sessions.push((d, sess, index));
     }
 
     // Advance and persist the derivation index BEFORE calling melt.
@@ -437,7 +442,6 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     };
     
     state.transactions.push(pending_tx);
-    state.proofs.remove(&hub_mint);
     state.save_encrypted(wallet_path, passphrase).ok();
 
     let melt_result = hub_client.melt_tokens(&hub_proofs, invoice, Some(&quote_id), Some(outputs)).await;
@@ -453,17 +457,21 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let mut new_proofs = Vec::new();
     for sig in change_sigs.iter() {
         let amount = sig["amount"].as_u64().ok_or_else(|| anyhow!("Missing amount in signature"))?;
-        if let Some(sess) = sessions.get(&amount) {
-            let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id);
-            let c_prime_str = sig["C_"].as_str().ok_or_else(|| anyhow!("Missing C_ in signature"))?;
-            let c_prime = point_from_hex(c_prime_str).context("Invalid C_")?;
-            let mint_pk_str = hub_keyset.keys.get(&amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", amount))?;
-            let mint_pk = point_from_hex(mint_pk_str).context("Invalid mint pk")?;
-            let dleq = parse_dleq(sig);
-            let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
-            proof.derivation_index = deriv.index;
-            new_proofs.push(proof);
-        }
+        let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id);
+        
+        let session_idx = sessions.iter().position(|(d, _, _)| *d == amount)
+            .ok_or_else(|| anyhow!("Mint returned change for unknown denomination {}", amount))?;
+        let (_, sess, index) = sessions.remove(session_idx);
+
+        let c_prime_str = sig["C_"].as_str().ok_or_else(|| anyhow!("Missing C_ in signature"))?;
+        let c_prime = point_from_hex(c_prime_str).context("Invalid C_")?;
+        let mint_pk_str = hub_keyset.keys.get(&amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", amount))?;
+        let mint_pk = point_from_hex(mint_pk_str).context("Invalid mint pk")?;
+        let dleq = parse_dleq(sig);
+        
+        let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
+        proof.derivation_index = index;
+        new_proofs.push(proof);
     }
 
     if !new_proofs.is_empty() {
