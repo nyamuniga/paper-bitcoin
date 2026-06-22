@@ -393,9 +393,9 @@ async fn cmd_issue(
         &note.public_data,
         note.amount_sats,
         note.block_height,
-    );
+    ).expect("Encode error");
     std::fs::write(&json_path, serde_json::to_string_pretty(&note)?)?;
-    let svg_str = generate_note_svg(&note);
+    let svg_str = generate_note_svg(&note)?;
     let pdf_bytes = generate_note_pdf(&svg_str)?;
     std::fs::write(&pdf_path, &pdf_bytes)?;
     std::fs::write(&bin_path, &public_bin)?;
@@ -724,9 +724,11 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
                             &note.public_data,
                             note.amount_sats,
                             note.block_height,
-                        );
+                        ).expect("Encode error");
                         std::fs::write(&json_path, serde_json::to_string_pretty(&note).unwrap()).ok();
-                        std::fs::write(&svg_path, generate_note_svg(&note)).ok();
+                        if let Ok(svg) = generate_note_svg(&note) {
+                            std::fs::write(&svg_path, svg).ok();
+                        }
                         std::fs::write(&bin_path, &public_bin).ok();
                         println!("\nSerial: {}", note.serial.cyan());
                         println!("BIN  → {}", bin_path.display().to_string().cyan());
@@ -840,14 +842,7 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
-fn extract_public_json(raw: &str) -> String {
-    if let Ok(v) = serde_json::from_str::<serde_json::Value>(raw) {
-        if v.get("public_data").is_some() {
-            return serde_json::to_string(&v["public_data"]).unwrap_or(raw.to_string());
-        }
-    }
-    raw.to_string()
-}
+
 
 async fn fetch_mint_keys(url: &str) -> Option<std::collections::HashMap<u64, String>> {
     let client = reqwest::Client::builder()
@@ -938,9 +933,9 @@ async fn cmd_resume(wallet_path: &PathBuf, tx_id: &str) -> Result<()> {
                 &note.public_data,
                 note.amount_sats,
                 note.block_height,
-            );
+            ).expect("Encode error");
             std::fs::write(&json_path, serde_json::to_string_pretty(&note)?)?;
-            let svg_str = generate_note_svg(&note);
+            let svg_str = generate_note_svg(&note)?;
             let pdf_bytes = generate_note_pdf(&svg_str)?;
             std::fs::write(&pdf_path, &pdf_bytes)?;
             std::fs::write(&bin_path, &public_bin)?;

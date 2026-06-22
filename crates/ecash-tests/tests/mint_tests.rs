@@ -57,6 +57,16 @@ async fn test_multi_mint_issuance_integration() {
         .mount(&hub_server)
         .await;
 
+    // Mock Hub melt quote for multi-mint routing fee calculation
+    Mock::given(method("POST"))
+        .and(path("/v1/melt/quote/bolt11"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "quote": "melt_q123",
+            "fee_reserve": 10
+        })))
+        .mount(&hub_server)
+        .await;
+
     // Mock Hub Mint
     // Mint tokens requires us to return signatures corresponding to the outputs sent
     // We don't care exactly about amounts here because resume_issue_note expects

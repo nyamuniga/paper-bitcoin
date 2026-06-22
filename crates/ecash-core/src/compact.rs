@@ -37,12 +37,25 @@ const VERSION: u8 = 0x03;
 
 // ─── Encode ──────────────────────────────────────────────────────────────────
 
+#[derive(Debug)]
+pub enum EncodeError {
+    InvalidHex,
+    InvalidLength,
+}
+
+impl std::fmt::Display for EncodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EncodeError::InvalidHex => write!(f, "invalid hex string"),
+            EncodeError::InvalidLength => write!(f, "hex string has invalid length"),
+        }
+    }
+}
+
+impl std::error::Error for EncodeError {}
+
 /// Encode `PublicNoteData` to compact binary.
-///
-/// # Panics
-/// Panics if any hex field is not valid hex or not the expected length (these
-/// are all internal invariants guaranteed when a note is issued).
-pub fn encode_public_data(data: &PublicNoteData, face_value_sats: u64, block_height: u64) -> Vec<u8> {
+pub fn encode_public_data(data: &PublicNoteData, face_value_sats: u64, block_height: u64) -> Result<Vec<u8>, EncodeError> {
     let mut buf = Vec::with_capacity(256);
 
     // Header
@@ -50,7 +63,7 @@ pub fn encode_public_data(data: &PublicNoteData, face_value_sats: u64, block_hei
     buf.push(VERSION);
     buf.extend_from_slice(&(face_value_sats as u32).to_le_bytes());
     buf.extend_from_slice(&(block_height as u32).to_le_bytes());
-    buf.extend_from_slice(&hex_to_bytes32(&data.validation_hash));
+    buf.extend_from_slice(&hex_to_bytes32(&data.validation_hash)?);
     buf.push(data.entries.len() as u8);
 
     for entry in &data.entries {
@@ -63,20 +76,20 @@ pub fn encode_public_data(data: &PublicNoteData, face_value_sats: u64, block_hei
             // amount (varint)
             write_varint(&mut buf, proof.amount);
             // keyset id (variable length: 1 byte length + bytes)
-            let id_bytes = hex::decode(&proof.id).expect("invalid hex in keyset id");
+            let id_bytes = hex::decode(&proof.id).map_err(|_| EncodeError::InvalidHex)?;
             buf.push(id_bytes.len() as u8);
             buf.extend_from_slice(&id_bytes);
             // derivation index (varint)
             write_varint(&mut buf, proof.derivation_index);
             // secp256k1 points (33 bytes each)
-            buf.extend_from_slice(&hex_to_bytes33(&proof.c));
-            buf.extend_from_slice(&hex_to_bytes33(proof.c_prime.as_deref().unwrap_or(&"00".repeat(33))));
-            buf.extend_from_slice(&hex_to_bytes33(proof.b_prime.as_deref().unwrap_or(&"00".repeat(33))));
-            buf.extend_from_slice(&hex_to_bytes33(proof.y.as_deref().unwrap_or(&"00".repeat(33))));
+            buf.extend_from_slice(&hex_to_bytes33(&proof.c)?);
+            buf.extend_from_slice(&hex_to_bytes33(proof.c_prime.as_deref().unwrap_or(&"00".repeat(33)))?);
+            buf.extend_from_slice(&hex_to_bytes33(proof.b_prime.as_deref().unwrap_or(&"00".repeat(33)))?);
+            buf.extend_from_slice(&hex_to_bytes33(proof.y.as_deref().unwrap_or(&"00".repeat(33)))?);
             // DLEQ scalars (32 bytes each)
             if let Some(dleq) = &proof.dleq {
-                buf.extend_from_slice(&hex_to_bytes32(&dleq.e));
-                buf.extend_from_slice(&hex_to_bytes32(&dleq.s));
+                buf.extend_from_slice(&hex_to_bytes32(&dleq.e)?);
+                buf.extend_from_slice(&hex_to_bytes32(&dleq.s)?);
             } else {
                 buf.extend_from_slice(&[0u8; 32]);
                 buf.extend_from_slice(&[0u8; 32]);
@@ -84,7 +97,7 @@ pub fn encode_public_data(data: &PublicNoteData, face_value_sats: u64, block_hei
         }
     }
 
-    buf
+    Ok(buf)
 }
 
 // ─── Decode ──────────────────────────────────────────────────────────────────
@@ -112,6 +125,8 @@ impl std::fmt::Display for DecodeError {
     }
 }
 
+impl std::error::Error for DecodeError {}
+
 pub struct DecodedPublicData {
     pub data: PublicNoteData,
     pub face_value_sats: u64,
@@ -128,8 +143,10 @@ fn decode_public_internal<'a>(r: &mut Reader<'a>) -> Result<DecodedPublicData, D
     if version != 0x02 && version != 0x03 {
         return Err(DecodeError::UnsupportedVersion(version));
     }
-    let face_value_sats = u32::from_le_bytes(r.read(4)?.try_into().unwrap()) as u64;
-    let block_height = u32::from_le_bytes(r.read(4)?.try_into().unwrap()) as u64;
+    let face_bytes: [u8; 4] = r.read(4)?.try_into().map_err(|_| DecodeError::TooShort)?;
+    let face_value_sats = u32::from_le_bytes(face_bytes) as u64;
+    let block_bytes: [u8; 4] = r.read(4)?.try_into().map_err(|_| DecodeError::TooShort)?;
+    let block_height = u32::from_le_bytes(block_bytes) as u64;
     let validation_hash = hex::encode(r.read(32)?);
     let num_mints = r.read(1)?[0] as usize;
 
@@ -257,14 +274,14 @@ fn write_varint(buf: &mut Vec<u8>, mut v: u64) {
     }
 }
 
-fn hex_to_bytes32(s: &str) -> [u8; 32] {
-    let v = hex::decode(s).expect("invalid hex in proof field (expected 32 bytes)");
-    v.try_into().expect("hex field is not 32 bytes")
+fn hex_to_bytes32(s: &str) -> Result<[u8; 32], EncodeError> {
+    let v = hex::decode(s).map_err(|_| EncodeError::InvalidHex)?;
+    v.try_into().map_err(|_| EncodeError::InvalidLength)
 }
 
-fn hex_to_bytes33(s: &str) -> [u8; 33] {
-    let v = hex::decode(s).expect("invalid hex in proof field (expected 33 bytes)");
-    v.try_into().expect("hex field is not 33 bytes")
+fn hex_to_bytes33(s: &str) -> Result<[u8; 33], EncodeError> {
+    let v = hex::decode(s).map_err(|_| EncodeError::InvalidHex)?;
+    v.try_into().map_err(|_| EncodeError::InvalidLength)
 }
 
 
@@ -273,16 +290,16 @@ fn hex_to_bytes33(s: &str) -> [u8; 33] {
 
 use crate::types::{PhysicalNote, PrivateNoteData};
 
-pub fn encode_full_note(note: &PhysicalNote) -> Vec<u8> {
-    let mut buf = encode_public_data(&note.public_data, note.amount_sats, note.block_height);
+pub fn encode_full_note(note: &PhysicalNote) -> Result<Vec<u8>, EncodeError> {
+    let mut buf = encode_public_data(&note.public_data, note.amount_sats, note.block_height)?;
     buf.push(note.serial.len() as u8);
     buf.extend_from_slice(note.serial.as_bytes());
-    buf.extend_from_slice(&hex_to_bytes32(&note.private_data.master_seed_hex));
+    buf.extend_from_slice(&hex_to_bytes32(&note.private_data.master_seed_hex)?);
     
     // Encode fee_strategy string
     buf.push(note.fee_strategy.len() as u8);
     buf.extend_from_slice(note.fee_strategy.as_bytes());
-    buf
+    Ok(buf)
 }
 
 pub fn decode_full_note(bytes: &[u8]) -> Result<PhysicalNote, DecodeError> {

@@ -21,5 +21,5 @@ fn main() {
 
     println!("Generating SVG...");
     let svg = generate_note_svg(&note);
-    println!("SVG generated successfully! Length: {}", svg.len());
+    println!("SVG generated successfully! Length: {}", svg.expect("Failed to generate SVG").len());
 }
