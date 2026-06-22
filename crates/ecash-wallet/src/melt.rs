@@ -117,9 +117,10 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
 
     let mut hub_proofs = token.token[0].proofs.clone();
 
-    if let Some(existing_proofs) = state.proofs.get_mut(&hub_mint.to_string()) {
-        hub_proofs.extend(existing_proofs.drain(..));
-    }
+    // We DO NOT drain existing_proofs here. The physical note contains exactly enough
+    // face value + fee reserve to pay its own invoice. Mixing wallet proofs with note proofs
+    // is dangerous because if the wallet contains corrupt proofs, it will fail the entire
+    // redemption transaction, risking the valid note proofs.
 
     // Deduplicate proofs by secret to prevent "Duplicate inputs provided" if the user
     // tries to redeem the same physical note multiple times while it's sitting in their wallet.
@@ -302,6 +303,14 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let (paid, change_sigs) = match melt_result {
         Ok(res) => res,
         Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("proofs could not be verified") {
+                if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                    tx.status = TransactionStatus::FailedMintError;
+                }
+                state.save_encrypted(wallet_path, passphrase).ok();
+                return Err(anyhow!("Mint rejected the proofs as invalid/corrupt. The transaction was marked as FailedMintError and the corrupted proofs were discarded to prevent further issues."));
+            }
             // Do NOT refund proofs immediately on network error. Keep them in Pending state.
             return Err(anyhow!("Payment might be stuck: {}. Your funds are safe but pending. Go to History and click Check Status to resolve it.", e));
         }
@@ -449,6 +458,14 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let (paid, change_sigs) = match melt_result {
         Ok(res) => res,
         Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("proofs could not be verified") {
+                if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                    tx.status = TransactionStatus::FailedMintError;
+                }
+                state.save_encrypted(wallet_path, passphrase).ok();
+                return Err(anyhow!("Mint rejected the proofs as invalid/corrupt. The transaction was marked as FailedMintError and the corrupted proofs were discarded to prevent further issues."));
+            }
             // Do NOT refund proofs immediately on network error. Keep them in Pending state.
             return Err(anyhow!("Payment might be stuck: {}. Your funds are safe but pending. Go to History and click Check Status to resolve it.", e));
         }
