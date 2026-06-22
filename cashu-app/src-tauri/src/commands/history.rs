@@ -69,7 +69,7 @@ pub async fn get_note_svg(tx_id: String, state: State<'_, AppState>) -> CommandR
     match &tx.tx_type {
         ecash_core::types::TransactionType::Issue(data) => {
             if let Some(note) = &data.note {
-                let svg_string = ecash_encoder::generate_note_svg(note);
+                let svg_string = ecash_encoder::generate_note_svg(note).map_err(|e| anyhow::anyhow!(e.to_string()))?;
                 use base64::Engine;
                 let svg_b64 = base64::engine::general_purpose::STANDARD.encode(svg_string.as_bytes());
                 Ok(svg_b64)
@@ -98,7 +98,7 @@ pub async fn get_note_pdf(tx_id: String, state: State<'_, AppState>) -> CommandR
     match &tx.tx_type {
         ecash_core::types::TransactionType::Issue(data) => {
             if let Some(note) = &data.note {
-                let svg_string = ecash_encoder::generate_note_svg(note);
+                let svg_string = ecash_encoder::generate_note_svg(note).map_err(|e| anyhow::anyhow!(e.to_string()))?;
                 
                 let result = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
                     let mut fontdb = svg2pdf::usvg::fontdb::Database::new();
@@ -148,12 +148,12 @@ pub async fn check_issue_status(tx_id: String, state: State<'_, AppState>) -> Co
 
     let note = ecash_wallet::resume_issue_note(&mut w_state, &path, &passphrase, &tx_id).await?;
 
-    let bin_data = ecash_core::compact::encode_full_note(&note);
+    let bin_data = ecash_core::compact::encode_full_note(&note).unwrap();
     use base64::Engine;
     let bin_b64 = base64::engine::general_purpose::STANDARD.encode(&bin_data);
     let serial = note.serial.chars().take(8).collect::<String>();
     
-    let svg_string = ecash_encoder::generate_note_svg(&note);
+    let svg_string = ecash_encoder::generate_note_svg(&note).map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let svg_b64 = base64::engine::general_purpose::STANDARD.encode(svg_string.as_bytes());
 
     Ok(crate::commands::issue::IssuedNote {

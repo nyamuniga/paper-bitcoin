@@ -111,14 +111,25 @@ enum Cmd {
         #[arg(long, default_value = "./notes")]
         out: PathBuf,
     },
-    /// Verify a note offline from its JSON file (or JSON string)
+    /// Verify a note offline from its Base45/64 payload
     Verify {
-        /// Path to `<serial>.json` or inline JSON
-        input: String,
+        /// Base45 or Base64 encoded payload
+        payload: String,
     },
     /// Redeem a note at the mint — pays out to a Lightning invoice
     Redeem {
-        note: PathBuf,
+        /// Base45 or Base64 encoded payload
+        payload: String,
+    },
+    /// Pay a Lightning invoice directly from the wallet
+    Pay {
+        invoice: String,
+    },
+    /// View transaction history
+    History,
+    /// Resume or check status of a pending transaction
+    Resume {
+        tx_id: String,
     },
 }
 
@@ -145,8 +156,11 @@ async fn main() -> Result<()> {
             Cmd::Migrate         => cmd_migrate(&wallet_path),
             Cmd::Info            => cmd_info(&wallet_path),
             Cmd::Issue { sats, out } => cmd_issue(&wallet_path, &cli.mint, sats, &out).await,
-            Cmd::Verify { input }    => cmd_verify(&cli.mint, &input).await,
-            Cmd::Redeem { note }     => cmd_redeem(&wallet_path, &note).await,
+            Cmd::Verify { payload }  => cmd_verify(&cli.mint, &payload).await,
+            Cmd::Redeem { payload }  => cmd_redeem(&wallet_path, &payload).await,
+            Cmd::Pay { invoice }     => cmd_pay(&wallet_path, &invoice).await,
+            Cmd::History             => cmd_history(&wallet_path).await,
+            Cmd::Resume { tx_id }    => cmd_resume(&wallet_path, &tx_id).await,
         }
     } else {
         cmd_interactive(&wallet_path, &cli.mint).await
@@ -373,15 +387,17 @@ async fn cmd_issue(
 
     std::fs::create_dir_all(out_dir)?;
     let json_path = out_dir.join(format!("{}.json", note.serial));
-    let svg_path  = out_dir.join(format!("{}.svg",  note.serial));
+    let pdf_path  = out_dir.join(format!("{}.pdf",  note.serial));
     let bin_path  = out_dir.join(format!("{}.bin",  note.serial));
     let public_bin = ecash_core::compact::encode_public_data(
         &note.public_data,
         note.amount_sats,
         note.block_height,
-    );
+    ).expect("Encode error");
     std::fs::write(&json_path, serde_json::to_string_pretty(&note)?)?;
-    std::fs::write(&svg_path, generate_note_svg(&note))?;
+    let svg_str = generate_note_svg(&note)?;
+    let pdf_bytes = generate_note_pdf(&svg_str)?;
+    std::fs::write(&pdf_path, &pdf_bytes)?;
     std::fs::write(&bin_path, &public_bin)?;
 
     println!();
@@ -390,23 +406,20 @@ async fn cmd_issue(
     println!("    Amount:  {} sats", note.amount_sats);
     println!("    JSON → {}  ← keep this (has private seed)", json_path.display());
     println!("    BIN  → {}  ← give this to recipient for verification", bin_path.display());
-    println!("    SVG  → {}  ← open in browser to print", svg_path.display());
+    println!("    PDF  → {}  ← open to print", pdf_path.display());
 
     Ok(())
 }
 
-async fn cmd_verify(_mint_url: &str, input: &str) -> Result<()> {
-    // Read binary file
-    let bytes = std::fs::read(input)
-        .with_context(|| format!("Could not read file: {}", input))?;
+async fn cmd_verify(_mint_url: &str, payload: &str) -> Result<()> {
+    let bytes = decode_qr_payload(payload).context("Invalid base45/64 payload")?;
 
     // Decode compact binary
     let decoded = match ecash_core::compact::decode_public_data(&bytes) {
         Ok(d) => d,
         Err(e) => {
             println!("{}", format!("❌  Failed to decode binary file: {}", e).red());
-            println!("    This file may not be a valid ecash note binary.");
-            println!("    Make sure you're using a .bin file, not a .json file.");
+            println!("    This payload may not be a valid ecash note binary.");
             return Ok(());
         }
     };
@@ -550,27 +563,19 @@ fn fmt_verbose_result(r: &VerificationResult) {
     }
 }
 
-async fn cmd_redeem(wallet_path: &PathBuf, note_path: &PathBuf) -> Result<()> {
-    println!("💸  Redeeming note {}…", note_path.display());
+async fn cmd_redeem(wallet_path: &PathBuf, payload: &str) -> Result<()> {
+    println!("💸  Redeeming note...");
 
     let (mut state, passphrase) = load_wallet(wallet_path)?;
 
-    let raw = std::fs::read_to_string(note_path)?;
-    let public_json = extract_public_json(&raw);
-    let public_data: ecash_core::types::PublicNoteData = serde_json::from_str(&public_json)?;
-
-    // Use face value from note JSON root if available
-    let amount_sats: u64 = if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
-        v.get("amount_sats").and_then(|a| a.as_u64())
-            .unwrap_or_else(|| public_data.entries.iter().flat_map(|e| e.proofs.iter()).map(|p| p.amount).sum())
-    } else {
-        public_data.entries.iter().flat_map(|e| e.proofs.iter()).map(|p| p.amount).sum()
-    };
+    let bin_data = decode_qr_payload(payload).context("Invalid base45/64 payload")?;
+    let note = ecash_core::compact::decode_full_note(&bin_data).map_err(|e| anyhow::anyhow!("Decode error: {:?}", e))?;
+    
+    let public_data = note.public_data;
+    let amount_sats = note.amount_sats;
+    let master_seed_hex = note.private_data.master_seed_hex;
 
     println!("    Face value: {} sats", amount_sats);
-
-    let master_seed_raw = Text::new("Enter the scratch-off secret (master_seed_hex):").prompt()?;
-    let master_seed_hex: String = master_seed_raw.chars().filter(|c| !c.is_whitespace()).collect();
 
     let ln_invoice_raw = Text::new(&format!(
         "Paste a Lightning invoice for exactly {} sats:", amount_sats
@@ -613,6 +618,8 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
             "🔍 Verify Note Offline",
             "💸 Redeem Note (Lightning)",
             "⚡ Pay Lightning Invoice (From Wallet)",
+            "📜 View Transaction History",
+            "🔄 Resume Pending Transaction",
             "🔑 Show Recovery Words",
             "❌ Exit",
         ];
@@ -717,9 +724,11 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
                             &note.public_data,
                             note.amount_sats,
                             note.block_height,
-                        );
+                        ).expect("Encode error");
                         std::fs::write(&json_path, serde_json::to_string_pretty(&note).unwrap()).ok();
-                        std::fs::write(&svg_path, generate_note_svg(&note)).ok();
+                        if let Ok(svg) = generate_note_svg(&note) {
+                            std::fs::write(&svg_path, svg).ok();
+                        }
                         std::fs::write(&bin_path, &public_bin).ok();
                         println!("\nSerial: {}", note.serial.cyan());
                         println!("BIN  → {}", bin_path.display().to_string().cyan());
@@ -736,74 +745,20 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
             }
 
             "🔍 Verify Note Offline" => {
-                let path = Text::new("Path to note .bin file:").with_default("./notes/").prompt()?;
-                let path = path.trim();
-                // If user gives a .json, auto-suggest the sibling .bin
-                let bin_path = if path.ends_with(".json") {
-                    let p = std::path::Path::new(path).with_extension("bin");
-                    if p.exists() {
-                        println!("{}", format!("ℹ️  Using sibling binary file: {}", p.display()).cyan());
-                        p.to_string_lossy().into_owned()
-                    } else {
-                        println!("{}", "❌  No .bin file found alongside this note. Issue a new note to generate one.".red());
-                        continue;
-                    }
-                } else {
-                    path.to_string()
-                };
+                let payload = Text::new("Scan the public QR code (Base45/Base64 payload):").prompt()?;
+                let payload = payload.trim();
+                
                 let _wallet = match load_wallet(wallet_path) {
                     Ok(s) => s,
                     Err(e) => { println!("{}", format!("❌ {}", e).red()); continue; }
                 };
-                let _ = cmd_verify(default_mint, &bin_path).await;
+                let _ = cmd_verify(default_mint, payload).await;
             }
 
             "💸 Redeem Note (Lightning)" => {
-                let path = Text::new("Path to note JSON to redeem:").prompt()?;
-                let raw = match std::fs::read_to_string(path.trim()) {
-                    Ok(r) => r,
-                    Err(_) => { println!("{}", "File not found.".red()); continue; }
-                };
-
-                let (mut state, passphrase) = match load_wallet(wallet_path) {
-                    Ok(s) => s,
-                    Err(e) => { println!("{}", format!("❌ {}", e).red()); continue; }
-                };
-
-                let public_json = extract_public_json(&raw);
-                match serde_json::from_str::<ecash_core::types::PublicNoteData>(&public_json) {
-                    Ok(public_data) => {
-                        let amount_sats: u64 = if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
-                            v.get("amount_sats").and_then(|a| a.as_u64())
-                                .unwrap_or_else(|| public_data.entries.iter().flat_map(|e| e.proofs.iter()).map(|p| p.amount).sum())
-                        } else {
-                            public_data.entries.iter().flat_map(|e| e.proofs.iter()).map(|p| p.amount).sum()
-                        };
-
-                        let master_seed_raw = Text::new("Enter the scratch-off secret (master_seed_hex):").prompt()?;
-                        let master_seed_hex: String = master_seed_raw.chars().filter(|c| !c.is_whitespace()).collect();
-
-                        let ln_invoice_raw = Text::new(&format!(
-                            "Paste a Lightning invoice for exactly {} sats:", amount_sats
-                        )).prompt()?;
-                        let ln_invoice: String = ln_invoice_raw.chars().filter(|c| !c.is_whitespace()).collect();
-
-                        match validate_invoice(&ln_invoice, Some(amount_sats)) {
-                            Err(e) => { println!("{}", format!("❌ {}", e).red()); continue; }
-                            Ok(_) => {}
-                        }
-
-                        let pb = ProgressBar::new_spinner();
-                        pb.set_message("Consolidating funds & paying invoice...");
-                        pb.enable_steady_tick(std::time::Duration::from_millis(100));
-
-                        match redeem_note(&mut state, wallet_path, &passphrase, &public_data, &master_seed_hex, &ln_invoice).await {
-                            Ok(redeemed) => pb.finish_with_message(format!("{} Routed {} sats to your wallet!", "✅".green(), redeemed)),
-                            Err(e) => pb.finish_with_message(format!("{} Redemption failed: {}", "❌".red(), e)),
-                        }
-                    }
-                    Err(_) => println!("{}", "Invalid JSON".red()),
-                }
+                let payload = Text::new("Scan the private/full QR code (Base45/Base64 payload):").prompt()?;
+                let payload = payload.trim();
+                let _ = cmd_redeem(wallet_path, payload).await;
             }
 
             "⚡ Pay Lightning Invoice (From Wallet)" => {
@@ -839,6 +794,15 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
                     Ok(paid_amt) => pb.finish_with_message(format!("{} Paid {} sats!", "✅".green(), paid_amt)),
                     Err(e) => pb.finish_with_message(format!("{} Payment failed: {}", "❌".red(), e)),
                 }
+            }
+
+            "📜 View Transaction History" => {
+                let _ = cmd_history(wallet_path).await;
+            }
+
+            "🔄 Resume Pending Transaction" => {
+                let tx_id = Text::new("Transaction ID:").prompt()?;
+                let _ = cmd_resume(wallet_path, tx_id.trim()).await;
             }
 
             "🔑 Show Recovery Words" => {
@@ -878,14 +842,7 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
-fn extract_public_json(raw: &str) -> String {
-    if let Ok(v) = serde_json::from_str::<serde_json::Value>(raw) {
-        if v.get("public_data").is_some() {
-            return serde_json::to_string(&v["public_data"]).unwrap_or(raw.to_string());
-        }
-    }
-    raw.to_string()
-}
+
 
 async fn fetch_mint_keys(url: &str) -> Option<std::collections::HashMap<u64, String>> {
     let client = reqwest::Client::builder()
@@ -902,4 +859,167 @@ async fn fetch_mint_keys(url: &str) -> Option<std::collections::HashMap<u64, Str
         }
     }
     Some(keys)
+}
+
+async fn cmd_history(wallet_path: &PathBuf) -> Result<()> {
+    let (state, _) = load_wallet(wallet_path)?;
+    let mut txs = state.transactions.clone();
+    txs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp)); // Newest first
+    
+    if txs.is_empty() {
+        println!("No transactions found.");
+        return Ok(());
+    }
+    
+    let mut table = Table::new();
+    table.load_preset(UTF8_FULL);
+    table.set_header(vec!["ID", "Type", "Status", "Amount", "Fee", "Mint", "Date"]);
+    
+    for tx in txs {
+        let type_str = match tx.tx_type {
+            ecash_core::types::TransactionType::Mint(_) => "Mint",
+            ecash_core::types::TransactionType::Melt(_) => "Melt",
+            ecash_core::types::TransactionType::Issue(_) => "Issue",
+            ecash_core::types::TransactionType::Redeem(_) => "Redeem",
+        };
+        let status_str = match tx.status {
+            ecash_core::types::TransactionStatus::Pending => "Pending".yellow().to_string(),
+            ecash_core::types::TransactionStatus::Success => "Success".green().to_string(),
+            ecash_core::types::TransactionStatus::Failed => "Failed".red().to_string(),
+            ecash_core::types::TransactionStatus::FailedMintError => "MintError".red().to_string(),
+        };
+        table.add_row(vec![
+            tx.id[..8].to_string(),
+            type_str.to_string(),
+            status_str,
+            tx.amount.to_string(),
+            tx.fee.to_string(),
+            tx.mint_url,
+            tx.timestamp.to_string()
+        ]);
+    }
+    
+    println!("{}", table);
+    Ok(())
+}
+
+async fn cmd_resume(wallet_path: &PathBuf, tx_id: &str) -> Result<()> {
+    let (mut state, passphrase) = load_wallet(wallet_path)?;
+    
+    let tx = state.transactions.iter().find(|t| t.id == tx_id).context("Transaction not found")?.clone();
+    
+    if tx.status != ecash_core::types::TransactionStatus::Pending {
+        println!("Transaction is not pending. Status: {:?}", tx.status);
+        return Ok(());
+    }
+    
+    println!("Resuming {} transaction...", match tx.tx_type {
+        ecash_core::types::TransactionType::Mint(_) => "Mint",
+        ecash_core::types::TransactionType::Melt(_) => "Melt",
+        ecash_core::types::TransactionType::Issue(_) => "Issue",
+        ecash_core::types::TransactionType::Redeem(_) => "Redeem",
+    });
+    
+    match tx.tx_type {
+        ecash_core::types::TransactionType::Issue(_) => {
+            let note = ecash_wallet::resume_issue_note(&mut state, wallet_path, &passphrase, tx_id).await?;
+            println!("✅ Successfully resumed issuance!");
+            let out_dir = PathBuf::from("./notes");
+            std::fs::create_dir_all(&out_dir)?;
+            let pdf_path  = out_dir.join(format!("{}.pdf",  note.serial));
+            let json_path = out_dir.join(format!("{}.json", note.serial));
+            let bin_path  = out_dir.join(format!("{}.bin",  note.serial));
+            let public_bin = ecash_core::compact::encode_public_data(
+                &note.public_data,
+                note.amount_sats,
+                note.block_height,
+            ).expect("Encode error");
+            std::fs::write(&json_path, serde_json::to_string_pretty(&note)?)?;
+            let svg_str = generate_note_svg(&note)?;
+            let pdf_bytes = generate_note_pdf(&svg_str)?;
+            std::fs::write(&pdf_path, &pdf_bytes)?;
+            std::fs::write(&bin_path, &public_bin)?;
+            println!("    JSON → {}", json_path.display());
+            println!("    BIN  → {}", bin_path.display());
+            println!("    PDF  → {}", pdf_path.display());
+        }
+        ecash_core::types::TransactionType::Melt(_) | ecash_core::types::TransactionType::Redeem(_) => {
+            let new_status = ecash_wallet::check_melt_status(&mut state, wallet_path, &passphrase, tx_id).await?;
+            println!("Checked melt status: {:?}", new_status);
+        }
+        ecash_core::types::TransactionType::Mint(_) => {
+            ecash_wallet::retry_mint(&mut state, wallet_path, &passphrase, tx_id).await?;
+            println!("✅ Successfully retried mint and salvaged funds into wallet!");
+        }
+    }
+    
+    Ok(())
+}
+
+async fn cmd_pay(wallet_path: &PathBuf, invoice: &str) -> Result<()> {
+    let (mut state, passphrase) = load_wallet(wallet_path)?;
+    
+    match validate_invoice(invoice, None) {
+        Ok(0) => println!("ℹ️  Any-amount invoice — will pay based on mint quote."),
+        Ok(sats) => {
+            println!("ℹ️  Invoice amount: {} sats", sats);
+            let confirm = Text::new("Confirm payment? (yes/no):").prompt()?;
+            if confirm.trim().to_lowercase() != "yes" {
+                return Ok(());
+            }
+        }
+        Err(e) => return Err(anyhow::anyhow!("Invalid invoice: {}", e)),
+    }
+    
+    println!("Paying invoice...");
+    let paid_amt = pay_invoice(&mut state, wallet_path, &passphrase, invoice).await?;
+    println!("✅ Paid {} sats!", paid_amt);
+    Ok(())
+}
+
+pub fn decode_qr_payload(payload: &str) -> anyhow::Result<Vec<u8>> {
+    use std::io::Read;
+    use base64::Engine;
+    if let Some(b45) = payload.strip_prefix("ECASHZ:") {
+        let compressed = base45::decode(b45).map_err(|_| anyhow::anyhow!("Invalid base45 payload"))?;
+        let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
+        let mut decompressed = Vec::new();
+        decoder.read_to_end(&mut decompressed)?;
+        Ok(decompressed)
+    } else if let Some(b64) = payload.strip_prefix("eCashZ:") {
+        let compressed = base64::engine::general_purpose::STANDARD.decode(b64)?;
+        let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
+        let mut decompressed = Vec::new();
+        decoder.read_to_end(&mut decompressed)?;
+        Ok(decompressed)
+    } else {
+        // Fallback for older notes
+        let decoded = base64::engine::general_purpose::STANDARD.decode(payload)?;
+        Ok(decoded)
+    }
+}
+
+pub fn generate_note_pdf(svg_string: &str) -> anyhow::Result<Vec<u8>> {
+    let mut fontdb = svg2pdf::usvg::fontdb::Database::new();
+    fontdb.load_font_data(include_bytes!("../../../cashu-app/src-tauri/assets/Roboto-Regular.ttf").to_vec());
+    fontdb.set_serif_family("Roboto");
+    fontdb.set_sans_serif_family("Roboto");
+    fontdb.set_monospace_family("Roboto");
+    fontdb.set_cursive_family("Roboto");
+    fontdb.set_fantasy_family("Roboto");
+
+    let mut opt = svg2pdf::usvg::Options::default();
+    opt.font_family = "Roboto".to_string();
+    opt.fontdb = std::sync::Arc::new(fontdb);
+    
+    let tree = svg2pdf::usvg::Tree::from_str(svg_string, &opt)
+        .map_err(|e| anyhow::anyhow!("SVG parse error: {}", e))?;
+    
+    let pdf_bytes = svg2pdf::to_pdf(
+        &tree, 
+        svg2pdf::ConversionOptions::default(), 
+        svg2pdf::PageOptions::default()
+    ).map_err(|e| anyhow::anyhow!("PDF generation failed: {:?}", e))?;
+    
+    Ok(pdf_bytes)
 }

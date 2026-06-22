@@ -41,15 +41,13 @@ npm run tauri dev
 
 ### Running the CLI
 
+By default, the CLI uses a remote mint.
+
 ```bash
 # Build
 cargo build --release
 
-# Run the full demo (starts a local mint, issues a note, verifies, redeems)
-cargo run -p ecash-cli -- demo
-
-# Or step by step:
-cargo run -p ecash-cli -- start-mint &          # start local mock mint
+# Run step by step:
 cargo run -p ecash-cli -- init                  # create wallet
 cargo run -p ecash-cli -- issue 1000            # issue 1000 sat note → ./notes/
 cargo run -p ecash-cli -- verify ./notes/<serial>.json
@@ -58,7 +56,7 @@ cargo run -p ecash-cli -- redeem ./notes/<serial>.json
 
 ## Production
 
-Point `ECASH_MINT_URL` at any real Cashu mint:
+You can point `ECASH_MINT_URL` at any other real Cashu mint:
 
 ```bash
 export ECASH_MINT_URL=https://mint.minibits.cash/Bitcoin
@@ -70,7 +68,6 @@ cargo run -p ecash-cli -- issue 1000
 | Crate | Purpose |
 |-------|---------|
 | `ecash-core` | Cashu NUT-00 DHKE blind signatures + shared types |
-| `ecash-mint` | Mock Cashu mint HTTP server (axum, auto-pays LN) |
 | `ecash-wallet` | Multi-mint wallet client + proof management |
 | `ecash-encoder` | Physical note SVG generator (encodes block height + QR) |
 | `ecash-verifier` | Offline integrity & format verifier |
@@ -80,7 +77,6 @@ cargo run -p ecash-cli -- issue 1000
 ## Security & Architecture Notes
 
 - This is a **prototype**. Cryptographic code has not been audited.
-- The mock mint uses a fixed seed `[0u8; 32]`. Use a random seed in production.
 - Full blind-signature verification at redemption is done server-side by the mint.
 - Offline verification checks format + integrity hash; DLEQ proofs (NUT-12) are a future upgrade.
 

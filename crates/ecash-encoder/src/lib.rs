@@ -17,8 +17,9 @@ const BLANK_NOTE_JPG: &[u8] = include_bytes!("../assets/blank-note.jpg");
 ///
 /// The **public QR** encodes a compact binary payload (see `ecash_core::compact`).
 /// The **private QR** encodes the JSON private seed (unchanged).
-pub fn generate_note_svg(note: &PhysicalNote) -> String {
-    let public_bin = ecash_core::compact::encode_public_data(&note.public_data, note.amount_sats, note.block_height);    let full_note_bin = ecash_core::compact::encode_full_note(note);
+pub fn generate_note_svg(note: &PhysicalNote) -> Result<String, ecash_core::compact::EncodeError> {
+    let public_bin = ecash_core::compact::encode_public_data(&note.public_data, note.amount_sats, note.block_height)?;
+    let full_note_bin = ecash_core::compact::encode_full_note(note)?;
 
     let pub_qr = qr_bin(&public_bin);
     let priv_qr = qr_bin(&full_note_bin);
@@ -56,7 +57,7 @@ pub fn generate_note_svg(note: &PhysicalNote) -> String {
         "#33691E" // Green for Dynamic strategy
     };
 
-    build_svg(
+    Ok(build_svg(
         &bg_b64,
         &amount_num,
         &amount_unit,
@@ -68,7 +69,7 @@ pub fn generate_note_svg(note: &PhysicalNote) -> String {
         &pub_qr,
         &priv_qr,
         amt_color,
-    )
+    ))
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

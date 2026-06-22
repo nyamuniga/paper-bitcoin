@@ -142,7 +142,7 @@ impl MintKeypair {
         let expected = y * k;
         if let Ok(c) = point_from_hex(&proof.c) {
             if c != expected {
-                println!("verify_proof FAILED! Expected: {}, Got: {}", point_to_hex(&expected), proof.c);
+                tracing::warn!("verify_proof FAILED! Expected: {}, Got: {}", point_to_hex(&expected), proof.c);
                 false
             } else {
                 true

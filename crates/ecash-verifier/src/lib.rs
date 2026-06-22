@@ -84,7 +84,10 @@ impl OfflineVerifier {
 
             // ── 3. DLEQ Verification (NUT-12) if trusted ──────────────────────
             if self.trusted.contains_key(&entry.mint) {
-                let mint_key_map = self.mint_keys.get(&entry.mint).unwrap();
+                let mint_key_map = match self.mint_keys.get(&entry.mint) {
+                    Some(m) => m,
+                    None => return VerificationResult::InvalidFormat { reason: format!("Trusted mint {} has no loaded keys", entry.mint) },
+                };
                 for (i, proof) in entry.proofs.iter().enumerate() {
                     let c_prime = match &proof.c_prime {
                         Some(cp_hex) => match point_from_hex(cp_hex) {
@@ -99,7 +102,10 @@ impl OfflineVerifier {
                         Some(pk) => pk,
                         None => return VerificationResult::InvalidFormat { reason: format!("No known public key for denomination {}", proof.amount) },
                     };
-                    let mint_pubkey = point_from_hex(pubkey_hex).unwrap();
+                    let mint_pubkey = match point_from_hex(pubkey_hex) {
+                        Ok(pk) => pk,
+                        Err(_) => return VerificationResult::InvalidFormat { reason: format!("Invalid mint pubkey for denomination {}", proof.amount) },
+                    };
 
                     // Get B_ and DLEQ
                     if let (Some(b_prime_hex), Some(dleq)) = (&proof.b_prime, &proof.dleq) {

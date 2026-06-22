@@ -138,12 +138,7 @@ Contains the shared data types and cryptographic functions used by all other cra
 - **`src/types.rs`**: Defines the standard `TokenV3`, `Proof`, and `BlindSignature` structs that mints and wallets pass around.
 - **`src/compact.rs`**: Handles the binary encoding/decoding. This compresses a massive JSON token into a tiny binary payload that can fit inside a physical QR code.
 
-### 2. `ecash-mint` (The Mock Server)
-A standalone `axum` HTTP server simulating a Cashu Mint.
-- **`src/server.rs`**: Maps the HTTP endpoints (`/keys`, `/mint/quote`, `/mint`, `/melt`).
-- **`src/lib.rs`**: Contains the dummy state machine. It magically auto-pays any Lightning invoices you throw at it to make local testing effortless.
-
-### 3. `ecash-wallet` (The Routing Engine)
+### 2. `ecash-wallet` (The Routing Engine)
 This crate contains the heavy lifting for the Hub-and-Spoke model.
 - **`src/lib.rs`**: 
   - `WalletState`: The struct that holds local balances, seeds, and the transaction journal.
@@ -151,19 +146,19 @@ This crate contains the heavy lifting for the Hub-and-Spoke model.
   - `redeem_note()`: The function that implements the "Auto-Consolidation" sweep using `futures::future::join_all` for concurrent melting.
   - `resume_pending_transactions()`: The safety net that runs on startup to recover from failed atomic operations.
 
-### 4. `ecash-encoder` (The Printer)
+### 3. `ecash-encoder` (The Printer)
 Generates the physical SVG artwork.
 - **`src/lib.rs`**: Takes the public/private payload data, generates dual QR codes using the `qrcode` crate, and injects them into a beautiful, styled SVG canvas ready for printing. Handles the visual differentiation between strategies.
 
-### 5. `ecash-verifier` (The Auditor)
+### 4. `ecash-verifier` (The Auditor)
 Offline integrity checking.
 - **`src/lib.rs`**: Contains `verify_offline_integrity()`. It mathematically ensures the proofs inside the QR code correctly map to the mint's public keys without making a single HTTP request.
 
-### 6. `cashu-app` (The Frontend App)
+### 5. `cashu-app` (The Frontend App)
 A native cross-platform application built with Tauri and React.
 - **`src-tauri/src/commands/`**: Rust backend bindings. For example, `redeem.rs` and `issue.rs` expose the `ecash-wallet` engine to the React frontend.
 - **`src/pages/`**: The React UI. `Issue.tsx` provides the multi-mint selection menu and handles background polling to prevent race conditions. `Scan.tsx` requests camera permissions and decodes the physical notes.
 
-### 7. `ecash-cli` (The Terminal interface)
+### 6. `ecash-cli` (The Terminal interface)
 The command-line wrapper.
 - **`src/main.rs`**: Uses `clap` and `inquire` to build interactive terminal menus. It parses user input and calls the underlying `ecash-wallet` orchestrator.

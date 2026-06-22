@@ -1,91 +1,20 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
 
-// ─── MintUrl ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct MintUrl(pub String);
-
-impl MintUrl {
-    pub fn new(s: impl Into<String>) -> Self {
-        Self(s.into().trim_end_matches('/').to_string())
-    }
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for MintUrl {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<&str> for MintUrl {
-    fn from(s: &str) -> Self {
-        Self::new(s)
-    }
-}
-impl From<String> for MintUrl {
-    fn from(s: String) -> Self {
-        Self::new(s)
-    }
-}
-
-// ─── Amount ──────────────────────────────────────────────────────────────────
-
-/// Amount in satoshis.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
-    Serialize, Deserialize, Default,
-)]
-pub struct Amount(pub u64);
-
-impl Amount {
-    pub const ZERO: Self = Self(0);
-
-    pub fn from_sat(v: u64) -> Self {
-        Self(v)
-    }
-    pub fn to_sat(self) -> u64 {
-        self.0
-    }
-    pub fn is_zero(self) -> bool {
-        self.0 == 0
-    }
-
-    /// Split into power-of-2 denominations (Cashu standard).
-    pub fn split_into_powers_of_2(self) -> Vec<u64> {
-        let mut result = Vec::new();
-        let mut v = self.0;
-        let mut bit = 1u64;
-        while v > 0 {
-            if v & 1 == 1 {
-                result.push(bit);
-            }
-            v >>= 1;
-            bit <<= 1;
+/// Split an amount in satoshis into power-of-2 denominations (Cashu standard).
+pub fn split_into_powers_of_2(amount: u64) -> Vec<u64> {
+    let mut result = Vec::new();
+    let mut v = amount;
+    let mut bit = 1u64;
+    while v > 0 {
+        if v & 1 == 1 {
+            result.push(bit);
         }
-        result
+        v >>= 1;
+        bit <<= 1;
     }
-}
-
-impl std::ops::Add for Amount {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self {
-        Self(self.0 + rhs.0)
-    }
-}
-impl std::ops::Sub for Amount {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self {
-        Self(self.0.saturating_sub(rhs.0))
-    }
-}
-impl fmt::Display for Amount {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} sats", self.0)
-    }
+    result
 }
 
 // ─── Cashu proof (NUT-00) ────────────────────────────────────────────────────

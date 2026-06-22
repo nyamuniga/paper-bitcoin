@@ -75,7 +75,7 @@ pub async fn get_pdf_from_bin(bin_b64: String) -> CommandResult<Vec<u8>> {
     let note = ecash_core::compact::decode_full_note(&bin_data)
         .map_err(|e| anyhow::anyhow!("Decode error: {}", e))?;
 
-    let svg_string = ecash_encoder::generate_note_svg(&note);
+    let svg_string = ecash_encoder::generate_note_svg(&note).map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     let result = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
         let mut fontdb = svg2pdf::usvg::fontdb::Database::new();

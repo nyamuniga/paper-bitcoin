@@ -62,16 +62,7 @@ impl TokenDerivation {
         hex::encode(mac.finalize().into_bytes())
     }
 
-    /// Derive a per-amount mint keypair seed.
-    ///
-    /// `key = HMAC-SHA256(seed, "mint-key-v1-" || amount_le64)`
-    pub fn mint_amount_key(&self, amount: u64) -> [u8; 32] {
-        let mut mac =
-            HmacSha256::new_from_slice(&self.seed).expect("HMAC accepts any key size");
-        mac.update(b"mint-key-v1-");
-        mac.update(&amount.to_le_bytes());
-        mac.finalize().into_bytes().into()
-    }
+
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -103,10 +94,5 @@ mod tests {
         assert_eq!(d.secret_at(42), d2.secret_at(42));
     }
 
-    #[test]
-    fn mint_keys_are_stable() {
-        let d = TokenDerivation::from_seed([0u8; 32]);
-        assert_eq!(d.mint_amount_key(1), d.mint_amount_key(1));
-        assert_ne!(d.mint_amount_key(1), d.mint_amount_key(2));
-    }
+
 }
