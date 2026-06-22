@@ -309,9 +309,11 @@ pub async fn resume_issue_note(
     let serial = serial_from_hash(&validation_hash);
 
     let mut block_height = 0;
-    if let Ok(resp) = reqwest::get("https://mempool.space/api/blocks/tip/height").await {
-        if let Ok(text) = resp.text().await {
-            block_height = text.trim().parse::<u64>().unwrap_or(0);
+    if let Ok(client) = reqwest::Client::builder().user_agent("ecash-wallet/0.1.0").build() {
+        if let Ok(resp) = client.get("https://mempool.space/api/blocks/tip/height").send().await {
+            if let Ok(text) = resp.text().await {
+                block_height = text.trim().parse::<u64>().unwrap_or(0);
+            }
         }
     }
 
