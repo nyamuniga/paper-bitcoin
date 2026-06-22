@@ -137,14 +137,13 @@ enum Cmd {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("ecash=info".parse().unwrap())
-                .add_directive("ecash_wallet=info".parse().unwrap()),
-        )
-        .with_target(false)
-        .init();
+    // Initialize tracing to stderr if RUST_LOG is set
+    if std::env::var("RUST_LOG").is_ok() {
+        tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .with_writer(std::io::stderr)
+            .init();
+    }
 
     let cli = Cli::parse();
     let wallet_path = cli.wallet.unwrap_or_else(WalletState::default_path);

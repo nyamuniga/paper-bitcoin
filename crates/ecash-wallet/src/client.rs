@@ -41,24 +41,50 @@ impl MintClient {
     }
 
     pub async fn fetch_keyset_by_id(&self, keyset_id: &str) -> Result<KeysetInfo> {
-        let v: serde_json::Value = match self.http.get(format!("{}/v1/keys/{}", self.url, keyset_id)).send().await {
-            Ok(resp) if resp.status().is_success() => resp.json().await?,
-            _ => self.http.get(format!("{}/v1/keys", self.url)).send().await?.json().await?,
+        // 1. ALWAYS request the specific keyset. DO NOT fall back to /v1/keys.
+        let resp = self.http.get(format!("{}/v1/keys/{}", self.url, keyset_id)).send().await?;
+        
+        if !resp.status().is_success() {
+            return Err(anyhow!("Mint does not have keyset {}", keyset_id));
+        }
+
+        let v: serde_json::Value = resp.json().await?;
+        if let Some(err) = v.get("error") {
+            return Err(anyhow!("Mint error: {}", err));
+        }
+
+        // 2. Handle BOTH response formats:
+        //    - Array format: { "keysets": [ { "id": "...", "keys": {...} } ] }
+        //    - Single object format: { "id": "...", "keys": {...} }
+        let ks_obj = if let Some(ks_arr) = v.get("keysets").and_then(|k| k.as_array()) {
+            // Find the matching keyset in the array, then convert it to a Map
+            ks_arr.iter()
+                .find(|k| k.get("id").and_then(|i| i.as_str()) == Some(keyset_id))
+                .ok_or_else(|| anyhow!("Keyset {} not found in response", keyset_id))?
+                .as_object()
+                .ok_or_else(|| anyhow!("Keyset entry is not a JSON object"))?
+        } else {
+            // Assume the response itself is the keyset object
+            v.as_object().ok_or_else(|| anyhow!("Invalid keyset response"))?
         };
 
-        if let Some(err) = v.get("error") { return Err(anyhow!("Mint error: {}", err)); }
-        if let Some(err) = v.get("detail") { return Err(anyhow!("Mint error (detail): {}", err)); }
+        // Now `ks_obj` is a `&serde_json::Map`, so `.get()` works perfectly.
+        let id = ks_obj.get("id")
+            .and_then(|i| i.as_str())
+            .ok_or_else(|| anyhow!("Missing keyset id"))?
+            .to_string();
 
-        let ks_array = v.get("keysets").and_then(|k| k.as_array()).ok_or_else(|| anyhow!("Invalid keys response: {:?}", v))?;
-        let ks = ks_array.iter().find(|k| k.get("id").and_then(|i| i.as_str()) == Some(keyset_id))
-            .ok_or_else(|| anyhow!("Keyset {} not found in mint", keyset_id))?;
-
-        let id = ks.get("id").and_then(|i| i.as_str()).ok_or_else(|| anyhow!("Missing keyset id"))?.to_string();
         let mut keys = HashMap::new();
-        let keys_obj = ks.get("keys").and_then(|k| k.as_object()).ok_or_else(|| anyhow!("Missing keys in keyset"))?;
+        let keys_obj = ks_obj.get("keys")
+            .and_then(|k| k.as_object())
+            .ok_or_else(|| anyhow!("Missing keys in keyset"))?;
+
         for (amt_str, pk) in keys_obj {
-            keys.insert(amt_str.parse()?, pk.as_str().ok_or_else(|| anyhow!("Invalid pubkey"))?.to_string());
+            let amt: u64 = amt_str.parse()?;
+            let pk_str = pk.as_str().ok_or_else(|| anyhow!("Invalid pubkey"))?.to_string();
+            keys.insert(amt, pk_str);
         }
+
         Ok(KeysetInfo { id, keys })
     }
 
@@ -115,18 +141,26 @@ impl MintClient {
             qv["quote"].as_str().ok_or_else(|| anyhow!("No quote returned"))?.to_string()
         };
 
-        let mut clean_proofs = proofs.to_vec();
-        for p in &mut clean_proofs {
-            p.b_prime = None;
-            p.dleq = None;
+        let mut inputs = Vec::new();
+        for p in proofs {
+            let mut val = serde_json::to_value(p)?;
+            if let Some(obj) = val.as_object_mut() {
+                obj.remove("derivation_index");
+                obj.remove("B_");
+                obj.remove("C_");
+                obj.remove("dleq");
+            }
+            inputs.push(val);
         }
-        let mut req = serde_json::json!({ "quote": qid, "inputs": clean_proofs });
+        let mut req = serde_json::json!({ "quote": qid, "inputs": inputs });
         if let Some(outs) = outputs {
             req["outputs"] = serde_json::Value::Array(outs);
         }
 
+
         let mv: serde_json::Value = self.http.post(format!("{}/v1/melt/bolt11", self.url))
             .json(&req).send().await?.json().await?;
+
         if let Some(err) = mv.get("error") { return Err(anyhow!("Melt error: {}", err)); }
         if let Some(err) = mv.get("detail") { return Err(anyhow!("Melt error (detail): {}", err)); }
 
@@ -221,5 +255,6 @@ fn extract_json_number(value: &serde_json::Value, key: &str) -> Option<u64> {
     }
 }
 
+#[derive(Clone)]
 pub struct KeysetInfo { pub id: String, pub keys: HashMap<u64, String> }
 
