@@ -8,16 +8,8 @@
 //! The encryption key is derived from a user passphrase via Argon2id.
 //! The seed itself is the entropy of a BIP39 24-word mnemonic phrase.
 
-use std::{collections::HashMap, path::PathBuf};
 
-use anyhow::{anyhow, Context, Result};
-use serde::{Deserialize, Serialize};
 
-use ecash_core::{
-    derivation::TokenDerivation,
-    dhke::{compute_validation_hash, point_from_hex, BlindingSession},
-    types::{CashuToken, PhysicalNote, PrivateNoteData, Proof, PublicNoteData, TokenEntry, Transaction, TransactionType, MeltTransactionData, TransactionStatus},
-};
 
 pub const DEFAULT_MINT_URL: &str = "https://mint.minibits.cash/Bitcoin";
 

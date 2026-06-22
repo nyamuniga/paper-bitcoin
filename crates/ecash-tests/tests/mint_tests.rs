@@ -76,15 +76,15 @@ async fn test_multi_mint_issuance_integration() {
     // Wiremock allows dynamic responses, but maybe we can just return a large array of signatures for all possible amounts
     // No, resume_issue_note iterates `zip` between outputs and signatures.
     // It's easier if we just write a custom responder or just hardcode the expected outputs.
-    // 64 face value on Hub -> 64
-    // 64 face value on Child -> 64 + 10 reserve = 74
-    // Hub denoms = split(64) + split(74) = 64 + 64 + 8 + 2
+    // Hub denoms = split(74) + split(84) = 64 + 8 + 2 + 64 + 16 + 4 (6 sigs)
     let hub_sigs = json!({
         "signatures": [
             { "amount": 64, "id": "00112233", "C_": DUMMY_POINT },
-            { "amount": 64, "id": "00112233", "C_": DUMMY_POINT },
             { "amount": 8, "id": "00112233", "C_": DUMMY_POINT },
-            { "amount": 2, "id": "00112233", "C_": DUMMY_POINT }
+            { "amount": 2, "id": "00112233", "C_": DUMMY_POINT },
+            { "amount": 64, "id": "00112233", "C_": DUMMY_POINT },
+            { "amount": 16, "id": "00112233", "C_": DUMMY_POINT },
+            { "amount": 4, "id": "00112233", "C_": DUMMY_POINT }
         ]
     });
     Mock::given(method("POST"))
@@ -119,11 +119,12 @@ async fn test_multi_mint_issuance_integration() {
         .await;
 
     // Child Mint
-    // Child denoms for 74 = 64 + 8 + 2 (wait, amt = 64, split(64) = 64)
-    // The child gets transfer_amt = 64.
+    // Child denoms for 74 = 64 + 8 + 2 (3 sigs)
     let child_sigs = json!({
         "signatures": [
-            { "amount": 64, "id": "00112233", "C_": DUMMY_POINT }
+            { "amount": 64, "id": "00112233", "C_": DUMMY_POINT },
+            { "amount": 8, "id": "00112233", "C_": DUMMY_POINT },
+            { "amount": 2, "id": "00112233", "C_": DUMMY_POINT }
         ]
     });
     Mock::given(method("POST"))
