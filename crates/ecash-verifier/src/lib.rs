@@ -203,7 +203,13 @@ impl OfflineVerifier {
                 .build()
                 .unwrap_or_default();
             
-            let clean_mint_url = entry.mint.trim_end_matches('/');
+            let clean = entry.mint.trim_end_matches('/');
+            let clean_mint_url = if let Ok(parsed) = reqwest::Url::parse(clean) {
+                parsed.to_string().trim_end_matches('/').to_string()
+            } else {
+                clean.to_lowercase()
+            };
+            
             let resp = client.post(format!("{}/v1/checkstate", clean_mint_url))
                 .json(&serde_json::json!({ "Ys": y_values }))
                 .send()

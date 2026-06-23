@@ -22,7 +22,7 @@ tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
 dirs               = { workspace = true }
 rand               = { workspace = true }
-reqwest            = { workspace = true }
+reqwest            = { workspace = true, features = ["json", "rustls-tls", "rustls-tls-webpki-roots"] }
 indicatif          = "0.18.4"
 comfy-table        = "7.2.2"
 colored            = "3.1.1"

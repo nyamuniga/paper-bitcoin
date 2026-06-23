@@ -52,6 +52,7 @@ impl WalletState {
                 let plaintext = decrypt_wallet(&enc, passphrase)?;
                 let mut state: WalletState = serde_json::from_slice(&plaintext)?;
                 state.heal_corrupt_proofs();
+                state.normalize_mints();
                 return Ok(state);
             }
         }
@@ -67,6 +68,7 @@ impl WalletState {
             .context("Wallet not found — run `ecash init` first")?;
         let mut state: WalletState = serde_json::from_str(&data)?;
         state.heal_corrupt_proofs();
+        state.normalize_mints();
         Ok(state)
     }
 
@@ -87,10 +89,11 @@ impl WalletState {
 
     /// Cache public keys for a mint (persisted in wallet.json for offline verification).
     pub fn cache_mint_keys(&mut self, url: &str, keys: HashMap<u64, String>) {
-        self.trusted_keys.insert(url.to_string(), keys);
+        let clean_url = normalize_mint_url(url);
+        self.trusted_keys.insert(clean_url.clone(), keys);
         // Also ensure the mint is in our known mints list
-        if !self.mints.contains(&url.to_string()) {
-            self.mints.push(url.to_string());
+        if !self.mints.contains(&clean_url) {
+            self.mints.push(clean_url);
         }
     }
 
@@ -151,6 +154,70 @@ impl WalletState {
         if healed_count > 0 {
             tracing::info!("Successfully auto-healed {} corrupted proofs.", healed_count);
         }
+    }
+
+    pub fn normalize_mints(&mut self) {
+        // Safe lowercase mints list
+        let mut new_mints = Vec::new();
+        for m in &self.mints {
+            let m_lower = normalize_mint_url(m);
+            if !new_mints.contains(&m_lower) {
+                new_mints.push(m_lower);
+            }
+        }
+        self.mints = new_mints;
+
+        // Lowercase trusted_keys
+        let mut new_keys = HashMap::new();
+        for (k, v) in self.trusted_keys.drain() {
+            new_keys.insert(normalize_mint_url(&k), v);
+        }
+        self.trusted_keys = new_keys;
+
+        // Lowercase proofs keys
+        let mut new_proofs = HashMap::new();
+        for (k, v) in self.proofs.drain() {
+            let key_lower = normalize_mint_url(&k);
+            new_proofs.entry(key_lower).or_insert_with(Vec::new).extend(v);
+        }
+        self.proofs = new_proofs;
+        
+        // Lowercase transactions
+        for tx in &mut self.transactions {
+            tx.mint_url = normalize_mint_url(&tx.mint_url);
+            match &mut tx.tx_type {
+                ecash_core::types::TransactionType::Issue(data) => {
+                    data.hub_mint = normalize_mint_url(&data.hub_mint);
+                    for a in &mut data.allocations {
+                        a.0 = normalize_mint_url(&a.0);
+                    }
+                    for c in &mut data.child_quotes {
+                        c.0 = normalize_mint_url(&c.0);
+                    }
+                    if let Some(note) = &mut data.note {
+                        note.mint_urls = note.mint_urls.iter().map(|m| normalize_mint_url(m)).collect();
+                        for e in &mut note.public_data.entries {
+                            e.mint = normalize_mint_url(&e.mint);
+                        }
+                    }
+                }
+                ecash_core::types::TransactionType::Redeem(data) => {
+                    for e in &mut data.public_data.entries {
+                        e.mint = normalize_mint_url(&e.mint);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+pub fn normalize_mint_url(url_str: &str) -> String {
+    let clean = url_str.trim_end_matches('/');
+    if let Ok(parsed) = reqwest::Url::parse(clean) {
+        parsed.to_string().trim_end_matches('/').to_string()
+    } else {
+        clean.to_lowercase()
     }
 }
 

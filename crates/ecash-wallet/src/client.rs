@@ -33,7 +33,7 @@ impl MintClient {
                 .pool_max_idle_per_host(0)
                 .build()
                 .unwrap_or_default(),
-            url: mint_url.trim_end_matches('/').to_string(),
+            url: crate::state::normalize_mint_url(mint_url),
         }
     }
 
