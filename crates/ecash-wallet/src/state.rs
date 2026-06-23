@@ -50,7 +50,9 @@ impl WalletState {
         if let Ok(enc) = serde_json::from_str::<EncryptedWallet>(&data) {
             if enc.version == 1 {
                 let plaintext = decrypt_wallet(&enc, passphrase)?;
-                let state: WalletState = serde_json::from_slice(&plaintext)?;
+                let mut state: WalletState = serde_json::from_slice(&plaintext)?;
+                state.heal_corrupt_proofs();
+                state.normalize_mints();
                 return Ok(state);
             }
         }
@@ -64,7 +66,10 @@ impl WalletState {
     pub fn load_plaintext(path: &PathBuf) -> Result<Self> {
         let data = std::fs::read_to_string(path)
             .context("Wallet not found — run `ecash init` first")?;
-        Ok(serde_json::from_str(&data)?)
+        let mut state: WalletState = serde_json::from_str(&data)?;
+        state.heal_corrupt_proofs();
+        state.normalize_mints();
+        Ok(state)
     }
 
     fn dedup_proofs(&mut self) {
@@ -84,11 +89,135 @@ impl WalletState {
 
     /// Cache public keys for a mint (persisted in wallet.json for offline verification).
     pub fn cache_mint_keys(&mut self, url: &str, keys: HashMap<u64, String>) {
-        self.trusted_keys.insert(url.to_string(), keys);
+        let clean_url = normalize_mint_url(url);
+        self.trusted_keys.insert(clean_url.clone(), keys);
         // Also ensure the mint is in our known mints list
-        if !self.mints.contains(&url.to_string()) {
-            self.mints.push(url.to_string());
+        if !self.mints.contains(&clean_url) {
+            self.mints.push(clean_url);
         }
+    }
+
+    pub fn heal_corrupt_proofs(&mut self) {
+        use ecash_core::dhke::{point_from_hex, verify_dleq, BlindingSession};
+        use ecash_core::derivation::TokenDerivation;
+
+        let mut deriv = match TokenDerivation::from_hex(&self.seed_hex) {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        
+        // Pre-compute all sessions up to current derivation index + some buffer
+        let mut all_sessions = Vec::new();
+        let max_index = self.derivation_index + 100;
+        for _ in 0..max_index {
+            let idx = deriv.index;
+            let secret = deriv.next_secret();
+            all_sessions.push((idx, BlindingSession::new(&secret)));
+        }
+
+        let mut healed_count = 0;
+
+        for (mint, proofs) in self.proofs.iter_mut() {
+            let keys_map = match self.trusted_keys.get(mint) {
+                Some(k) => k,
+                None => continue,
+            };
+
+            for p in proofs.iter_mut() {
+                // First, check if it's already perfectly valid.
+                let is_valid = if let (Some(c_p_str), Some(b_p_str), Some(dleq), Some(mint_pk_str)) = (&p.c_prime, &p.b_prime, &p.dleq, keys_map.get(&p.amount)) {
+                    if let (Ok(c_p), Ok(b_p), Ok(mint_pk)) = (point_from_hex(c_p_str), point_from_hex(b_p_str), point_from_hex(mint_pk_str)) {
+                        verify_dleq(&mint_pk, &c_p, &b_p, dleq)
+                    } else { false }
+                } else { true }; // If missing data, we can't heal, assume valid or leave it.
+
+                if !is_valid {
+                    // It's corrupt! Let's find the correct session.
+                    if let (Some(c_p_str), Some(dleq), Some(mint_pk_str)) = (&p.c_prime, &p.dleq, keys_map.get(&p.amount)) {
+                        if let (Ok(c_p), Ok(mint_pk)) = (point_from_hex(c_p_str), point_from_hex(mint_pk_str)) {
+                            for (idx, sess) in &all_sessions {
+                                if verify_dleq(&mint_pk, &c_p, &sess.b_prime, dleq) {
+                                    tracing::info!("Auto-healed proof for amount {}! Restored from secret idx {}", p.amount, idx);
+                                    let mut new_proof = sess.unblind(&c_p, &mint_pk, p.amount, &p.id, Some(dleq.clone()));
+                                    new_proof.derivation_index = *idx;
+                                    *p = new_proof;
+                                    healed_count += 1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if healed_count > 0 {
+            tracing::info!("Successfully auto-healed {} corrupted proofs.", healed_count);
+        }
+    }
+
+    pub fn normalize_mints(&mut self) {
+        // Safe lowercase mints list
+        let mut new_mints = Vec::new();
+        for m in &self.mints {
+            let m_lower = normalize_mint_url(m);
+            if !new_mints.contains(&m_lower) {
+                new_mints.push(m_lower);
+            }
+        }
+        self.mints = new_mints;
+
+        // Lowercase trusted_keys
+        let mut new_keys = HashMap::new();
+        for (k, v) in self.trusted_keys.drain() {
+            new_keys.insert(normalize_mint_url(&k), v);
+        }
+        self.trusted_keys = new_keys;
+
+        // Lowercase proofs keys
+        let mut new_proofs = HashMap::new();
+        for (k, v) in self.proofs.drain() {
+            let key_lower = normalize_mint_url(&k);
+            new_proofs.entry(key_lower).or_insert_with(Vec::new).extend(v);
+        }
+        self.proofs = new_proofs;
+        
+        // Lowercase transactions
+        for tx in &mut self.transactions {
+            tx.mint_url = normalize_mint_url(&tx.mint_url);
+            match &mut tx.tx_type {
+                ecash_core::types::TransactionType::Issue(data) => {
+                    data.hub_mint = normalize_mint_url(&data.hub_mint);
+                    for a in &mut data.allocations {
+                        a.0 = normalize_mint_url(&a.0);
+                    }
+                    for c in &mut data.child_quotes {
+                        c.0 = normalize_mint_url(&c.0);
+                    }
+                    if let Some(note) = &mut data.note {
+                        note.mint_urls = note.mint_urls.iter().map(|m| normalize_mint_url(m)).collect();
+                        for e in &mut note.public_data.entries {
+                            e.mint = normalize_mint_url(&e.mint);
+                        }
+                    }
+                }
+                ecash_core::types::TransactionType::Redeem(data) => {
+                    for e in &mut data.public_data.entries {
+                        e.mint = normalize_mint_url(&e.mint);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+pub fn normalize_mint_url(url_str: &str) -> String {
+    let clean = url_str.trim_end_matches('/');
+    if let Ok(parsed) = reqwest::Url::parse(clean) {
+        parsed.to_string().trim_end_matches('/').to_string()
+    } else {
+        clean.to_lowercase()
     }
 }
 

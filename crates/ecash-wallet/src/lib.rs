@@ -11,7 +11,7 @@
 
 
 
-pub const DEFAULT_MINT_URL: &str = "https://mint.minibits.cash/Bitcoin";
+pub const DEFAULT_MINT_URL: &str = "https://mint.28waves.com";
 
 
 pub mod state;

@@ -26,18 +26,40 @@ pub async fn retry_mint(state: &mut WalletState, wallet_path: &PathBuf, passphra
     
     let sigs = client.mint_tokens(&mint_data.quote_id, mint_data.outputs.clone()).await?;
 
+    let mut sessions = Vec::new();
+    for (secret_hex, out) in mint_data.blinding_sessions_hex.iter().zip(mint_data.outputs.iter()) {
+        let amount = out["amount"].as_u64().ok_or_else(|| anyhow!("Missing amount in outputs"))?;
+        sessions.push((amount, secret_hex.clone()));
+    }
+
+    let mut keyset_cache: std::collections::HashMap<String, crate::client::KeysetInfo> = std::collections::HashMap::new();
+    keyset_cache.insert(keyset.id.clone(), keyset.clone());
+
     let mut new_proofs = Vec::new();
-    for (secret_hex, sig) in mint_data.blinding_sessions_hex.iter().zip(sigs.iter()) {
+    for sig in sigs.iter() {
         let amount = sig["amount"].as_u64().ok_or_else(|| anyhow!("Missing amount in signature"))?;
-        let sig_id = sig["id"].as_str().unwrap_or(&keyset.id);
+        
+        let session_idx = sessions.iter().position(|(d, _)| *d == amount)
+            .ok_or_else(|| anyhow!("Mint returned signature for unknown amount {}", amount))?;
+        let (_, secret_hex) = sessions.remove(session_idx);
+
+        let sig_id = sig["id"].as_str().unwrap_or(&keyset.id).to_string();
+        let actual_keyset = if let Some(ks) = keyset_cache.get(&sig_id) {
+            ks.clone()
+        } else {
+            let ks = client.fetch_keyset_by_id(&sig_id).await?;
+            keyset_cache.insert(sig_id.clone(), ks.clone());
+            ks
+        };
+
         let c_prime_str = sig["C_"].as_str().ok_or_else(|| anyhow!("Missing C_ in signature"))?;
         let c_prime = point_from_hex(c_prime_str).context("Invalid C_")?;
-        let mint_pk_str = keyset.keys.get(&amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", amount))?;
+        let mint_pk_str = actual_keyset.keys.get(&amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", amount))?;
         let mint_pk = point_from_hex(mint_pk_str).context("Invalid mint pk")?;
         let dleq = parse_dleq(sig);
         
         let sess = BlindingSession::new(&secret_hex);
-        let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
+        let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq);
         proof.derivation_index = 0; // Salvaged proofs go directly into wallet with index 0
         new_proofs.push(proof);
     }
