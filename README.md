@@ -59,7 +59,7 @@ cargo run -p ecash-cli -- redeem ./notes/<serial>.json
 You can point `ECASH_MINT_URL` at any other real Cashu mint:
 
 ```bash
-export ECASH_MINT_URL=https://mint.minibits.cash/Bitcoin
+export ECASH_MINT_URL=https://mint.28waves.com
 cargo run -p ecash-cli -- issue 1000
 ```
 
