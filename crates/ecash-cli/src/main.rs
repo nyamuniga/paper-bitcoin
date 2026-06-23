@@ -746,9 +746,9 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
                     }
                     Err(e) => {
                         if let Some(p2) = pb_clone.lock().unwrap().take() {
-                            p2.finish_with_message(format!("{} Error: {}", "❌".red(), e));
+                            p2.finish_with_message(format!("{} Error: {:?}", "❌".red(), e));
                         } else {
-                            println!("{} Error: {}", "❌".red(), e);
+                            println!("{} Error: {:?}", "❌".red(), e);
                         }
                     }
                 }

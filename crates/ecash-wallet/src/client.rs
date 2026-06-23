@@ -89,8 +89,30 @@ impl MintClient {
     }
 
     pub async fn request_mint_quote(&self, amount_sats: u64) -> Result<(String, String)> {
-        let v: serde_json::Value = self.http.post(format!("{}/v1/mint/quote/bolt11", self.url))
-            .json(&serde_json::json!({ "amount": amount_sats, "unit": "sat" })).send().await?.json().await?;
+        let mut attempts = 0;
+        let v: serde_json::Value = loop {
+            attempts += 1;
+            match self.http.post(format!("{}/v1/mint/quote/bolt11", self.url))
+                .json(&serde_json::json!({ "amount": amount_sats, "unit": "sat" })).send().await {
+                Ok(resp) => {
+                    match resp.json().await {
+                        Ok(json) => break json,
+                        Err(e) if attempts >= 3 => return Err(anyhow!("Failed to parse quote response: {}", e)),
+                        Err(_) => {
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    if attempts >= 3 {
+                        return Err(anyhow::Error::new(e).context("Failed to request mint quote after 3 attempts"));
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+            }
+        };
+
         if let Some(err) = v.get("error") { return Err(anyhow!("Mint error: {}", err)); }
         if let Some(err) = v.get("detail") { return Err(anyhow!("Mint error (detail): {}", err)); }
         
@@ -191,8 +213,28 @@ impl MintClient {
     }
 
     pub async fn fetch_info(&self) -> Result<serde_json::Value> {
-        let v: serde_json::Value = self.http.get(format!("{}/v1/info", self.url)).send().await?.json().await?;
-        Ok(v)
+        let mut attempts = 0;
+        loop {
+            attempts += 1;
+            match self.http.get(format!("{}/v1/info", self.url)).send().await {
+                Ok(resp) => {
+                    match resp.json().await {
+                        Ok(json) => return Ok(json),
+                        Err(e) if attempts >= 3 => return Err(anyhow!("Failed to parse info response: {}", e)),
+                        Err(_) => {
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    if attempts >= 3 {
+                        return Err(anyhow::Error::new(e).context("Failed to fetch mint info after 3 attempts"));
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+            }
+        }
     }
 }
 
