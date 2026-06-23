@@ -37,13 +37,26 @@ pub async fn verify_note(bin_b64: String, state: State<'_, AppState>) -> Command
     let bin_data = crate::utils::decode_qr_payload(&bin_b64).map_err(|e| anyhow::anyhow!("Invalid QR payload: {}", e))?;
     // In verify_note, we must accept EITHER the full note OR the public note data
     // because verification only requires public data!
-    let pub_data = if let Ok(note) = ecash_core::compact::decode_full_note(&bin_data) {
-        note.public_data
+    let (pub_data, block_height) = if let Ok(note) = ecash_core::compact::decode_full_note(&bin_data) {
+        (note.public_data, note.block_height)
     } else if let Ok(dec) = ecash_core::compact::decode_public_data(&bin_data) {
-        dec.data
+        (dec.data, dec.block_height)
     } else {
         return Err(crate::error::CommandError("Could not decode verification payload.".to_string()));
     };
+
+    let hash = &pub_data.validation_hash;
+    let chars: Vec<char> = hash.to_uppercase().chars().take(12).collect();
+    let serial = format!("{}-{}-{}", chars[..4].iter().collect::<String>(), chars[4..8].iter().collect::<String>(), chars[8..12].iter().collect::<String>());
+
+    let mut key_ids = Vec::new();
+    for entry in &pub_data.entries {
+        for proof in &entry.proofs {
+            if !key_ids.contains(&proof.id) {
+                key_ids.push(proof.id.clone());
+            }
+        }
+    }
 
     let path = state.wallet_path.clone();
     
@@ -113,6 +126,10 @@ pub async fn verify_note(bin_b64: String, state: State<'_, AppState>) -> Command
             "face_value_sats": face_value_sats,
             "proof_total_sats": proof_total_sats,
             "spend_state": spend_state_str,
+            "validation_hash": hash,
+            "serial_number": serial,
+            "block_height": block_height,
+            "key_ids": key_ids,
         })),
         ecash_verifier::VerificationResult::ValidUntrusted { face_value_sats, proof_total_sats, mint_urls } => Ok(serde_json::json!({
             "success": true,
@@ -121,6 +138,10 @@ pub async fn verify_note(bin_b64: String, state: State<'_, AppState>) -> Command
             "face_value_sats": face_value_sats,
             "proof_total_sats": proof_total_sats,
             "spend_state": spend_state_str,
+            "validation_hash": hash,
+            "serial_number": serial,
+            "block_height": block_height,
+            "key_ids": key_ids,
         })),
         _ => Err(crate::error::CommandError(format!("Verification failed: {:?}", res))),
     }

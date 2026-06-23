@@ -172,6 +172,30 @@ export const Scan = () => {
 
             {verified && verifyResult && (
               <div className="bg-surface-container-lowest rounded-xl p-5 text-sm font-label-caps space-y-3 border border-outline-variant/30 shadow-inner">
+                {verifyResult.serial_number && (
+                  <div className="mb-4 pb-4 border-b border-outline-variant/20 border-dashed space-y-2">
+                    <div className="flex items-center text-on-surface">
+                      <span className="w-32 text-on-surface-variant flex-shrink-0">Serial Number</span>
+                      <span className="font-mono text-xs">{verifyResult.serial_number}</span>
+                    </div>
+                    <div className="flex items-center text-on-surface">
+                      <span className="w-32 text-on-surface-variant flex-shrink-0">Block height</span>
+                      <span className="font-mono text-xs">{verifyResult.block_height}</span>
+                    </div>
+                    <div className="flex items-center text-on-surface">
+                      <span className="w-32 text-on-surface-variant flex-shrink-0">Validation hash</span>
+                      <span className="font-mono text-xs truncate" title={verifyResult.validation_hash}>
+                        {verifyResult.validation_hash.substring(0, 12)}...{verifyResult.validation_hash.substring(verifyResult.validation_hash.length - 10)}
+                      </span>
+                      <span className="text-emerald-400 ml-1 ml-auto text-xs font-bold">(MATCHES)</span>
+                    </div>
+                    <div className="flex items-center text-on-surface">
+                      <span className="w-32 text-on-surface-variant flex-shrink-0">Key ID(s)</span>
+                      <span className="font-mono text-[10px] break-all">{verifyResult.key_ids?.join(", ")}</span>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="flex items-center text-emerald-400">
                   <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0" /> Validation hash perfectly matches data
                 </div>
