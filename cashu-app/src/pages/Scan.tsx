@@ -86,7 +86,14 @@ export const Scan = () => {
             <div className="relative z-10 flex flex-col gap-8 w-full">
               {showScanner ? (
                 <div className="rounded-xl overflow-hidden border-2 border-primary">
-                  <Scanner onScan={(result) => handleScan(result[0].rawValue)} />
+                  <Scanner 
+                    formats={['qr_code']}
+                    onScan={(result) => {
+                      if (!result || result.length === 0) return;
+                      const validQr = result.find(r => r.rawValue.toUpperCase().startsWith('ECASHZ:'));
+                      handleScan(validQr ? validQr.rawValue : result[0].rawValue);
+                    }} 
+                  />
                   <button onClick={() => setShowScanner(false)} className="w-full mt-2 text-on-surface-variant hover:text-on-surface py-2 text-label-caps font-label-caps">Cancel Scanner</button>
                 </div>
               ) : (
