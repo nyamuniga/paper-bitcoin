@@ -172,18 +172,40 @@ pub async fn resume_issue_note(
 
     let mut hub_all_proofs = Vec::new();
     let mut note_deriv = TokenDerivation::from_hex(&issue_data.master_seed_hex)?;
-    for (secret_hex, sig) in issue_data.hub_blinding_sessions_hex.iter().zip(sigs.iter()) {
+    
+    let mut sessions = Vec::new();
+    for (secret_hex, out) in issue_data.hub_blinding_sessions_hex.iter().zip(issue_data.hub_outputs.iter()) {
+        let amount = out["amount"].as_u64().ok_or_else(|| anyhow!("Missing amount in hub_outputs"))?;
         let sess = BlindingSession::new(secret_hex);
         let index = note_deriv.index;
         note_deriv.next_secret(); // advance index just like we did originally
+        sessions.push((amount, sess, index));
+    }
+
+    let mut keyset_cache: std::collections::HashMap<String, crate::client::KeysetInfo> = std::collections::HashMap::new();
+    keyset_cache.insert(hub_keyset.id.clone(), hub_keyset.clone());
+
+    for sig in sigs.iter() {
         let amount = sig["amount"].as_u64().ok_or_else(|| anyhow!("Missing amount in signature"))?;
-        let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id);
+        let session_idx = sessions.iter().position(|(d, _, _)| *d == amount)
+            .ok_or_else(|| anyhow!("Mint returned signature for unknown amount {}", amount))?;
+        let (_, sess, index) = sessions.remove(session_idx);
+
+        let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id).to_string();
+        let keyset = if let Some(ks) = keyset_cache.get(&sig_id) {
+            ks.clone()
+        } else {
+            let ks = hub_client.fetch_keyset_by_id(&sig_id).await?;
+            keyset_cache.insert(sig_id.clone(), ks.clone());
+            ks
+        };
+
         let c_prime_str = sig["C_"].as_str().ok_or_else(|| anyhow!("Missing C_ in signature"))?;
         let c_prime = point_from_hex(c_prime_str).context("Invalid C_")?;
-        let mint_pk_str = hub_keyset.keys.get(&amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", amount))?;
+        let mint_pk_str = keyset.keys.get(&amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", amount))?;
         let mint_pk = point_from_hex(mint_pk_str).context("Invalid mint pk")?;
         let dleq = parse_dleq(sig);
-        let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
+        let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq);
         proof.derivation_index = index;
         hub_all_proofs.push(proof);
     }
@@ -235,7 +257,7 @@ pub async fn resume_issue_note(
             let sess = BlindingSession::new(&secret);
             // We use a dummy keyset id for now, it will be overridden if we fetch keyset
             b_out.push(serde_json::json!({"amount": d, "id": "placeholder", "B_": sess.b_prime_hex()}));
-            b_sess.push((sess, index));
+            b_sess.push((d, sess, index));
         }
 
         let hub_mint_url = issue_data.hub_mint.clone();
@@ -260,17 +282,33 @@ pub async fn resume_issue_note(
 
             let b_sigs = client.mint_tokens(&qid_clone, final_b_out).await.map_err(|e| (tx_id_melt.clone(), anyhow!("Child mint error. Your funds are at the mint. Error: {}", e)))?;
 
+            let mut keyset_cache: std::collections::HashMap<String, crate::client::KeysetInfo> = std::collections::HashMap::new();
+            keyset_cache.insert(keyset.id.clone(), keyset.clone());
+
             let mut b_proofs = Vec::new();
-            for ((sess, index), sig) in b_sess.iter().zip(b_sigs.iter()) {
+            for sig in b_sigs.iter() {
                 let amount = sig["amount"].as_u64().ok_or_else(|| (tx_id_melt.clone(), anyhow!("Missing amount in signature")))?;
-                let sig_id = sig["id"].as_str().unwrap_or(&keyset.id);
+                
+                let session_idx = b_sess.iter().position(|(d, _, _)| *d == amount)
+                    .ok_or_else(|| (tx_id_melt.clone(), anyhow!("Mint returned signature for unknown amount {}", amount)))?;
+                let (_, sess, index) = b_sess.remove(session_idx);
+
+                let sig_id = sig["id"].as_str().unwrap_or(&keyset.id).to_string();
+                let actual_keyset = if let Some(ks) = keyset_cache.get(&sig_id) {
+                    ks.clone()
+                } else {
+                    let ks = client.fetch_keyset_by_id(&sig_id).await.map_err(|e| (tx_id_melt.clone(), e))?;
+                    keyset_cache.insert(sig_id.clone(), ks.clone());
+                    ks
+                };
+
                 let c_prime_str = sig["C_"].as_str().ok_or_else(|| (tx_id_melt.clone(), anyhow!("Missing C_ in signature")))?;
                 let c_prime = point_from_hex(c_prime_str).map_err(|e| (tx_id_melt.clone(), e.into()))?;
-                let mint_pk_str = keyset.keys.get(&amount).ok_or_else(|| (tx_id_melt.clone(), anyhow!("Unknown amount {} in keyset", amount)))?;
+                let mint_pk_str = actual_keyset.keys.get(&amount).ok_or_else(|| (tx_id_melt.clone(), anyhow!("Unknown amount {} in keyset", amount)))?;
                 let mint_pk = point_from_hex(mint_pk_str).map_err(|e| (tx_id_melt.clone(), e.into()))?;
                 let dleq = parse_dleq(sig);
-                let mut proof = sess.unblind(&c_prime, &mint_pk, amount, sig_id, dleq);
-                proof.derivation_index = *index;
+                let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq);
+                proof.derivation_index = index;
                 b_proofs.push(proof);
             }
             Ok::<_, (String, anyhow::Error)>((tx_id_melt, mint_clone, keyset.keys, b_proofs))
@@ -309,9 +347,35 @@ pub async fn resume_issue_note(
     let serial = serial_from_hash(&validation_hash);
 
     let mut block_height = 0;
-    if let Ok(resp) = reqwest::get("https://mempool.space/api/blocks/tip/height").await {
-        if let Ok(text) = resp.text().await {
-            block_height = text.trim().parse::<u64>().unwrap_or(0);
+
+    if let Ok(client) = reqwest::Client::builder()
+        .user_agent("PaperBitcoin/1.0")
+        .timeout(std::time::Duration::from_secs(5))
+        .build() 
+    {
+        match client.get("https://mempool.space/api/blocks/tip/height").send().await {
+            Ok(resp) if resp.status().is_success() => {
+                match resp.text().await {
+                    Ok(text) => {
+                        block_height = text.trim().parse::<u64>().unwrap_or(0);
+                    }
+                    Err(e) => tracing::warn!("Failed to read mempool response body: {}", e),
+                }
+            }
+            Ok(resp) => {
+                tracing::warn!("Mempool API returned HTTP {}: {}", resp.status(), resp.status().canonical_reason().unwrap_or("unknown"));
+            }
+            Err(e) => {
+                tracing::warn!("Failed to reach mempool.space: {}", e);
+                // Try fallback API
+                if let Ok(fallback_resp) = client.get("https://blockstream.info/api/blocks/tip/height").send().await {
+                    if fallback_resp.status().is_success() {
+                        if let Ok(text) = fallback_resp.text().await {
+                            block_height = text.trim().parse::<u64>().unwrap_or(0);
+                        }
+                    }
+                }
+            }
         }
     }
 

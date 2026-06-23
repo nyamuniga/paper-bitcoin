@@ -198,22 +198,37 @@ impl OfflineVerifier {
             }
             if y_values.is_empty() { continue; }
             
-            let client = reqwest::Client::new();
-            let resp = client.post(format!("{}/v1/checkstate", entry.mint))
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(3))
+                .build()
+                .unwrap_or_default();
+            
+            let clean = entry.mint.trim_end_matches('/');
+            let clean_mint_url = if let Ok(parsed) = reqwest::Url::parse(clean) {
+                parsed.to_string().trim_end_matches('/').to_string()
+            } else {
+                clean.to_lowercase()
+            };
+            
+            let resp = client.post(format!("{}/v1/checkstate", clean_mint_url))
                 .json(&serde_json::json!({ "Ys": y_values }))
                 .send()
                 .await;
                 
             if let Ok(r) = resp {
-                if let Ok(json) = r.json::<serde_json::Value>().await {
-                    if let Some(states) = json.get("states").and_then(|s| s.as_array()) {
-                        for state in states {
-                            if state.get("state").and_then(|s| s.as_str()) == Some("SPENT") {
-                                return Ok(SpentStatus::Spent);
+                if r.status().is_success() {
+                    if let Ok(json) = r.json::<serde_json::Value>().await {
+                        if let Some(states) = json.get("states").and_then(|s| s.as_array()) {
+                            for state in states {
+                                if state.get("state").and_then(|s| s.as_str()) == Some("SPENT") {
+                                    return Ok(SpentStatus::Spent);
+                                }
                             }
+                            continue; // Successfully checked this mint, none were SPENT
                         }
                     }
                 }
+                return Err(format!("Mint {} returned an invalid or error response", entry.mint));
             } else {
                 return Err(format!("Could not connect to mint {}", entry.mint));
             }
