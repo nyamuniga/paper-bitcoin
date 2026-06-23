@@ -67,6 +67,32 @@ pub(crate) fn match_and_remove_session(
     Ok(sessions.remove(0))
 }
 
+/// Verify a proof offline using the mint's public key and the DLEQ proof.
+/// Returns `true` if the proof is cryptographically valid.
+fn verify_proof_offline(proof: &Proof, mint_pubkeys: &HashMap<u64, String>) -> bool {
+    if let (Some(c_prime), Some(b_prime), Some(dleq)) = (&proof.c_prime, &proof.b_prime, &proof.dleq) {
+        let c_p = match point_from_hex(c_prime) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+        let b_p = match point_from_hex(b_prime) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+        let pk_hex = match mint_pubkeys.get(&proof.amount) {
+            Some(h) => h,
+            None => return false,
+        };
+        let mint_pk = match point_from_hex(pk_hex) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+        verify_dleq(&mint_pk, &c_p, &b_p, dleq)
+    } else {
+        false
+    }
+}
+
 
 
 pub async fn reconstruct_token(public_data: &ecash_core::types::PublicNoteData, master_seed_hex: &str) -> Result<CashuToken> {
@@ -249,6 +275,9 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
 
                     let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq);
                     proof.derivation_index = idx;
+                    if !verify_proof_offline(&proof, &keyset.keys) {
+                        tracing::warn!("⚠️  DLEQ verification FAILED for amount {} (keyset {}). Storing anyway to preserve funds.", amount, sig_id);
+                    }
                     reclaimed_proofs.push(proof);
                 }
 
@@ -276,6 +305,9 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
 
                     let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq);
                     proof.derivation_index = index;
+                    if !verify_proof_offline(&proof, &keyset.keys) {
+                        tracing::warn!("⚠️  DLEQ verification FAILED for amount {} (keyset {}). Storing anyway to preserve funds.", amount, sig_id);
+                    }
                     new_hub_proofs.push(proof);
                 }
             }
@@ -403,8 +435,10 @@ pub async fn redeem_note(state: &mut WalletState, wallet_path: &PathBuf, passphr
         let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq.clone());
         proof.derivation_index = index;
 
-
-
+        if !verify_proof_offline(&proof, &keyset.keys) {
+            tracing::warn!("⚠️  DLEQ verification FAILED for amount {} (keyset {}). Storing anyway to preserve funds.", amount, sig_id);
+        }
+        
         // Store the proof unconditionally so we don't lose funds
         new_proofs.push(proof);
     }
@@ -585,6 +619,9 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
 
         let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq);
         proof.derivation_index = index;
+        if !verify_proof_offline(&proof, &keyset.keys) {
+            tracing::warn!("⚠️  DLEQ verification FAILED for amount {} (keyset {}). Storing anyway to preserve funds.", amount, sig_id);
+        }
         new_proofs.push(proof);
     }
 

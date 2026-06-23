@@ -198,7 +198,10 @@ impl OfflineVerifier {
             }
             if y_values.is_empty() { continue; }
             
-            let client = reqwest::Client::new();
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(3))
+                .build()
+                .unwrap_or_default();
             let resp = client.post(format!("{}/v1/checkstate", entry.mint))
                 .json(&serde_json::json!({ "Ys": y_values }))
                 .send()

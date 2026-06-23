@@ -5,6 +5,21 @@ use ecash_core::types::Proof;
 
 // ─── Mint Client (internal) ───────────────────────────────────────────────────
 
+pub fn check_api_error(v: &serde_json::Value, prefix: &str) -> Result<()> {
+    if let Some(err) = v.get("error") {
+        if err.as_str() != Some("") && !err.is_null() && err.as_bool() != Some(false) {
+            return Err(anyhow!("{} error: {}", prefix, err));
+        }
+    }
+    if let Some(err) = v.get("detail") {
+        if err.as_str() != Some("") && !err.is_null() && err.as_bool() != Some(false) {
+            return Err(anyhow!("{} error (detail): {}", prefix, err));
+        }
+    }
+    Ok(())
+}
+
+
 pub struct MintClient {
     pub http: reqwest::Client,
     pub url: String,
@@ -24,8 +39,7 @@ impl MintClient {
 
     pub async fn fetch_keyset(&self) -> Result<KeysetInfo> {
         let v: serde_json::Value = self.http.get(format!("{}/v1/keys", self.url)).send().await?.json().await?;
-        if let Some(err) = v.get("error") { return Err(anyhow!("Mint error: {}", err)); }
-        if let Some(err) = v.get("detail") { return Err(anyhow!("Mint error (detail): {}", err)); }
+        check_api_error(&v, "Mint")?;
         
         let ks_array = v.get("keysets").and_then(|k| k.as_array()).ok_or_else(|| anyhow!("Missing keysets in response: {:?}", v))?;
         if ks_array.is_empty() { return Err(anyhow!("Mint returned empty keysets")); }
@@ -49,9 +63,7 @@ impl MintClient {
         }
 
         let v: serde_json::Value = resp.json().await?;
-        if let Some(err) = v.get("error") {
-            return Err(anyhow!("Mint error: {}", err));
-        }
+        check_api_error(&v, "Mint")?;
 
         // 2. Handle BOTH response formats:
         //    - Array format: { "keysets": [ { "id": "...", "keys": {...} } ] }
@@ -113,8 +125,7 @@ impl MintClient {
             }
         };
 
-        if let Some(err) = v.get("error") { return Err(anyhow!("Mint error: {}", err)); }
-        if let Some(err) = v.get("detail") { return Err(anyhow!("Mint error (detail): {}", err)); }
+        check_api_error(&v, "Mint")?;
         
         let quote = v.get("quote").and_then(|q| q.as_str()).ok_or_else(|| anyhow!("Missing quote in response: {:?}", v))?;
         let request = v.get("request").and_then(|r| r.as_str()).unwrap_or("");
@@ -144,8 +155,7 @@ impl MintClient {
     pub async fn mint_tokens(&self, quote_id: &str, outputs: Vec<serde_json::Value>) -> Result<Vec<serde_json::Value>> {
         let v: serde_json::Value = self.http.post(format!("{}/v1/mint/bolt11", self.url))
             .json(&serde_json::json!({ "quote": quote_id, "outputs": outputs })).send().await?.json().await?;
-        if let Some(err) = v.get("error") { return Err(anyhow!("Mint error: {}", err)); }
-        if let Some(err) = v.get("detail") { return Err(anyhow!("Mint error (detail): {}", err)); }
+        check_api_error(&v, "Mint")?;
         
         let sigs = v.get("signatures").and_then(|s| s.as_array())
             .ok_or_else(|| anyhow!("Mint response missing signatures: {:?}", v))?;
@@ -158,8 +168,7 @@ impl MintClient {
         } else {
             let qv: serde_json::Value = self.http.post(format!("{}/v1/melt/quote/bolt11", self.url))
                 .json(&serde_json::json!({ "request": invoice, "unit": "sat" })).send().await?.json().await?;
-            if let Some(err) = qv.get("error") { return Err(anyhow!("Melt quote error: {}", err)); }
-            if let Some(err) = qv.get("detail") { return Err(anyhow!("Melt quote error (detail): {}", err)); }
+            check_api_error(&qv, "Melt quote")?;
             qv["quote"].as_str().ok_or_else(|| anyhow!("No quote returned"))?.to_string()
         };
 
@@ -183,8 +192,7 @@ impl MintClient {
         let mv: serde_json::Value = self.http.post(format!("{}/v1/melt/bolt11", self.url))
             .json(&req).send().await?.json().await?;
 
-        if let Some(err) = mv.get("error") { return Err(anyhow!("Melt error: {}", err)); }
-        if let Some(err) = mv.get("detail") { return Err(anyhow!("Melt error (detail): {}", err)); }
+        check_api_error(&mv, "Melt")?;
 
         let paid = mv["paid"].as_bool().unwrap_or(false);
 
@@ -199,7 +207,7 @@ impl MintClient {
     pub async fn check_state(&self, ys: &[String]) -> Result<HashMap<String, String>> {
         let v: serde_json::Value = self.http.post(format!("{}/v1/checkstate", self.url))
             .json(&serde_json::json!({ "Ys": ys })).send().await?.json().await?;
-        if let Some(err) = v.get("error") { return Err(anyhow!("Checkstate error: {}", err)); }
+        check_api_error(&v, "Checkstate")?;
         
         let mut results = HashMap::new();
         if let Some(states) = v.get("states").and_then(|s| s.as_array()) {
@@ -242,7 +250,7 @@ pub async fn estimate_melt_fee(mint_url: &str, invoice: &str) -> Result<(u64, St
     let client = MintClient::new(mint_url);
     let qv: serde_json::Value = client.http.post(format!("{}/v1/melt/quote/bolt11", client.url))
         .json(&serde_json::json!({ "request": invoice, "unit": "sat" })).send().await?.json().await?;
-    if let Some(err) = qv.get("error") { return Err(anyhow!("Melt quote error: {}", err)); }
+    check_api_error(&qv, "Melt quote")?;
     let fee = qv["fee_reserve"].as_u64().unwrap_or(0);
     let quote = qv["quote"].as_str().unwrap_or("").to_string();
     Ok((fee, quote))
