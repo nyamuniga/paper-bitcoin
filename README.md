@@ -79,6 +79,7 @@ cargo run -p ecash-cli -- issue 1000
 - This is a **prototype**. Cryptographic code has not been audited.
 - Full blind-signature verification at redemption is done server-side by the mint.
 - Offline verification checks format + integrity hash; DLEQ proofs (NUT-12) are a future upgrade.
+- The system supports both legacy Hub-and-Spoke consolidation and modern **NUT-15 Multi-Path Payments (MPP)** for redemption, allowing a single Lightning invoice to be paid in parallel across multiple independent mints without requiring centralized consolidation or incurring double routing fees.
 
 ## References
 

@@ -178,7 +178,6 @@ async fn redeem_note_mpp(
         mint: String,
         proofs: Vec<Proof>,
         quote_id: String,
-        fee_reserve: u64,
         change_outputs: Vec<serde_json::Value>,
         change_sessions: Vec<(u64, BlindingSession, u64)>,
         keyset: KeysetInfo,
@@ -242,7 +241,6 @@ async fn redeem_note_mpp(
             mint: mint.clone(),
             proofs: proofs.clone(),
             quote_id,
-            fee_reserve,
             change_outputs,
             change_sessions,
             keyset,
@@ -289,7 +287,7 @@ async fn redeem_note_mpp(
 
     // ── Step 7: Process change from all mints ──────────────────────────────
     let mut all_change_proofs = Vec::new();
-    for (mut req, res) in melt_requests.into_iter().zip(results.into_iter()) {
+    for (req, res) in melt_requests.into_iter().zip(results.into_iter()) {
         let (_paid, change_sigs) = res?;
         let client = MintClient::new(&req.mint);
         let mut keyset_cache = std::collections::HashMap::new();
@@ -582,7 +580,7 @@ async fn redeem_note_legacy(
     state.save_encrypted(wallet_path, passphrase).ok();
 
     // Now get a melt quote for the final invoice
-    let (final_quote_id, final_fee_reserve, _) = hub_client.request_melt_quote(external_invoice).await?;
+    let (final_quote_id, _final_fee_reserve, _) = hub_client.request_melt_quote(external_invoice).await?;
     
     // Send the final melt
     let melt_result = hub_client.melt_tokens(&hub_proofs, external_invoice, Some(&final_quote_id), Some(outputs)).await;
