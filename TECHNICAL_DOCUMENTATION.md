@@ -35,7 +35,7 @@ To coordinate multi-mint tokens without burdening the user with multiple invoice
 
 
 ====================================================================
-                     2. REDEMPTION FLOW (Auto-Consolidation)
+                     2A. REDEMPTION FLOW (Legacy Auto-Consolidation)
 ====================================================================
 
          [ USER ] ◄──(4. Final Lightning Payout)─────┐
@@ -55,6 +55,29 @@ To coordinate multi-mint tokens without burdening the user with multiple invoice
 │  2. Computes Exact Routing Fees │      │                       │
 │  3. Melts Child Tokens to Hub   ├──────┴────────(3)────────────┘
 │  4. Melts Hub Tokens to User    │      
+└─────────────────────────────────┘ 
+
+====================================================================
+                     2B. REDEMPTION FLOW (Modern NUT-15 MPP)
+====================================================================
+
+         [ USER ] ◄──(3. Partial Lightning Payouts)──┐
+            ▲                                        │
+            │(1. Provides Note & Invoice)            │
+            │                                        │
+┌───────────┴─────────────────────┐            [ MINT A ]
+│         WALLET ENGINE           │                  ▲
+│  (Orchestrator / ecash-wallet)  │                  │
+│                                 │                  │ (2. Melt proportional
+│  [Quote Math]                   │                  │     shares in parallel)
+│  Share = Prop. % of Total       │                  │
+│  Quote = Mint.Quote(Inv, Share) │      ┌───────────┴───────────┐
+│                                 │      │                       │
+│  1. Scans Note & Gets User Inv  │ [ MINT B ]              [ MINT C ]
+│  2. Calculates Proportional     │      ▲                       ▲
+│     Shares for each Mint        │      │                       │
+│  3. Melts Tokens in Parallel    ├──────┴────────(2)────────────┘
+│     via NUT-15                  │      
 └─────────────────────────────────┘ 
 ====================================================================
 ```
@@ -77,24 +100,41 @@ Sweeping funds between mints incurs Lightning Network routing fees. To ensure th
 3. **The Mint Swap:** The user pays this massive invoice from their phone. The CLI then sequentially generates quotes at the child mints and pays them using the funds sitting at the Hub Mint.
 4. **Result:** The physical note is printed with valid, over-funded Cashu proofs distributed securely across all the mints.
 
-## 4. Note Redemption (Auto-Consolidation)
+## 4. Note Redemption (NUT-15 Multi-Path Payments)
 
-When a recipient scans the note, they simply provide a Lightning Invoice for the exact Face Value. The CLI acts as an automated routing agent to consolidate the funds.
+When a recipient scans the note, they simply provide a Lightning Invoice for the exact Face Value. The CLI utilizes **NUT-15 (Partial Multi-Path Payments)** to pay this single invoice simultaneously from multiple mints.
 
-### Dynamic Full-Balance Sweeps
-You cannot blindly subtract a flat fee when sweeping a child mint to the Hub Mint, as doing so might throw away too much of the reserve and result in a shortfall.
+### Why NUT-15?
+Previously, the system used a "Hub-and-Spoke" auto-consolidation model where all child mints were swept into a central Hub mint before paying the final invoice. This had significant drawbacks:
+## 4. Note Redemption
 
+When a recipient scans the note, they simply provide a Lightning Invoice for the exact Face Value. The system supports two distinct redemption strategies:
+
+### Strategy A: Modern NUT-15 (Multi-Path Payments)
+
+The CLI utilizes **NUT-15 (Partial Multi-Path Payments)** to pay the single invoice simultaneously from multiple mints. This avoids consolidation entirely:
+
+1. **Proportional Split:** The CLI calculates a proportional share of the total required amount (Face Value + Lightning fees) for each mint based on its available balance.
+2. **Partial Quotes:** It requests a partial melt quote from each mint for its specific share of the invoice.
+3. **Parallel Melting:** All mints are commanded to pay their portion of the invoice to the Lightning Network simultaneously using `join_all`.
+4. **Atomic Refund:** If any single leg of the multi-path payment fails, the protocol ensures safety—the failing leg's funds remain intact, and we locally refund the other portions to the user's wallet state.
+
+### Strategy B: Legacy Auto-Consolidation (Hub-and-Spoke)
+
+The legacy flow uses a "Hub-and-Spoke" model where all child mints are swept into a central Hub mint before paying the final invoice. While this incurs double fees and sequential latency, it remains a supported fallback.
+
+#### Dynamic Full-Balance Sweeps
 1. The CLI queries the Hub Mint for a "dummy quote" of the exact balance held on the child mint.
 2. It asks the child mint to estimate the EXACT Lightning routing fee required to pay that dummy quote.
 3. It then requests a real quote from the Hub Mint for exactly `Balance - Exact Fee` and melts the child proofs to pay it.
 4. This perfectly funnels every available satoshi to the Hub Mint without leaving unnecessary change behind.
 
-### The Final Payout
+#### The Final Payout
 Once all funds are consolidated at the Hub Mint, the CLI asks the Hub Mint to pay the user's external Lightning invoice. 
 
 > [!TIP]
 > **What happens to the leftover routing buffer?**
-> If the actual Lightning routing fees were cheaper than the buffer collected during issuance, the Mint returns the unused buffer as *change*. The CLI unblinds these change signatures and deposits them safely into the user's local Wallet Dashboard.
+> Since the original note was over-funded during issuance to cover routing fees, the actual Lightning routing fees are often cheaper than the buffer. The Mint returns the unused buffer as *change*. The CLI unblinds these change signatures and deposits them safely into the user's local Wallet Dashboard.
 
 ## 5. Failure State Management
 
