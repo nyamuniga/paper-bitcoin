@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Result};
 use ecash_core::types::Proof;
 
-
-// ─── Mint Client (internal) ───────────────────────────────────────────────────
+// ─── Mint Client ──────────────────────────────────────────────────────────────
 
 pub fn check_api_error(v: &serde_json::Value, prefix: &str) -> Result<()> {
     if let Some(err) = v.get("error") {
@@ -18,7 +17,6 @@ pub fn check_api_error(v: &serde_json::Value, prefix: &str) -> Result<()> {
     }
     Ok(())
 }
-
 
 pub struct MintClient {
     pub http: reqwest::Client,
@@ -55,7 +53,6 @@ impl MintClient {
     }
 
     pub async fn fetch_keyset_by_id(&self, keyset_id: &str) -> Result<KeysetInfo> {
-        // 1. ALWAYS request the specific keyset. DO NOT fall back to /v1/keys.
         let resp = self.http.get(format!("{}/v1/keys/{}", self.url, keyset_id)).send().await?;
         
         if !resp.status().is_success() {
@@ -65,22 +62,16 @@ impl MintClient {
         let v: serde_json::Value = resp.json().await?;
         check_api_error(&v, "Mint")?;
 
-        // 2. Handle BOTH response formats:
-        //    - Array format: { "keysets": [ { "id": "...", "keys": {...} } ] }
-        //    - Single object format: { "id": "...", "keys": {...} }
         let ks_obj = if let Some(ks_arr) = v.get("keysets").and_then(|k| k.as_array()) {
-            // Find the matching keyset in the array, then convert it to a Map
             ks_arr.iter()
                 .find(|k| k.get("id").and_then(|i| i.as_str()) == Some(keyset_id))
                 .ok_or_else(|| anyhow!("Keyset {} not found in response", keyset_id))?
                 .as_object()
                 .ok_or_else(|| anyhow!("Keyset entry is not a JSON object"))?
         } else {
-            // Assume the response itself is the keyset object
             v.as_object().ok_or_else(|| anyhow!("Invalid keyset response"))?
         };
 
-        // Now `ks_obj` is a `&serde_json::Map`, so `.get()` works perfectly.
         let id = ks_obj.get("id")
             .and_then(|i| i.as_str())
             .ok_or_else(|| anyhow!("Missing keyset id"))?
@@ -137,7 +128,6 @@ impl MintClient {
         for _ in 0..300 {
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
             
-            // Ignore transient network errors (e.g. OS suspending the socket while switching apps)
             let resp = match self.http.get(format!("{}/v1/mint/quote/bolt11/{}", self.url, quote_id)).send().await {
                 Ok(r) => r,
                 Err(_) => continue,
@@ -162,10 +152,19 @@ impl MintClient {
         Ok(sigs.clone())
     }
 
-    pub async fn melt_tokens(&self, proofs: &[Proof], invoice: &str, quote_id: Option<&str>, outputs: Option<Vec<serde_json::Value>>) -> Result<(bool, Vec<serde_json::Value>)> {
+    /// Send a melt request. If `quote_id` is provided, it uses that; otherwise it requests a new one.
+    /// For NUT-15 MPP, all mints must use the SAME `quote_id`.
+    pub async fn melt_tokens(
+        &self,
+        proofs: &[Proof],
+        invoice: &str,
+        quote_id: Option<&str>,
+        outputs: Option<Vec<serde_json::Value>>,
+    ) -> Result<(bool, Vec<serde_json::Value>)> {
         let qid = if let Some(q) = quote_id {
             q.to_string()
         } else {
+            // Fallback: request a new quote (not recommended for MPP)
             let qv: serde_json::Value = self.http.post(format!("{}/v1/melt/quote/bolt11", self.url))
                 .json(&serde_json::json!({ "request": invoice, "unit": "sat" })).send().await?.json().await?;
             check_api_error(&qv, "Melt quote")?;
@@ -188,14 +187,12 @@ impl MintClient {
             req["outputs"] = serde_json::Value::Array(outs);
         }
 
-
         let mv: serde_json::Value = self.http.post(format!("{}/v1/melt/bolt11", self.url))
             .json(&req).send().await?.json().await?;
 
         check_api_error(&mv, "Melt")?;
 
         let paid = mv["paid"].as_bool().unwrap_or(false);
-
         let change = mv.get("change")
             .and_then(|c| c.as_array())
             .cloned()
@@ -244,7 +241,59 @@ impl MintClient {
             }
         }
     }
+
+    /// Check if the mint supports NUT-15 (Multi-Path Payments).
+    /// According to the Cashu spec, NUT-15 support is indicated by the presence
+    /// of the `"15"` key in the `nuts` object of the `/info` response.
+    pub async fn supports_nut15(&self) -> Result<bool> {
+        let info = self.fetch_info().await?;
+        if let Some(nuts) = info.get("nuts").and_then(|n| n.as_object()) {
+            if nuts.contains_key("15") {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Request a melt quote. Returns (quote_id, fee_reserve, total_amount_sats).
+    /// For NUT-15, this quote can be used by multiple mints.
+    pub async fn request_melt_quote(&self, invoice: &str) -> Result<(String, u64, u64)> {
+        let qv: serde_json::Value = self.http.post(format!("{}/v1/melt/quote/bolt11", self.url))
+            .json(&serde_json::json!({ 
+                "request": invoice, 
+                "unit": "sat"
+            })).send().await?.json().await?;
+        check_api_error(&qv, "Melt quote")?;
+        
+        let quote = qv["quote"].as_str().ok_or_else(|| anyhow!("No quote returned"))?.to_string();
+        let fee_reserve = qv["fee_reserve"].as_u64().unwrap_or(0);
+        let amount = qv["amount"].as_u64().unwrap_or(0);
+        Ok((quote, fee_reserve, amount + fee_reserve)) // total required
+    }
+    /// Request a melt quote for a specific amount (for MPP).
+    /// Returns (quote_id, fee_reserve, total_required_for_this_amount).
+    pub async fn request_melt_quote_with_amount(&self, invoice: &str, amount_sats: u64) -> Result<(String, u64, u64)> {
+        // Convert to msat (multiply by 1000)
+        let amount_msat = amount_sats * 1000;
+        let qv: serde_json::Value = self.http.post(format!("{}/v1/melt/quote/bolt11", self.url))
+            .json(&serde_json::json!({ 
+                "request": invoice, 
+                "unit": "sat",
+                "options": {
+            "mpp": {
+                "amount": amount_msat
+            }
+        }
+            })).send().await?.json().await?;
+        check_api_error(&qv, "Melt quote")?;
+        
+        let quote = qv["quote"].as_str().ok_or_else(|| anyhow!("No quote returned"))?.to_string();
+        let fee_reserve = qv["fee_reserve"].as_u64().unwrap_or(0);
+        let amount = qv["amount"].as_u64().unwrap_or(0);
+        Ok((quote, fee_reserve, amount + fee_reserve))
+    }
 }
+
 
 pub async fn estimate_melt_fee(mint_url: &str, invoice: &str) -> Result<(u64, String)> {
     let client = MintClient::new(mint_url);
@@ -258,8 +307,8 @@ pub async fn estimate_melt_fee(mint_url: &str, invoice: &str) -> Result<(u64, St
 
 pub async fn estimate_routing_fee_from_info(mint_url: &str, amount_sats: u64) -> u64 {
     let client = MintClient::new(mint_url);
-    let mut base_msat = 1000; // default 1 sat
-    let mut proportional_millionths = 1000; // default 0.1%
+    let mut base_msat = 1000;
+    let mut proportional_millionths = 1000;
 
     if let Ok(info) = client.fetch_info().await {
         if let Some(base) = extract_json_number(&info, "fee_base_msat") {
@@ -274,7 +323,6 @@ pub async fn estimate_routing_fee_from_info(mint_url: &str, amount_sats: u64) ->
 
     let base_sats = base_msat / 1000;
     let proportional_sats = (amount_sats * proportional_millionths) / 1_000_000;
-    
     base_sats + proportional_sats
 }
 
@@ -307,4 +355,3 @@ fn extract_json_number(value: &serde_json::Value, key: &str) -> Option<u64> {
 
 #[derive(Clone)]
 pub struct KeysetInfo { pub id: String, pub keys: HashMap<u64, String> }
-
