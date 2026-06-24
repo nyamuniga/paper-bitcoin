@@ -187,7 +187,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    Init { force: bool },
+    Init {
+        #[arg(short, long)]
+        force: bool,
+    },
     Recover,
     Migrate,
     Info,
