@@ -50,8 +50,17 @@ cargo build --release
 # Run step by step:
 cargo run -p ecash-cli -- init                  # create wallet
 cargo run -p ecash-cli -- issue 1000            # issue 1000 sat note → ./notes/
-cargo run -p ecash-cli -- verify ./notes/<serial>.json
-cargo run -p ecash-cli -- redeem ./notes/<serial>.json
+# Save payload to file
+echo "ECASHZ:NCFOA0/..." > note.txt
+
+# Verify using the file
+cargo run -p ecash-cli -- verify "$(cat note.txt)"
+
+# Save payload to file
+echo "ECASHZ:NCFOA0/..." > note.txt
+
+# Redeem using the file
+cargo run -p ecash-cli -- redeem "$(cat note.txt)"
 ```
 
 ## Production
