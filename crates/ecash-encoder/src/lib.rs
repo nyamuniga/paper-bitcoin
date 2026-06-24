@@ -201,8 +201,8 @@ fn build_svg(
 <text x="100" y="395" class="link">{mint_url}</text>
 
 <!-- Public QR Code -->
-<image href="data:image/svg+xml;base64,{pub_qr}" x="483" y="200" width="144" height="144"/>
-<text x="555" y="375" text-anchor="middle" class="lbl">SCAN TO VERIFY</text>
+<image href="data:image/svg+xml;base64,{pub_qr}" x="438" y="190" width="205" height="205"/>
+<text x="550" y="420" text-anchor="middle" class="lbl">SCAN TO VERIFY</text>
 
 <!-- Vertical Hash -->
 <text x="695" y="555" class="lbl" font-size="7" fill="#5D4037" transform="rotate(-90 695 535)">HASH: {full_hash}</text>
@@ -219,14 +219,14 @@ fn build_svg(
 </g>
 <text x="875" y="67" text-anchor="middle" class="wlbl">SECRETS BELOW</text>
 
-<text x="875" y="85" text-anchor="middle" class="wsub">SCRATCH TO REVEAL</text>
-<text x="875" y="95" text-anchor="middle" class="wsub">REDEMPTION KEY</text>
+<text x="875" y="87" text-anchor="middle" class="wsub">SCRATCH TO REVEAL</text>
+<text x="875" y="102" text-anchor="middle" class="wsub">REDEMPTION KEY</text>
 
 <!-- Private QR Code -->
-<image href="data:image/svg+xml;base64,{priv_qr}" x="810" y="200" width="144" height="144"/>
+<image href="data:image/svg+xml;base64,{priv_qr}" x="780" y="185" width="205" height="205"/>
 
-<text x="880" y="375" text-anchor="middle" class="warn">DO NOT SHARE THIS CODE.</text>
-<text x="880" y="390" text-anchor="middle" class="warn">IT CONTROLS THE FUNDS.</text>
+<text x="880" y="410" text-anchor="middle" class="warn">DO NOT SHARE THIS CODE.</text>
+<text x="880" y="430" text-anchor="middle" class="warn">IT CONTROLS THE FUNDS.</text>
 
 </svg>"##,
         bg_b64 = bg_b64,
