@@ -39,6 +39,35 @@ npm install
 npm run tauri dev
 ```
 
+### Building for Production
+
+You can build the app for multiple platforms. Note that for macOS builds on headless environments (like CI), you may need to bypass the Finder automation script by setting `CI=true`.
+
+**macOS:**
+```bash
+CI=true npm run tauri build --release
+```
+
+**Windows:**
+```bash
+npm run tauri build --target x86_64-pc-windows-msvc
+```
+
+**Linux:**
+```bash
+npm run tauri build
+```
+
+**Android:**
+```bash
+npm run tauri android build
+```
+
+**iOS:**
+```bash
+npm run tauri ios build
+```
+
 ### Running the CLI
 
 By default, the CLI uses a remote mint.

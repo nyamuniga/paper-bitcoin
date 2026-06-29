@@ -41,10 +41,15 @@ async fn test_redemption_integration() {
     });
     Mock::given(method("GET"))
         .and(path("/v1/keys"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(keys_body))
+        .respond_with(ResponseTemplate::new(200).set_body_json(keys_body.clone()))
         .mount(&server)
         .await;
 
+    Mock::given(method("GET"))
+        .and(path("/v1/keys/00112233"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(keys_body))
+        .mount(&server)
+        .await;
     // Mock checkstate
     Mock::given(method("POST"))
         .and(path("/v1/checkstate"))

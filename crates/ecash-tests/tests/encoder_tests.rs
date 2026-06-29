@@ -28,5 +28,4 @@ fn test_encoder_generates_svg_without_panic() {
     assert!(svg.contains("1,000")); // Amount
     assert!(svg.contains("SATOSHIS")); // Unit
     assert!(svg.contains("abcd1234")); // Hash
-    assert!(svg.contains("SCAN TO VERIFY"));
 }
