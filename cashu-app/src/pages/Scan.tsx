@@ -86,13 +86,13 @@ export const Scan = () => {
             <div className="relative z-10 flex flex-col gap-8 w-full">
               {showScanner ? (
                 <div className="rounded-xl overflow-hidden border-2 border-primary">
-                  <Scanner 
+                  <Scanner
                     formats={['qr_code']}
                     onScan={(result) => {
                       if (!result || result.length === 0) return;
                       const validQr = result.find(r => r.rawValue.toUpperCase().startsWith('ECASHZ:'));
                       handleScan(validQr ? validQr.rawValue : result[0].rawValue);
-                    }} 
+                    }}
                   />
                   <button onClick={() => setShowScanner(false)} className="w-full mt-2 text-on-surface-variant hover:text-on-surface py-2 text-label-caps font-label-caps">Cancel Scanner</button>
                 </div>
@@ -125,7 +125,7 @@ export const Scan = () => {
                     value={binB64}
                     onChange={(e) => setBinB64(e.target.value)}
                     className="w-full bg-surface-container-lowest text-on-background rounded-lg border-none px-4 py-4 min-h-[100px] resize-none focus:ring-1 focus:ring-primary/50 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] text-body-md font-body-md placeholder:text-on-surface-variant/40 transition-all glow-effect focus:bg-surface-container-lowest/80"
-                    placeholder="Paste binary base64..."
+                    placeholder="Paste binary base45/base64..."
                     spellCheck="false"
                   ></textarea>
                 </div>
@@ -202,7 +202,7 @@ export const Scan = () => {
                     </div>
                   </div>
                 )}
-                
+
                 <div className="flex items-center text-emerald-400">
                   <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0" /> Validation hash perfectly matches data
                 </div>
