@@ -1,13 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useLocation } from 'react-router-dom';
 import { useWalletStore } from '../store/wallet';
 
 export const useIssue = () => {
+  const location = useLocation();
+  const state = location.state as any;
+
   const [sats, setSats] = useState<string>('');
   const [mintUrls, setMintUrls] = useState<string[]>([]);
   const [strategy, setStrategy] = useState<'dynamic' | 'static'>('dynamic');
   const [loading, setLoading] = useState(false);
-  const [invoicePayload, setInvoicePayload] = useState<any>(null);
+  const [invoicePayload, setInvoicePayload] = useState<any>(state?.pendingIssue || null);
   const [issuedNote, setIssuedNote] = useState<any>(null);
   const [pollTrigger, setPollTrigger] = useState(0);
   const [error, setError] = useState<string>('');

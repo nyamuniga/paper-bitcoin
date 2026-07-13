@@ -72,6 +72,7 @@ export const Scan = () => {
                 redeemSuccess={redeemSuccess}
                 error={error}
                 onRedeem={handleRedeem}
+                noteAmount={noteInfo.amount}
               />
             )}
             

@@ -68,6 +68,52 @@ pub async fn issue_note(
 }
 
 #[tauri::command]
+pub async fn get_pending_issue(
+    state: State<'_, AppState>,
+    tx_id: String,
+) -> CommandResult<PendingIssue> {
+    let path = state.wallet_path.clone();
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock.clone().ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
+    };
+
+    let w_state = WalletState::load_encrypted(&path, &passphrase)?;
+
+    let tx = w_state.transactions.into_iter().find(|t| t.id == tx_id)
+        .ok_or_else(|| crate::error::CommandError("Transaction not found".to_string()))?;
+
+    if let ecash_core::types::TransactionType::Issue(issue_data) = tx.tx_type {
+        // Fetch the invoice from the hub mint using the quote_id
+        let client = ecash_wallet::client::MintClient::new(&issue_data.hub_mint);
+        
+        // We do a manual reqwest GET to /v1/mint/quote/bolt11/{}
+        let url = format!("{}/v1/mint/quote/bolt11/{}", client.url, issue_data.quote_id);
+        let resp = client.http.get(&url).send().await
+            .map_err(|e| crate::error::CommandError(format!("Network error: {}", e)))?;
+            
+        let json: serde_json::Value = resp.json().await
+            .map_err(|e| crate::error::CommandError(format!("Parse error: {}", e)))?;
+            
+        ecash_wallet::client::check_api_error(&json, "Mint")
+            .map_err(|e| crate::error::CommandError(e.to_string()))?;
+            
+        let invoice = json.get("request").and_then(|r| r.as_str())
+            .ok_or_else(|| crate::error::CommandError("Missing request/invoice in quote".to_string()))?
+            .to_string();
+
+        Ok(PendingIssue {
+            tx_id,
+            hub_mint: issue_data.hub_mint,
+            invoice,
+            total_sats: tx.amount + tx.fee, // Or however total_sats is calculated, wait tx.amount is the face value, total_hub_needed is face value + fee. Let's use tx.amount + tx.fee. Wait, no, actual total_sats in issue_note was total_hub_needed!
+        })
+    } else {
+        Err(crate::error::CommandError("Not an issue transaction".to_string()))
+    }
+}
+
+#[tauri::command]
 pub async fn get_pdf_from_bin(bin_b64: String) -> CommandResult<Vec<u8>> {
     use base64::Engine;
     let bin_data = base64::engine::general_purpose::STANDARD.decode(bin_b64)

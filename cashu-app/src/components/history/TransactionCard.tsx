@@ -16,9 +16,10 @@ interface TransactionCardProps {
   onCheckMelt: (txId: string) => void;
   onCheckIssue: (txId: string) => void;
   onDownloadNote: (txId: string, amount: number, serial?: string) => void;
+  onClick?: () => void;
 }
 
-export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, onDownloadNote }: TransactionCardProps) => {
+export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, onDownloadNote, onClick }: TransactionCardProps) => {
   const isMint = 'Mint' in tx.tx_type;
   const isIssue = 'Issue' in tx.tx_type;
   const isMelt = 'Melt' in tx.tx_type;
@@ -26,7 +27,10 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
   const quoteId = isMint ? tx.tx_type.Mint.quote_id : (isMelt ? tx.tx_type.Melt.quote_id : '');
 
   return (
-    <div className={`obsidian-card rounded-xl p-5 border group ${isMint && tx.status === 'Success' ? 'border-emerald-900/30' : 'border-surface-container-high/50'}`}>
+    <div 
+      onClick={onClick}
+      className={`obsidian-card rounded-xl p-5 border group ${isMint && tx.status === 'Success' ? 'border-emerald-900/30' : 'border-surface-container-high/50'} ${onClick ? 'cursor-pointer active:scale-[0.99] transition-transform' : ''}`}
+    >
       {isMint && tx.status === 'Success' && (
         <>
           <div className="absolute inset-0 bg-emerald-900/5 mix-blend-screen pointer-events-none"></div>
@@ -87,7 +91,7 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
           </div>
 
           {isIssue && tx.status === 'Success' && (
-            <button onClick={() => onDownloadNote(tx.id, tx.amount, tx.tx_type?.Issue?.note?.serial)} className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-colors border border-outline-variant/30 text-label-caps font-label-caps">
+            <button onClick={(e) => { e.stopPropagation(); onDownloadNote(tx.id, tx.amount, tx.tx_type?.Issue?.note?.serial); }} className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-colors border border-outline-variant/30 text-label-caps font-label-caps">
               <Download className="w-4 h-4" /> Download SVG / PDF
             </button>
           )}
@@ -95,15 +99,15 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
           {tx.status === 'Pending' && (
             <div className="flex gap-2 w-full md:w-auto">
               {isMint ? (
-                <button onClick={() => onRetryMint(tx.id)} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-teal-500/20 text-teal-400 hover:bg-teal-500/30 transition-colors border border-teal-500/30 text-label-caps font-label-caps">
+                <button onClick={(e) => { e.stopPropagation(); onRetryMint(tx.id); }} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-teal-500/20 text-teal-400 hover:bg-teal-500/30 transition-colors border border-teal-500/30 text-label-caps font-label-caps">
                   Retry Mint
                 </button>
               ) : isIssue ? (
-                <button onClick={() => onCheckIssue(tx.id)} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors border border-primary/30 text-label-caps font-label-caps">
+                <button onClick={(e) => { e.stopPropagation(); onCheckIssue(tx.id); }} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors border border-primary/30 text-label-caps font-label-caps">
                   Check Status & Resume
                 </button>
               ) : (
-                <button onClick={() => onCheckMelt(tx.id)} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors border border-amber-500/30 text-label-caps font-label-caps">
+                <button onClick={(e) => { e.stopPropagation(); onCheckMelt(tx.id); }} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors border border-amber-500/30 text-label-caps font-label-caps">
                   Check Status & Refund
                 </button>
               )}

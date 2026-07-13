@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowDown, ArrowUp, FileText, ChevronRight } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { Transaction } from '../history/TransactionCard';
+import { TransactionDetailsModal } from '../history/TransactionDetailsModal';
 
 export const RecentTransactions: React.FC = () => {
+  const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
   useEffect(() => {
     const fetchRecent = async () => {
@@ -21,6 +25,21 @@ export const RecentTransactions: React.FC = () => {
     };
     fetchRecent();
   }, []);
+
+  const handleRowClick = async (tx: Transaction) => {
+    if (tx.status === 'Pending' && 'Issue' in tx.tx_type) {
+      toast.loading('Loading invoice...', { id: tx.id });
+      try {
+        const pendingIssue = await invoke('get_pending_issue', { txId: tx.id });
+        toast.dismiss(tx.id);
+        navigate('/issue', { state: { pendingIssue } });
+      } catch (e: any) {
+        toast.error(`Error: ${e}`, { id: tx.id });
+      }
+    } else if ('Melt' in tx.tx_type) {
+      setSelectedTx(tx);
+    }
+  };
 
   const getTxLabel = (tx: Transaction) => {
     if ('Mint' in tx.tx_type) return 'Received';
@@ -83,53 +102,66 @@ export const RecentTransactions: React.FC = () => {
     });
   };
 
-  if (loading) return null;
+
 
   return (
     <section className="flex flex-col gap-2">
       <div className="flex justify-between items-center">
         <h2 className="text-label-caps font-label-caps text-on-surface-variant tracking-widest">RECENT ACTIVITY</h2>
-        {transactions.length > 0 && (
+        {loading || transactions.length > 0 && (
           <Link to="/history" className="text-label-caps font-label-caps text-primary hover:opacity-80 transition-opacity flex items-center gap-1">
             VIEW ALL
             <ChevronRight size={14} />
           </Link>
         )}
       </div>
-      {transactions.length === 0 ? (
+      {loading ? (
+        <div className="text-center text-on-surface-variant py-6 bg-surface-container-high rounded-2xl border border-outline-variant/10 text-body-md font-body-md">
+          Loading transactions...
+        </div>
+      ) : transactions.length === 0 ? (
         <div className="text-center text-on-surface-variant py-6 bg-surface-container-high rounded-2xl border border-outline-variant/10 text-body-md font-body-md">
           No recent activity
         </div>
       ) : (
-      <div className="bg-surface-container-high rounded-2xl overflow-hidden border border-outline-variant/10 relative">
-        <div className="absolute inset-0 texture-overlay opacity-20"></div>
-        {transactions.map((tx, index) => (
-          <div 
-            key={tx.id} 
-            className={`flex items-center gap-3 p-3.5 md:p-4 relative z-10 hover:bg-surface-container-highest/50 transition-colors ${
-              index < transactions.length - 1 ? 'border-b border-outline-variant/10' : ''
-            }`}
-          >
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center border flex-shrink-0 ${getTxIconBg(tx)}`}>
-              {getTxIcon(tx)}
+        <div className="bg-surface-container-high rounded-2xl overflow-hidden border border-outline-variant/10 relative">
+          <div className="absolute inset-0 texture-overlay opacity-20"></div>
+          {transactions.map((tx, index) => {
+            const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type;
+            return (
+            <div
+              key={tx.id}
+              onClick={() => handleRowClick(tx)}
+              className={`flex items-center gap-3 p-3.5 md:p-4 relative z-10 hover:bg-surface-container-highest/50 transition-colors ${index < transactions.length - 1 ? 'border-b border-outline-variant/10' : ''
+                } ${isClickable ? 'cursor-pointer active:scale-[0.99]' : ''}`}
+            >
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center border flex-shrink-0 ${getTxIconBg(tx)}`}>
+                {getTxIcon(tx)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-body-md font-body-md font-medium text-on-surface text-[14px]">{getTxLabel(tx)}</p>
+                {/* Mobile: relative time / Desktop: full date */}
+                <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] md:hidden">{formatTime(tx.timestamp)}</p>
+                <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] hidden md:block">{formatFullDate(tx.timestamp)}</p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <span className={`text-body-md font-body-md font-semibold ${getTxAmountColor(tx)} text-[14px]`}>
+                  {getTxSign(tx)}{tx.amount} sats
+                </span>
+                {tx.status === 'Pending' && (
+                  <span className="block text-[10px] text-amber-500 font-label-caps">Pending</span>
+                )}
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-body-md font-body-md font-medium text-on-surface text-[14px]">{getTxLabel(tx)}</p>
-              {/* Mobile: relative time / Desktop: full date */}
-              <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] md:hidden">{formatTime(tx.timestamp)}</p>
-              <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] hidden md:block">{formatFullDate(tx.timestamp)}</p>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <span className={`text-body-md font-body-md font-semibold ${getTxAmountColor(tx)} text-[14px]`}>
-                {getTxSign(tx)}{tx.amount} sats
-              </span>
-              {tx.status === 'Pending' && (
-                <span className="block text-[10px] text-amber-500 font-label-caps">Pending</span>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+          )})}
+        </div>
+      )}
+
+      {selectedTx && (
+        <TransactionDetailsModal
+          tx={selectedTx}
+          onClose={() => setSelectedTx(null)}
+        />
       )}
     </section>
   );

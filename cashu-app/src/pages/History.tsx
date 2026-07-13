@@ -1,9 +1,15 @@
+import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { TransactionCard } from '../components/history/TransactionCard';
+import { Transaction, TransactionCard } from '../components/history/TransactionCard';
 import { PageHeader } from '../components/shared/PageHeader';
 import { useHistory } from '../hooks/useHistory';
+import { TransactionDetailsModal } from '../components/history/TransactionDetailsModal';
+
+import { useNavigate } from 'react-router-dom';
 
 export default function History() {
+  const navigate = useNavigate();
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const {
     transactions,
     loading,
@@ -13,6 +19,12 @@ export default function History() {
     handleCheckIssue,
     handleDownloadNote
   } = useHistory();
+
+  const handleCardClick = (tx: Transaction) => {
+    if ('Melt' in tx.tx_type) {
+      setSelectedTx(tx);
+    }
+  };
 
   return (
     <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
@@ -43,11 +55,19 @@ export default function History() {
               tx={tx} 
               onRetryMint={handleRetryMint}
               onCheckMelt={handleCheckMelt}
-              onCheckIssue={handleCheckIssue}
+              onCheckIssue={(txId) => handleCheckIssue(txId, navigate)}
               onDownloadNote={handleDownloadNote}
+              onClick={'Melt' in tx.tx_type ? () => handleCardClick(tx) : undefined}
             />
           ))}
         </div>
+      )}
+
+      {selectedTx && (
+        <TransactionDetailsModal
+          tx={selectedTx}
+          onClose={() => setSelectedTx(null)}
+        />
       )}
     </main>
   );

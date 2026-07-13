@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ChevronRight, ChevronLeft, Plus } from 'lucide-react';
 import { PageHeader } from '../shared/PageHeader';
+import { useWalletStore } from '../../store/wallet';
 
 interface IssueMintsStepProps {
   mintUrls: string[];
@@ -11,6 +12,10 @@ interface IssueMintsStepProps {
 
 export const IssueMintsStep: React.FC<IssueMintsStepProps> = ({ mintUrls, setMintUrls, onNext, onBack }) => {
   const [newMint, setNewMint] = useState<string>('');
+  const [showAllMints, setShowAllMints] = useState<boolean>(false);
+  const mintBalances = useWalletStore((s) => s.mintBalances);
+  
+  const trustedMintUrls = Object.keys(mintBalances).filter(url => !mintUrls.includes(url));
 
   const handleAddMint = () => {
     if (newMint) {
@@ -96,6 +101,41 @@ export const IssueMintsStep: React.FC<IssueMintsStepProps> = ({ mintUrls, setMin
         )}
         {mintUrls.length >= 3 && (
           <div className="text-xs text-on-surface-variant text-center font-label-caps">Maximum of 3 mints allowed</div>
+        )}
+
+        {/* Trusted Mints suggestions */}
+        {trustedMintUrls.length > 0 && mintUrls.length < 3 && (
+          <div className="mt-4 flex flex-col gap-3">
+            <p className="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Or select from Trusted Mints</p>
+            <div className="flex flex-col gap-2">
+              {(showAllMints ? trustedMintUrls : trustedMintUrls.slice(0, 3)).map((url, i) => (
+                <button
+                  key={i}
+                  onClick={() => setMintUrls([...mintUrls, url])}
+                  className="bg-surface-container-low hover:bg-surface-container rounded-xl p-3 flex items-center gap-3 border border-outline-variant/10 text-left transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-primary text-[10px] font-bold">{new URL(url).hostname.charAt(0).toUpperCase()}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-body-md font-body-md text-on-surface text-[14px] truncate">{new URL(url).hostname}</p>
+                    <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] truncate">{url}</p>
+                  </div>
+                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                    <Plus size={14} />
+                  </div>
+                </button>
+              ))}
+              {trustedMintUrls.length > 3 && (
+                <button
+                  onClick={() => setShowAllMints(!showAllMints)}
+                  className="mt-2 text-primary text-[14px] font-bold self-center hover:underline py-2"
+                >
+                  {showAllMints ? 'View less' : `View ${trustedMintUrls.length - 3} more`}
+                </button>
+              )}
+            </div>
+          </div>
         )}
       </div>
 

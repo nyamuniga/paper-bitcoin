@@ -1,4 +1,3 @@
-import { PendingTxAlert } from '../components/home/PendingTxAlert';
 import { WalletBalanceCard } from '../components/home/WalletBalanceCard';
 import { TrustedMintsList } from '../components/home/TrustedMintsList';
 import { RecentTransactions } from '../components/home/RecentTransactions';
@@ -8,12 +7,10 @@ export const Home = () => {
   const {
     balance,
     mintBalances,
-    pendingTxs,
   } = useHome();
 
   return (
     <main className="relative z-10 px-container-padding max-w-[480px] md:max-w-[1200px] mx-auto pt-4 md:pt-8 flex flex-col gap-6 pb-8 w-full">
-      <PendingTxAlert pendingTxs={pendingTxs} />
 
       {/* Desktop: two-column layout / Mobile: single column */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-10">
