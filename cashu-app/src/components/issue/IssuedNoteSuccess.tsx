@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { CheckCircle, Loader2 } from 'lucide-react';
+import { PageHeader } from '../shared/PageHeader';
 
 interface IssuedNoteSuccessProps {
   issuedNote: any;
@@ -49,7 +50,10 @@ export const IssuedNoteSuccess: React.FC<IssuedNoteSuccessProps> = ({ issuedNote
   };
 
   return (
-    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-8 flex flex-col items-center">
+    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col items-center">
+      <div className="w-full max-w-2xl mb-4">
+        <PageHeader title="Note Created" />
+      </div>
       <div className="w-full max-w-2xl text-center mb-8 mt-4 flex flex-col items-center">
         <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
           <CheckCircle className="w-12 h-12 text-emerald-400" />

@@ -2,6 +2,7 @@ import { Info } from 'lucide-react';
 import { ScanNoteForm } from '../components/scan/ScanNoteForm';
 import { NoteVerificationResult } from '../components/scan/NoteVerificationResult';
 import { RedeemNoteForm } from '../components/scan/RedeemNoteForm';
+import { PageHeader } from '../components/shared/PageHeader';
 import { useScan } from '../hooks/useScan';
 
 export const Scan = () => {
@@ -25,9 +26,9 @@ export const Scan = () => {
   } = useScan();
 
   return (
-    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-8 flex flex-col items-center">
-      <div className="w-full max-w-2xl text-left mb-6">
-        <h1 className="text-headline-lg font-headline-lg text-on-background">Scan Note</h1>
+    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col items-center">
+      <div className="w-full max-w-2xl mb-6">
+        <PageHeader title="Scan Note" />
       </div>
 
       {!noteInfo ? (
