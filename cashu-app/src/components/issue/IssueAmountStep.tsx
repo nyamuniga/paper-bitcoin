@@ -32,13 +32,12 @@ export const IssueAmountStep: React.FC<IssueAmountStepProps> = ({ sats, setSats,
       <div className="flex-1 flex flex-col items-center justify-center py-6 md:py-10">
         <span className="text-label-caps font-label-caps text-on-surface-variant tracking-widest mb-3">AMOUNT</span>
         <div className="flex items-baseline gap-2 mb-1">
-          <span className={`font-display-lg text-on-surface tracking-tight transition-all duration-200 ${
+          <h1 className={`font-display-lg text-on-surface tracking-tighter leading-none relative z-10 transition-all duration-300 ${
             sats.length > 6 ? 'text-[40px] md:text-[52px]' : 'text-[56px] md:text-[72px]'
-          } leading-none`}>
-            {amount.toLocaleString() || '0'}
-          </span>
+          }`}>
+            ₿{sats || '0'}
+          </h1>
         </div>
-        <span className="text-label-caps font-label-caps text-on-surface-variant">sats</span>
       </div>
 
       {/* Number pad */}

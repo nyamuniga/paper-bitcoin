@@ -62,9 +62,9 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             </div>
             <h3 className="text-headline-md font-headline-md text-on-surface">{getTxLabel()}</h3>
             <p className={`text-display-sm font-display-sm mt-2 ${isMint || isRedeem ? 'text-emerald-400' : isIssue ? 'text-primary' : 'text-on-surface'}`}>
-              {isMint || isRedeem ? '+' : isIssue ? '' : '-'}{tx.amount.toLocaleString()} sats
+              {isMint || isRedeem ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
             </p>
-            {tx.fee > 0 && <p className="text-label-caps font-label-caps text-on-surface-variant mt-1">Fee: {tx.fee.toLocaleString()} sats</p>}
+            {tx.fee > 0 && <p className="text-label-caps font-label-caps text-on-surface-variant mt-1">Fee: ₿{tx.fee.toLocaleString()}</p>}
           </div>
 
           <div className="divider-dashed my-1 border-outline-variant/20"></div>

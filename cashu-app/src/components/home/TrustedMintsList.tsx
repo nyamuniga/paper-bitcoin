@@ -67,9 +67,8 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
                     </div>
                     <span className="text-body-md font-body-md text-on-surface truncate text-[14px]" title={mint}>{new URL(mint).hostname}</span>
                   </div>
-                  <div className="flex items-baseline gap-1 relative z-10 whitespace-nowrap pointer-events-none">
-                    <span className="text-body-md font-body-md font-semibold text-on-surface">{amt.toLocaleString()}</span>
-                    <span className="text-label-caps font-label-caps text-on-surface-variant text-[10px]">sats</span>
+                  <div className="flex items-baseline gap-1 flex-shrink-0 whitespace-nowrap">
+                    <span className="text-body-md font-body-md font-semibold text-on-surface">₿{amt.toLocaleString()}</span>
                   </div>
                 </div>
               </div>

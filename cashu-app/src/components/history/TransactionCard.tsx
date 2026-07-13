@@ -63,9 +63,9 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
           </div>
           <div className="text-right">
             <span className={`text-body-md font-body-md font-bold block ${isMint || isRedeem ? 'text-emerald-400' : isIssue ? 'text-primary' : 'text-on-surface'}`}>
-              {isMint || isRedeem ? '+' : isIssue ? '' : '-'}{tx.amount} sats
+              {isMint || isRedeem ? '+' : isIssue ? '' : '-'}₿{tx.amount}
             </span>
-            {tx.fee > 0 && <span className="text-label-caps font-label-caps text-on-surface-variant mt-1 block">Fee: {tx.fee} sats</span>}
+            {tx.fee > 0 && <span className="text-label-caps font-label-caps text-on-surface-variant mt-1 block">Fee: ₿{tx.fee}</span>}
           </div>
         </div>
 

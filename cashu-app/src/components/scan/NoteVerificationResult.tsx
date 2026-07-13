@@ -21,7 +21,7 @@ export const NoteVerificationResult: React.FC<NoteVerificationResultProps> = ({
             VERIFICATION ONLY
           </span>
         )}
-        <h2 className="text-headline-lg-mobile font-headline-lg-mobile text-on-surface mb-1">E-Cash Note ({noteInfo.amount_sats} sats)</h2>
+        <h2 className="text-headline-lg-mobile font-headline-lg-mobile text-on-surface mb-1">E-Cash Note (₿{noteInfo.amount_sats})</h2>
         <div className="text-xs text-on-surface-variant font-mono break-all opacity-70">{noteInfo.validation_hash}</div>
       </div>
 
@@ -72,13 +72,13 @@ export const NoteVerificationResult: React.FC<NoteVerificationResultProps> = ({
               <div>
                 Face value safely bounded by proofs
                 <div className="text-on-surface-variant text-xs mt-1">
-                  ({verifyResult.face_value_sats} sats face, {verifyResult.proof_total_sats} sats in proofs)
+                  (₿{verifyResult.face_value_sats} face, ₿{verifyResult.proof_total_sats} in proofs)
                 </div>
               </div>
             </div>
           ) : (
             <div className="flex items-center text-emerald-400">
-              <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0" /> Amount perfectly matches proofs ({verifyResult.face_value_sats} sats)
+              <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0" /> Amount perfectly matches proofs (₿{verifyResult.face_value_sats})
             </div>
           )}
           {verifyResult.untrusted ? (

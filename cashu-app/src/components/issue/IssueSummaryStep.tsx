@@ -33,9 +33,9 @@ export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
               <div className="w-10 h-10 rounded-full bg-primary/15 border border-primary/20 flex items-center justify-center flex-shrink-0">
                 <Coins size={18} className="text-primary" />
               </div>
-              <div className="flex-1">
-                <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] tracking-widest">AMOUNT</p>
-                <p className="text-[22px] font-headline-lg-mobile text-on-surface">{amount.toLocaleString()} <span className="text-on-surface-variant text-[14px]">sats</span></p>
+              <div className="flex flex-col">
+                <p className="text-label-caps font-label-caps text-on-surface-variant mb-1">AMOUNT</p>
+                <p className="text-[22px] font-headline-lg-mobile text-on-surface">₿{amount.toLocaleString()}</p>
               </div>
             </div>
 

@@ -36,7 +36,7 @@ export const RecentTransactions: React.FC = () => {
       } catch (e: any) {
         toast.error(`Error: ${e}`, { id: tx.id });
       }
-    } else if ('Melt' in tx.tx_type) {
+    } else if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type) {
       setSelectedTx(tx);
     }
   };
@@ -127,7 +127,7 @@ export const RecentTransactions: React.FC = () => {
         <div className="bg-surface-container-high rounded-2xl overflow-hidden border border-outline-variant/10 relative">
           <div className="absolute inset-0 texture-overlay opacity-20"></div>
           {transactions.map((tx, index) => {
-            const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type;
+            const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type || 'Redeem' in tx.tx_type;
             return (
             <div
               key={tx.id}
@@ -146,7 +146,7 @@ export const RecentTransactions: React.FC = () => {
               </div>
               <div className="text-right flex-shrink-0">
                 <span className={`text-body-md font-body-md font-semibold ${getTxAmountColor(tx)} text-[14px]`}>
-                  {getTxSign(tx)}{tx.amount} sats
+                  {getTxSign(tx)}₿{tx.amount}
                 </span>
                 {tx.status === 'Pending' && (
                   <span className="block text-[10px] text-amber-500 font-label-caps">Pending</span>
