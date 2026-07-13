@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Loader2 } from 'lucide-react';
+import { PageHeader } from '../shared/PageHeader';
 import QRCode from 'react-qr-code';
 import { useWalletStore } from '../../store/wallet';
 
@@ -37,9 +38,9 @@ export const InvoicePaymentPending: React.FC<InvoicePaymentPendingProps> = ({
   const isLoading = loading || internalLoading;
 
   return (
-    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-8 flex flex-col items-center">
-      <div className="w-full max-w-2xl text-left mb-6">
-        <h1 className="text-headline-lg font-headline-lg text-on-background">Pay Invoice</h1>
+    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col items-center">
+      <div className="w-full max-w-2xl mb-6">
+        <PageHeader title="Pay Invoice" />
       </div>
 
       <div className="w-full max-w-2xl bg-surface-container-high rounded-xl p-8 relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-outline-variant/30 flex flex-col space-y-6 items-center text-center">

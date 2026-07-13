@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Loader2, X } from 'lucide-react';
+import { PageHeader } from '../shared/PageHeader';
 
 interface IssueNoteFormProps {
   sats: string;
@@ -41,9 +42,9 @@ export const IssueNoteForm: React.FC<IssueNoteFormProps> = ({
   };
 
   return (
-    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-8 flex flex-col items-center">
-      <div className="w-full max-w-2xl text-left mb-6">
-        <h1 className="text-headline-lg font-headline-lg text-on-background">Issue Note</h1>
+    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col items-center">
+      <div className="w-full max-w-2xl mb-6">
+        <PageHeader title="Issue Note" />
       </div>
 
       <div className="w-full max-w-2xl bg-surface-container-high rounded-xl p-8 relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-outline-variant/30 flex flex-col space-y-8">

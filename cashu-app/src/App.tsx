@@ -9,7 +9,6 @@ import { Auth } from './pages/Auth';
 import { Scan } from './pages/Scan';
 import { Home } from './pages/Home';
 import { TopNav } from './components/navigation/TopNav';
-import { BottomNav } from './components/navigation/BottomNav';
 import './App.css';
 
 export default function App() {
@@ -31,7 +30,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="fixed inset-0 texture-overlay z-0 pointer-events-none"></div>
-      <div className="min-h-screen bg-background md:pb-8 pb-28 relative z-10 flex flex-col">
+      <div className="min-h-screen bg-background pb-8 relative z-10 flex flex-col">
         <TopNav />
         <Routes>
           <Route path="/" element={<Home />} />
@@ -40,7 +39,6 @@ export default function App() {
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
-        <BottomNav />
       </div>
     </BrowserRouter>
   );
