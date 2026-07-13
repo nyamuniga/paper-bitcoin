@@ -227,11 +227,18 @@ pub struct RedeemTransactionData {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SendTransactionData {
+    pub token_string: String,
+    pub proofs: Vec<Proof>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransactionType {
     Mint(MintTransactionData),
     Melt(MeltTransactionData),
     Issue(IssueTransactionData),
     Redeem(RedeemTransactionData),
+    Send(SendTransactionData),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

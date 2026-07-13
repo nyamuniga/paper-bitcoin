@@ -1,6 +1,9 @@
-import React from 'react';
-import { X, ArrowDown, ArrowUp, FileText, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, ArrowDown, ArrowUp, FileText, CheckCircle, AlertCircle, XCircle, Copy, Check } from 'lucide-react';
 import { Transaction } from './TransactionCard';
+import { toast } from 'react-hot-toast';
+import QRCode from 'react-qr-code';
+import { useUrEncoder } from '../../hooks/useUrEncoder';
 
 interface TransactionDetailsModalProps {
   tx: Transaction;
@@ -12,13 +15,20 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   const isIssue = 'Issue' in tx.tx_type;
   const isMelt = 'Melt' in tx.tx_type;
   const isRedeem = 'Redeem' in tx.tx_type;
+  const isSend = 'Send' in tx.tx_type;
 
   const quoteId = isMint ? tx.tx_type.Mint.quote_id : (isMelt ? tx.tx_type.Melt.quote_id : (isIssue ? tx.tx_type.Issue.quote_id : ''));
+  const tokenString = isSend ? tx.tx_type.Send.token_string : null;
+
+  const [copied, setCopied] = useState(false);
   
+  const { currentFrame, isAnimated, currentFrameIndex, totalFrames } = useUrEncoder(tokenString, 150, 400);
+
   const getTxLabel = () => {
     if (isMint) return 'Received / Mint';
     if (isIssue) return 'Issued Note';
     if (isRedeem) return 'Redeemed Note';
+    if (isSend) return 'Sent Ecash';
     return 'Sent / Melt';
   };
 
@@ -29,9 +39,21 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
     });
   };
 
+  const handleCopy = async () => {
+    if (!tokenString) return;
+    try {
+      await navigator.clipboard.writeText(tokenString);
+      setCopied(true);
+      toast.success('Token copied!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Failed to copy');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <div className="bg-surface-container-high rounded-2xl w-full max-w-md border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative">
+      <div className="bg-surface-container-high rounded-2xl w-full max-w-md border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative max-h-[90vh]">
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
         
         {/* Header */}
@@ -46,22 +68,23 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
         </div>
 
         {/* Content */}
-        <div className="p-6 flex flex-col gap-6 relative z-10">
+        <div className="p-6 flex flex-col gap-6 relative z-10 overflow-y-auto">
           {/* Main info */}
           <div className="flex flex-col items-center text-center">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center border mb-4 ${
               isMint ? 'bg-emerald-900/30 border-emerald-500/30' : 
               isIssue ? 'bg-primary-container/20 border-primary/20' : 
               isRedeem ? 'bg-amber-500/20 border-amber-500/20' :
+              isSend ? 'bg-tertiary/20 border-tertiary/20' :
               'bg-error-container/20 border-error/20'
             }`}>
-              {isMint ? <ArrowDown className="text-emerald-400 w-8 h-8" /> : 
+              {isMint || isRedeem ? <ArrowDown className="text-emerald-400 w-8 h-8" /> :
                isIssue ? <FileText className="text-primary w-8 h-8" /> : 
-               isRedeem ? <ArrowDown className="text-amber-400 w-8 h-8" /> :
+               isSend ? <ArrowUp className="text-tertiary w-8 h-8" /> :
                <ArrowUp className="text-error w-8 h-8" />}
             </div>
             <h3 className="text-headline-md font-headline-md text-on-surface">{getTxLabel()}</h3>
-            <p className={`text-display-sm font-display-sm mt-2 ${isMint || isRedeem ? 'text-emerald-400' : isIssue ? 'text-primary' : 'text-on-surface'}`}>
+            <p className={`text-display-sm font-display-sm mt-2 ${isMint || isRedeem ? 'text-emerald-400' : isIssue ? 'text-primary' : isSend ? 'text-tertiary' : 'text-on-surface'}`}>
               {isMint || isRedeem ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
             </p>
             {tx.fee > 0 && <p className="text-label-caps font-label-caps text-on-surface-variant mt-1">Fee: ₿{tx.fee.toLocaleString()}</p>}
@@ -120,6 +143,47 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               </div>
             )}
           </div>
+
+          {/* Token Display for Send Ecash */}
+          {isSend && tokenString && (
+            <>
+              <div className="divider-dashed my-1 border-outline-variant/20"></div>
+              
+              <div className="flex flex-col items-center gap-5">
+                <span className="text-label-caps font-label-caps text-on-surface-variant self-start">TOKEN DATA</span>
+                
+                {/* QR Code */}
+                <div className="relative">
+                  <div className="bg-white p-4 rounded-xl shadow-lg relative">
+                    <QRCode value={currentFrame || tokenString || ''} size={180} />
+                    {isAnimated && (
+                      <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-label-caps">
+                        {currentFrameIndex + 1}/{totalFrames}
+                      </div>
+                    )}
+                  </div>
+                  {/* Pulsing glow */}
+                  <div className="absolute inset-0 bg-primary/20 rounded-xl blur-xl -z-10 animate-pulse"></div>
+                </div>
+
+                {/* Token string */}
+                <div className="w-full flex flex-col gap-2">
+                  <div 
+                    onClick={handleCopy}
+                    className="w-full bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30 shadow-inner cursor-pointer hover:border-primary/30 transition-colors"
+                  >
+                    <p className="text-[11px] font-mono text-on-surface-variant break-all line-clamp-3 select-all">{tokenString}</p>
+                  </div>
+                  <button
+                    onClick={handleCopy}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20"
+                  >
+                    {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Token</>}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

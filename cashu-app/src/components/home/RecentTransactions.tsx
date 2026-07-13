@@ -5,12 +5,14 @@ import { ArrowDown, ArrowUp, FileText, ChevronRight } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Transaction } from '../history/TransactionCard';
 import { TransactionDetailsModal } from '../history/TransactionDetailsModal';
+import { useWalletStore } from '../../store/wallet';
 
 export const RecentTransactions: React.FC = () => {
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const lastUpdate = useWalletStore((s) => s.lastUpdate);
 
   useEffect(() => {
     const fetchRecent = async () => {
@@ -24,7 +26,7 @@ export const RecentTransactions: React.FC = () => {
       }
     };
     fetchRecent();
-  }, []);
+  }, [lastUpdate]);
 
   const handleRowClick = async (tx: Transaction) => {
     if (tx.status === 'Pending' && 'Issue' in tx.tx_type) {
@@ -36,7 +38,7 @@ export const RecentTransactions: React.FC = () => {
       } catch (e: any) {
         toast.error(`Error: ${e}`, { id: tx.id });
       }
-    } else if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type) {
+    } else if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type) {
       setSelectedTx(tx);
     }
   };
@@ -45,6 +47,7 @@ export const RecentTransactions: React.FC = () => {
     if ('Mint' in tx.tx_type) return 'Received';
     if ('Issue' in tx.tx_type) return 'Issued Note';
     if ('Redeem' in tx.tx_type) return 'Redeemed';
+    if ('Send' in tx.tx_type) return 'Sent Ecash';
     if ('Melt' in tx.tx_type) return 'Sent';
     return 'Transaction';
   };
@@ -52,6 +55,9 @@ export const RecentTransactions: React.FC = () => {
   const getTxIcon = (tx: Transaction) => {
     if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type) {
       return <ArrowDown className="text-emerald-400 w-4 h-4" />;
+    }
+    if ('Send' in tx.tx_type) {
+      return <ArrowUp className="text-tertiary w-4 h-4" />;
     }
     if ('Issue' in tx.tx_type) {
       return <FileText className="text-primary w-4 h-4" />;
@@ -63,6 +69,9 @@ export const RecentTransactions: React.FC = () => {
     if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type) {
       return 'bg-emerald-900/30 border-emerald-500/30';
     }
+    if ('Send' in tx.tx_type) {
+      return 'bg-tertiary/20 border-tertiary/20';
+    }
     if ('Issue' in tx.tx_type) {
       return 'bg-primary-container/20 border-primary/20';
     }
@@ -72,6 +81,7 @@ export const RecentTransactions: React.FC = () => {
   const getTxAmountColor = (tx: Transaction) => {
     if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type) return 'text-emerald-400';
     if ('Issue' in tx.tx_type) return 'text-primary';
+    if ('Send' in tx.tx_type) return 'text-tertiary';
     return 'text-on-surface';
   };
 
@@ -127,7 +137,7 @@ export const RecentTransactions: React.FC = () => {
         <div className="bg-surface-container-high rounded-2xl overflow-hidden border border-outline-variant/10 relative">
           <div className="absolute inset-0 texture-overlay opacity-20"></div>
           {transactions.map((tx, index) => {
-            const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type || 'Redeem' in tx.tx_type;
+            const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type;
             return (
             <div
               key={tx.id}

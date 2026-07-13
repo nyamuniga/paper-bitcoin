@@ -24,6 +24,7 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
   const isIssue = 'Issue' in tx.tx_type;
   const isMelt = 'Melt' in tx.tx_type;
   const isRedeem = 'Redeem' in tx.tx_type;
+  const isSend = 'Send' in tx.tx_type;
   const quoteId = isMint ? tx.tx_type.Mint.quote_id : (isMelt ? tx.tx_type.Melt.quote_id : '');
 
   return (
@@ -45,16 +46,18 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
               isMint ? 'bg-emerald-900/30 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 
               isIssue ? 'bg-primary-container/20 border-primary/20' : 
               isRedeem ? 'bg-amber-500/20 border-amber-500/20' :
+              isSend ? 'bg-tertiary/20 border-tertiary/20' :
               'bg-error-container/20 border-error/20'
             }`}>
               {isMint ? <ArrowDown className="text-emerald-400 w-4 h-4" /> : 
                isIssue ? <FileText className="text-primary w-4 h-4" /> : 
                isRedeem ? <ArrowDown className="text-amber-400 w-4 h-4" /> :
+               isSend ? <ArrowUp className="text-tertiary w-4 h-4" /> :
                <ArrowUp className="text-error w-4 h-4" />}
             </div>
             <div>
               <h3 className="text-body-md font-body-md font-semibold text-on-surface">
-                {isMint ? 'Received / Mint' : isIssue ? 'Issued Note' : isRedeem ? 'Redeemed Note' : 'Sent / Melt'}
+                {isMint ? 'Received / Mint' : isIssue ? 'Issued Note' : isRedeem ? 'Redeemed Note' : isSend ? 'Sent Ecash' : 'Sent / Melt'}
               </h3>
               <p className="text-label-caps font-label-caps text-on-surface-variant mt-1 max-w-[200px] truncate" title={tx.mint_url}>
                 {tx.mint_url || 'Local Wallet'}
@@ -62,7 +65,7 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
             </div>
           </div>
           <div className="text-right">
-            <span className={`text-body-md font-body-md font-bold block ${isMint || isRedeem ? 'text-emerald-400' : isIssue ? 'text-primary' : 'text-on-surface'}`}>
+            <span className={`text-body-md font-body-md font-bold block ${isMint || isRedeem ? 'text-emerald-400' : isIssue ? 'text-primary' : isSend ? 'text-tertiary' : 'text-on-surface'}`}>
               {isMint || isRedeem ? '+' : isIssue ? '' : '-'}₿{tx.amount}
             </span>
             {tx.fee > 0 && <span className="text-label-caps font-label-caps text-on-surface-variant mt-1 block">Fee: ₿{tx.fee}</span>}

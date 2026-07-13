@@ -32,6 +32,7 @@ pub fn run() {
             commands::verify::verify_note,
             commands::redeem::redeem_note,
             commands::pay::pay_invoice,
+            commands::send::send_ecash,
             commands::auth::is_wallet_setup,
             commands::auth::unlock_wallet,
             commands::auth::lock_wallet,
