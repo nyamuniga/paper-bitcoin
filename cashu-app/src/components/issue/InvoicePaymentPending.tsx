@@ -50,7 +50,7 @@ export const InvoicePaymentPending: React.FC<InvoicePaymentPendingProps> = ({
           <div className="bg-white p-4 rounded-xl inline-block shadow-lg">
             <QRCode value={invoicePayload.invoice} size={200} />
           </div>
-          <div className="text-headline-lg font-headline-lg text-primary">{invoicePayload.total_sats} sats</div>
+          <div className="text-headline-lg font-headline-lg text-primary">₿{invoicePayload.total_sats}</div>
           <div className="text-xs text-on-surface-variant mb-2 truncate w-full max-w-sm px-4 py-3 bg-surface-container-lowest rounded-lg border border-outline-variant/30 select-all shadow-inner">{invoicePayload.invoice}</div>
 
           {balance >= invoicePayload.total_sats ? (

@@ -58,8 +58,8 @@ export const IssuedNoteSuccess: React.FC<IssuedNoteSuccessProps> = ({ issuedNote
         <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
           <CheckCircle className="w-12 h-12 text-emerald-400" />
         </div>
-        <h1 className="text-headline-lg font-headline-lg text-on-background mb-2">Note Created!</h1>
-        <p className="text-on-surface-variant text-lg">Face value: <span className="text-emerald-400 font-bold">{issuedNote.face_value} sats</span></p>
+        <h3 className="text-headline-md font-headline-md text-on-surface">Note Issued!</h3>
+        <p className="text-on-surface-variant text-lg">Face value: <span className="text-emerald-400 font-bold">₿{issuedNote.face_value}</span></p>
       </div>
 
       <div className="w-full max-w-2xl bg-surface-container-high rounded-xl p-8 relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-outline-variant/30 flex flex-col space-y-6">

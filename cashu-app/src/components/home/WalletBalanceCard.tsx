@@ -14,9 +14,8 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance })
         <div className="absolute inset-0 texture-overlay opacity-50"></div>
         <span className="text-label-caps font-label-caps text-on-surface-variant tracking-widest mb-2 relative z-10">BALANCE</span>
         <div className="relative z-10 flex items-baseline gap-2">
-          <span className="text-[48px] md:text-[64px] leading-none font-display-lg text-on-surface tracking-tight">{balance.toLocaleString()}</span>
+          <span className="text-[48px] md:text-[64px] leading-none font-display-lg text-on-surface tracking-tight">₿{balance.toLocaleString()}</span>
         </div>
-        <span className="text-label-caps font-label-caps text-on-surface-variant mt-1 relative z-10">sats</span>
       </div>
 
       {/* Action buttons — prominent on mobile, also visible on desktop */}

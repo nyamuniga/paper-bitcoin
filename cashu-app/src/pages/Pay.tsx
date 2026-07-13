@@ -96,7 +96,7 @@ export const Pay = () => {
               </div>
               <div className="flex items-baseline gap-1 flex-shrink-0 whitespace-nowrap">
                 <span className="text-body-md font-body-md font-semibold text-on-surface">{availableBalance.toLocaleString()}</span>
-                <span className="text-label-caps font-label-caps text-on-surface-variant text-[10px]">sats</span>
+                <span className="text-label-caps font-label-caps text-on-surface-variant text-[10px]">₿</span>
               </div>
             </div>
           </div>
@@ -158,7 +158,7 @@ export const Pay = () => {
               </div>
               {invoiceAmount !== null && (
                 <div className={`text-[12px] font-label-caps px-1 ${isInvalidAmount ? 'text-error' : 'text-on-surface-variant'}`}>
-                  Invoice Amount: {invoiceAmount.toLocaleString()} sats
+                  Invoice Amount: ₿{invoiceAmount.toLocaleString()}
                   {isInsufficient && ' (Insufficient balance)'}
                   {isZeroAmount && ' (Amount must be greater than 0)'}
                 </div>

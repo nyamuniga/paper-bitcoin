@@ -62,7 +62,7 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
             </div>
             {invoiceAmount !== null && (
               <div className={`text-[12px] font-label-caps px-1 ${isInvalidAmount ? 'text-error' : 'text-on-surface-variant'}`}>
-                Invoice Amount: {invoiceAmount.toLocaleString()} sats
+                Invoice Amount: ₿{invoiceAmount.toLocaleString()}
                 {isInsufficient && ' (Exceeds note value)'}
                 {isZeroAmount && ' (Amount must be greater than 0)'}
               </div>
