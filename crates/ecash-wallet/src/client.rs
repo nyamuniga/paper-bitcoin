@@ -201,6 +201,28 @@ impl MintClient {
         Ok((paid, change))
     }
 
+    /// Send a swap request (NUT-03).
+    /// Used to exchange existing proofs for new proofs of desired denominations.
+    pub async fn swap_tokens(
+        &self,
+        inputs: Vec<serde_json::Value>,
+        outputs: Vec<serde_json::Value>,
+    ) -> Result<Vec<serde_json::Value>> {
+        let req = serde_json::json!({
+            "inputs": inputs,
+            "outputs": outputs
+        });
+
+        let v: serde_json::Value = self.http.post(format!("{}/v1/swap", self.url))
+            .json(&req).send().await?.json().await?;
+
+        check_api_error(&v, "Swap")?;
+
+        let sigs = v.get("signatures").and_then(|s| s.as_array())
+            .ok_or_else(|| anyhow!("Mint response missing signatures for swap: {:?}", v))?;
+        Ok(sigs.clone())
+    }
+
     pub async fn check_state(&self, ys: &[String]) -> Result<HashMap<String, String>> {
         let v: serde_json::Value = self.http.post(format!("{}/v1/checkstate", self.url))
             .json(&serde_json::json!({ "Ys": ys })).send().await?.json().await?;

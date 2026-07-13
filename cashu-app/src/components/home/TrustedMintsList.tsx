@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, Send } from 'lucide-react';
+import { ChevronRight, Zap, Coins } from 'lucide-react';
+import { SendEcashModal } from './SendEcashModal';
 
 interface TrustedMintsListProps {
   mintBalances: Record<string, number>;
@@ -13,6 +14,7 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
   const displayMints = showAll ? sortedMints : sortedMints.slice(0, 6);
 
   const [revealedMint, setRevealedMint] = useState<string | null>(null);
+  const [ecashMint, setEcashMint] = useState<string | null>(null);
 
   const toggleReveal = (mint: string) => {
     if (revealedMint === mint) {
@@ -44,21 +46,29 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
                 key={mint} 
                 className={`relative rounded-2xl overflow-hidden ${!showAll && index >= 3 ? 'hidden md:block' : 'block'}`}
               >
-                {/* Background Send Button */}
-                <div className="absolute inset-y-0 left-0 w-20 flex items-center justify-center">
+                {/* Background Action Buttons */}
+                <div className="absolute inset-y-0 left-0 w-36 flex items-center justify-center gap-3 px-3">
                   <button 
                     onClick={(e) => { e.stopPropagation(); navigate('/pay', { state: { mintUrl: mint } }); }}
                     className="flex flex-col items-center justify-center text-amber-500 hover:text-amber-400 hover:scale-105 active:scale-95 transition-all duration-200 gap-1"
                   >
-                    <Send className="w-5 h-5" />
-                    <span className="text-[10px] font-label-caps uppercase tracking-wider">Send</span>
+                    <Zap className="w-5 h-5" />
+                    <span className="text-[10px] font-label-caps uppercase tracking-wider">Pay</span>
+                  </button>
+                  <div className="w-px h-8 bg-outline-variant/20"></div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setEcashMint(mint); setRevealedMint(null); }}
+                    className="flex flex-col items-center justify-center text-primary hover:text-primary/80 hover:scale-105 active:scale-95 transition-all duration-200 gap-1"
+                  >
+                    <Coins className="w-5 h-5" />
+                    <span className="text-[10px] font-label-caps uppercase tracking-wider">Ecash</span>
                   </button>
                 </div>
 
                 {/* Foreground Card */}
                 <div 
                   onClick={() => toggleReveal(mint)}
-                  className={`bg-surface-container-high rounded-2xl p-3.5 md:p-4 flex justify-between items-center shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] border border-outline-variant/10 relative group hover:bg-surface-container-highest transition-all duration-300 cursor-pointer ${isRevealed ? 'translate-x-20' : 'translate-x-0'}`}
+                  className={`bg-surface-container-high rounded-2xl p-3.5 md:p-4 flex justify-between items-center shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] border border-outline-variant/10 relative group hover:bg-surface-container-highest transition-all duration-300 cursor-pointer ${isRevealed ? 'translate-x-36' : 'translate-x-0'}`}
                 >
                   <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
                   <div className="flex items-center gap-3 relative z-10 min-w-0 mr-4 pointer-events-none">
@@ -76,6 +86,13 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
           })
         )}
       </div>
+
+      {ecashMint && (
+        <SendEcashModal
+          mintUrl={ecashMint}
+          onClose={() => setEcashMint(null)}
+        />
+      )}
     </section>
   );
 };

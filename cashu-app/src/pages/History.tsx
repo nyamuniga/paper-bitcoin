@@ -21,7 +21,7 @@ export default function History() {
   } = useHistory();
 
   const handleCardClick = (tx: Transaction) => {
-    if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type) {
+    if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type) {
       setSelectedTx(tx);
     }
   };
@@ -57,7 +57,7 @@ export default function History() {
               onCheckMelt={handleCheckMelt}
               onCheckIssue={(txId) => handleCheckIssue(txId, navigate)}
               onDownloadNote={handleDownloadNote}
-              onClick={'Melt' in tx.tx_type || 'Redeem' in tx.tx_type ? () => handleCardClick(tx) : undefined}
+              onClick={'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type ? () => handleCardClick(tx) : undefined}
             />
           ))}
         </div>

@@ -20,10 +20,12 @@ pub mod client;
 pub mod mint;
 pub mod melt;
 pub mod history;
+pub mod swap;
 
 pub use state::*;
 pub use invoice::*;
 pub use mint::*;
 pub use melt::*;
 pub use history::*;
+pub use swap::*;
 pub use client::estimate_routing_fee_from_info;
