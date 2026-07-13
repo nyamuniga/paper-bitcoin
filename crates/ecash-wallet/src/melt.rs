@@ -747,14 +747,20 @@ pub async fn redeem_note(
 
 // ─── Pay Invoice ────────────────────────────────────────────────────────────────
 
-pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, invoice: &str) -> Result<u64> {
+pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, invoice: &str, target_mint: Option<String>) -> Result<u64> {
     let mut selected_mint = None;
     let mut required_amt = 0;
     let mut fee_reserve = 0;
     let mut quote_id = String::new();
     let mut mint_errors = Vec::new();
 
-    for mint in state.proofs.keys() {
+    let mints_to_check: Vec<String> = if let Some(m) = target_mint {
+        vec![m]
+    } else {
+        state.proofs.keys().cloned().collect()
+    };
+
+    for mint in &mints_to_check {
         let client = MintClient::new(mint);
         let resp = client.http.post(format!("{}/v1/melt/quote/bolt11", client.url))
             .json(&serde_json::json!({ "request": invoice, "unit": "sat" })).send().await;
