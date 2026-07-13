@@ -55,15 +55,14 @@ export const useHistory = () => {
     }
   };
 
-  const handleCheckIssue = async (txId: string) => {
-    toast.loading('Checking issuance status...', { id: txId });
+  const handleCheckIssue = async (txId: string, navigate: any) => {
+    toast.loading('Loading invoice...', { id: txId });
     try {
-      await invoke('check_issue_status', { txId });
-      toast.success('Note issued successfully!', { id: txId });
-      fetchHistory();
-      refreshWallet();
+      const pendingIssue = await invoke('get_pending_issue', { txId });
+      toast.dismiss(txId);
+      navigate('/issue', { state: { pendingIssue } });
     } catch (e: any) {
-      toast.error(`Status: ${e}`, { id: txId });
+      toast.error(`Error: ${e}`, { id: txId });
     }
   };
 

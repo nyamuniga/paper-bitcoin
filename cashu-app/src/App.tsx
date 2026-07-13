@@ -8,6 +8,8 @@ import History from './pages/History';
 import { Auth } from './pages/Auth';
 import { Scan } from './pages/Scan';
 import { Home } from './pages/Home';
+import Mints from './pages/Mints';
+import { Pay } from './pages/Pay';
 import { TopNav } from './components/navigation/TopNav';
 import './App.css';
 
@@ -38,6 +40,8 @@ export default function App() {
           <Route path="/issue" element={<Issue />} />
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/mints" element={<Mints />} />
+          <Route path="/pay" element={<Pay />} />
         </Routes>
       </div>
     </BrowserRouter>

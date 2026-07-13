@@ -25,6 +25,7 @@ pub fn run() {
             commands::wallet::get_balance,
             commands::wallet::get_recovery_words,
             commands::issue::issue_note,
+            commands::issue::get_pending_issue,
             commands::issue::get_pdf_from_bin,
             commands::history::get_note_pdf,
             commands::verify::decode_bin,

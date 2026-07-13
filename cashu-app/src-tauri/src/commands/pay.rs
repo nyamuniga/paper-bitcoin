@@ -5,7 +5,7 @@ use tauri::State;
 use crate::commands::auth::AppState;
 
 #[tauri::command]
-pub async fn pay_invoice(invoice: String, state: State<'_, AppState>) -> CommandResult<u64> {
+pub async fn pay_invoice(invoice: String, mint_url: Option<String>, state: State<'_, AppState>) -> CommandResult<u64> {
     let path = state.wallet_path.clone();
     
     let passphrase = {
@@ -15,7 +15,7 @@ pub async fn pay_invoice(invoice: String, state: State<'_, AppState>) -> Command
 
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
 
-    let sats_paid = ecash_wallet::pay_invoice(&mut w_state, &path, &passphrase, &invoice).await?;
+    let sats_paid = ecash_wallet::pay_invoice(&mut w_state, &path, &passphrase, &invoice, mint_url).await?;
     
     Ok(sats_paid)
 }
