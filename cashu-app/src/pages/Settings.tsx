@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { RecoveryPhraseSection } from '../components/settings/RecoveryPhraseSection';
 import { BiometricToggle } from '../components/settings/BiometricToggle';
 import { VaultStatusPanel } from '../components/settings/VaultStatusPanel';
+import { PageHeader } from '../components/shared/PageHeader';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'react-hot-toast';
 
@@ -9,11 +10,8 @@ export const Settings = () => {
   const [isBackedUp, setIsBackedUp] = useState(true); // Default true for mock
 
   return (
-    <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding py-8 flex flex-col gap-6">
-      <div className="mb-2">
-        <h1 className="text-headline-lg font-headline-lg text-primary mb-2">Settings & Security</h1>
-        <p className="text-on-surface-variant text-body-md font-body-md">Manage your wallet keys and app preferences.</p>
-      </div>
+    <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col gap-6">
+      <PageHeader title="Settings & Security" subtitle="Manage your wallet keys and app preferences." />
 
       <VaultStatusPanel isBackedUp={isBackedUp} setIsBackedUp={setIsBackedUp} />
       <BiometricToggle />
