@@ -6,6 +6,8 @@ import { IssueMintsStep } from '../components/issue/IssueMintsStep';
 import { IssueSummaryStep } from '../components/issue/IssueSummaryStep';
 import { useIssue } from '../hooks/useIssue';
 
+import { WalletPaymentPending } from '../components/issue/WalletPaymentPending';
+
 export const Issue = () => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
@@ -39,6 +41,15 @@ export const Issue = () => {
   }
 
   if (invoicePayload) {
+    if (fundMethod === 'wallet') {
+      return (
+        <WalletPaymentPending
+          invoicePayload={invoicePayload}
+          error={error}
+          debugLogs={debugLogs}
+        />
+      );
+    }
     return (
       <InvoicePaymentPending
         invoicePayload={invoicePayload}
