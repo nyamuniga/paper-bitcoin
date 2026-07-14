@@ -6,6 +6,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../store/wallet';
 import { PageHeader } from '../components/shared/PageHeader';
+import { formatMintUrl } from '../utils/format';
+import { MintIcon } from '../components/shared/MintIcon';
 
 export const Pay = () => {
   const location = useLocation();
@@ -81,7 +83,7 @@ export const Pay = () => {
 
       <div className="w-full max-w-2xl bg-surface-container-high rounded-xl relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] p-card-gap flex flex-col gap-8 border border-outline-variant/30">
         <div className="noise-overlay"></div>
-        <div className="relative z-10 flex flex-col gap-6 w-full">
+        <div className="flex flex-col gap-6 w-full">
           
           <div className="flex flex-col gap-2">
             <p className="text-body-md font-body-md text-on-surface-variant">
@@ -89,10 +91,8 @@ export const Pay = () => {
             </p>
             <div className="flex items-center justify-between bg-surface-container-highest p-3 rounded-xl border border-outline-variant/10">
               <div className="flex items-center gap-2 min-w-0 pr-4">
-                <div className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
-                  <span className="text-primary text-[10px] font-bold">{new URL(mintUrl).hostname.charAt(0).toUpperCase()}</span>
-                </div>
-                <span className="text-body-md font-body-md text-on-surface font-medium truncate">{new URL(mintUrl).hostname}</span>
+                <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
+                <span className="text-body-md font-body-md text-on-surface font-medium truncate">{formatMintUrl(mintUrl)}</span>
               </div>
               <div className="flex items-baseline gap-1 flex-shrink-0 whitespace-nowrap">
                 <span className="text-body-md font-body-md font-semibold text-on-surface">{availableBalance.toLocaleString()}</span>

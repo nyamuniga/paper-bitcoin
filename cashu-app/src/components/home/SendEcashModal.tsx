@@ -5,6 +5,8 @@ import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 import QRCode from 'react-qr-code';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
+import { formatMintUrl } from '../../utils/format';
+import { MintIcon } from '../shared/MintIcon';
 
 interface SendEcashModalProps {
   mintUrl: string;
@@ -80,10 +82,8 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
             </p>
             <div className="flex items-center justify-between bg-surface-container-highest p-3 rounded-xl border border-outline-variant/10">
               <div className="flex items-center gap-2 min-w-0 pr-4">
-                <div className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
-                  <span className="text-primary text-[10px] font-bold">{new URL(mintUrl).hostname.charAt(0).toUpperCase()}</span>
-                </div>
-                <span className="text-body-md font-body-md text-on-surface font-medium truncate">{new URL(mintUrl).hostname}</span>
+                <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
+                <span className="text-body-md font-body-md text-on-surface font-medium truncate">{formatMintUrl(mintUrl)}</span>
               </div>
               <div className="flex items-baseline gap-1 flex-shrink-0 whitespace-nowrap">
                 <span className="text-body-md font-body-md font-semibold text-on-surface">₿{availableBalance.toLocaleString()}</span>
