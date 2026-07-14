@@ -93,7 +93,8 @@ pub async fn swap_proofs(
         let mint_pk = point_from_hex(keyset.keys.get(&amt).unwrap()).unwrap();
         let (_, ref sess, idx, is_desired) = sessions[i];
 
-        let mut proof = sess.unblind(&c_prime, &mint_pk, amt, &sig_id, None);
+        let dleq = crate::melt::parse_dleq(sig_val);
+        let mut proof = sess.unblind(&c_prime, &mint_pk, amt, &sig_id, dleq);
         proof.derivation_index = idx;
 
         if is_desired {

@@ -29,3 +29,4 @@ pub use melt::*;
 pub use history::*;
 pub use swap::*;
 pub use client::estimate_routing_fee_from_info;
+pub mod direct;

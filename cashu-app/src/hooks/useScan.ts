@@ -50,12 +50,18 @@ export const useScan = () => {
     setLoading(false);
   };
 
+  const [redeemMethod, setRedeemMethod] = useState<'lightning' | 'wallet'>('lightning');
+
   const handleRedeem = async () => {
-    if (!invoice) return;
+    if (redeemMethod === 'lightning' && !invoice) return;
     setRedeeming(true);
     setError(null);
     try {
-      await invoke('redeem_note', { binB64, invoice: invoice.trim() });
+      if (redeemMethod === 'wallet') {
+        await invoke('redeem_note_direct', { binB64 });
+      } else {
+        await invoke('redeem_note', { binB64, invoice: invoice.trim() });
+      }
       setRedeemSuccess(true);
       await refreshWallet();
     } catch (e: any) {
@@ -79,6 +85,8 @@ export const useScan = () => {
     redeemSuccess,
     showScanner,
     setShowScanner,
+    redeemMethod,
+    setRedeemMethod,
     handleDecode,
     handleVerify,
     handleRedeem
