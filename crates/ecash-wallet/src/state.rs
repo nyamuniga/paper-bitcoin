@@ -156,6 +156,19 @@ impl WalletState {
         }
     }
 
+    pub fn remove_mint(&mut self, mint_url: &str) -> Result<()> {
+        let mint_url = normalize_mint_url(mint_url);
+        let balances = self.balance_by_mint();
+        if balances.get(&mint_url).copied().unwrap_or(0) > 0 {
+            return Err(anyhow::anyhow!("Cannot remove a mint with a non-zero balance"));
+        }
+        
+        self.mints.retain(|m| m != &mint_url);
+        self.trusted_keys.remove(&mint_url);
+        self.proofs.remove(&mint_url);
+        Ok(())
+    }
+
     pub fn normalize_mints(&mut self) {
         // Safe lowercase mints list
         let mut new_mints = Vec::new();

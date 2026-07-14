@@ -1,6 +1,8 @@
 import React from 'react';
 import { Loader2, ChevronLeft, Zap, Shield, Coins, Globe } from 'lucide-react';
 import { PageHeader } from '../shared/PageHeader';
+import { formatMintUrl } from '../../utils/format';
+import { MintIcon } from '../shared/MintIcon';
 
 interface IssueSummaryStepProps {
   sats: string;
@@ -48,11 +50,14 @@ export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] tracking-widest mb-2">MINTS ({mintUrls.length})</p>
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-3">
                   {mintUrls.map((url, i) => (
-                    <p key={i} className="text-body-md font-body-md text-on-surface text-[14px] truncate" title={url}>
-                      {new URL(url).hostname}
-                    </p>
+                    <div key={i} className="flex items-center gap-3">
+                      <MintIcon mintUrl={url} className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 flex-shrink-0" textClassName="text-primary text-[12px] font-bold" />
+                      <span className="text-body-md font-body-md text-on-surface text-[14px] font-medium truncate" title={url}>
+                        {formatMintUrl(url)}
+                      </span>
+                    </div>
                   ))}
                 </div>
               </div>

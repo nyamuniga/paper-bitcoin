@@ -53,7 +53,7 @@ export const Scan = () => {
       ) : (
         <div className="w-full max-w-2xl bg-surface-container-high rounded-xl p-6 relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-outline-variant/30 flex flex-col space-y-6">
           <div className="noise-overlay"></div>
-          <div className="relative z-10 flex flex-col space-y-6">
+          <div className="flex flex-col space-y-6">
             
             <NoteVerificationResult 
               noteInfo={noteInfo}

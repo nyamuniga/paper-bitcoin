@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { X, ChevronRight, ChevronLeft, Plus } from 'lucide-react';
 import { PageHeader } from '../shared/PageHeader';
 import { useWalletStore } from '../../store/wallet';
+import { formatMintUrl } from '../../utils/format';
+import { MintIcon } from '../shared/MintIcon';
 
 interface IssueMintsStepProps {
   mintUrls: string[];
@@ -14,7 +16,7 @@ export const IssueMintsStep: React.FC<IssueMintsStepProps> = ({ mintUrls, setMin
   const [newMint, setNewMint] = useState<string>('');
   const [showAllMints, setShowAllMints] = useState<boolean>(false);
   const mintBalances = useWalletStore((s) => s.mintBalances);
-  
+
   const trustedMintUrls = Object.keys(mintBalances).filter(url => !mintUrls.includes(url));
 
   const handleAddMint = () => {
@@ -58,14 +60,14 @@ export const IssueMintsStep: React.FC<IssueMintsStepProps> = ({ mintUrls, setMin
             </div>
           )}
           {mintUrls.map((url, i) => (
-            <div key={i} className="bg-surface-container-high rounded-2xl p-4 flex items-center gap-3 border border-outline-variant/10 relative overflow-hidden group">
+            <div key={i} className="bg-surface-container-high rounded-2xl p-4 flex items-center justify-between border border-outline-variant/10 relative overflow-hidden group">
               <div className="absolute inset-0 texture-overlay opacity-20"></div>
-              <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/20 flex items-center justify-center flex-shrink-0 relative z-10">
-                <span className="text-primary text-[12px] font-bold">{new URL(url).hostname.charAt(0).toUpperCase()}</span>
-              </div>
-              <div className="flex-1 min-w-0 relative z-10">
-                <p className="text-body-md font-body-md text-on-surface text-[14px] truncate">{new URL(url).hostname}</p>
-                <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] truncate">{url}</p>
+              <div className="flex items-center gap-3 min-w-0 pr-4 relative z-10">
+                <MintIcon mintUrl={url} className="w-9 h-9 rounded-full bg-primary/15 border border-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[12px] font-bold" />
+                <div className="flex flex-col min-w-0">
+                  <p className="text-body-md font-body-md text-on-surface text-[14px] truncate">{formatMintUrl(url)}</p>
+                  <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] truncate">{url}</p>
+                </div>
               </div>
               <button
                 onClick={() => setMintUrls(mintUrls.filter((_, idx) => idx !== i))}
@@ -114,11 +116,9 @@ export const IssueMintsStep: React.FC<IssueMintsStepProps> = ({ mintUrls, setMin
                   onClick={() => setMintUrls([...mintUrls, url])}
                   className="bg-surface-container-low hover:bg-surface-container rounded-xl p-3 flex items-center gap-3 border border-outline-variant/10 text-left transition-colors"
                 >
-                  <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-primary text-[10px] font-bold">{new URL(url).hostname.charAt(0).toUpperCase()}</span>
-                  </div>
+                  <MintIcon mintUrl={url} className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20" textClassName="text-primary text-[10px] font-bold" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-body-md font-body-md text-on-surface text-[14px] truncate">{new URL(url).hostname}</p>
+                    <p className="text-body-md font-body-md text-on-surface text-[14px] truncate">{formatMintUrl(url)}</p>
                     <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] truncate">{url}</p>
                   </div>
                   <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">

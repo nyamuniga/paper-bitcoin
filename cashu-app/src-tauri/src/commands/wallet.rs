@@ -75,3 +75,19 @@ pub async fn get_recovery_words(state: State<'_, AppState>) -> CommandResult<Vec
         Err(CommandError("No recovery words stored.".to_string()))
     }
 }
+
+#[tauri::command]
+pub async fn remove_mint(mint_url: String, state: State<'_, AppState>) -> CommandResult<()> {
+    let path = state.wallet_path.clone();
+    
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+    };
+    
+    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    w_state.remove_mint(&mint_url)?;
+    w_state.save_encrypted(&path, &passphrase)?;
+    
+    Ok(())
+}
