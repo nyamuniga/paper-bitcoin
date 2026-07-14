@@ -1,6 +1,7 @@
 import React from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { QrCode, Loader2 } from 'lucide-react';
+import { useUrDecoder } from '../../hooks/useUrDecoder';
 
 interface ScanNoteFormProps {
   showScanner: boolean;
@@ -15,6 +16,8 @@ interface ScanNoteFormProps {
 export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({ 
   showScanner, setShowScanner, binB64, setBinB64, onDecode, loading, error 
 }) => {
+  const urDecoder = useUrDecoder();
+
   return (
     <div className="w-full max-w-2xl bg-surface-container-high rounded-xl relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] p-card-gap flex flex-col gap-8 border border-outline-variant/30">
       <div className="noise-overlay"></div>
@@ -25,15 +28,37 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
               formats={['qr_code']}
               onScan={(result) => {
                 if (!result || result.length === 0) return;
-                const validQr = result.find(r => r.rawValue.toUpperCase().startsWith('ECASHZ:'));
-                const val = validQr ? validQr.rawValue : result[0].rawValue;
-                if (val) {
-                  setShowScanner(false);
-                  onDecode(val);
+                const text = result[0].rawValue;
+                if (text.toLowerCase().startsWith('ur:')) {
+                  const decoded = urDecoder.receivePart(text);
+                  if (decoded) {
+                    setShowScanner(false);
+                    onDecode(decoded);
+                  }
+                } else {
+                  const validQr = result.find(r => r.rawValue.toUpperCase().startsWith('ECASHZ:'));
+                  const val = validQr ? validQr.rawValue : text;
+                  if (val) {
+                    setShowScanner(false);
+                    onDecode(val);
+                  }
                 }
               }}
             />
-            <button onClick={() => setShowScanner(false)} className="w-full mt-2 text-on-surface-variant hover:text-on-surface py-2 text-label-caps font-label-caps">Cancel Scanner</button>
+            {urDecoder.progress > 0 && !urDecoder.isSuccess && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface-container-highest/80 px-4 py-2 rounded-full text-label-caps font-label-caps text-primary backdrop-blur-md">
+                Scanning: {Math.round(urDecoder.progress * 100)}%
+              </div>
+            )}
+            <button 
+              onClick={() => {
+                setShowScanner(false);
+                urDecoder.reset();
+              }} 
+              className="w-full mt-2 text-on-surface-variant hover:text-on-surface py-2 text-label-caps font-label-caps"
+            >
+              Cancel Scanner
+            </button>
           </div>
         ) : (
           <button

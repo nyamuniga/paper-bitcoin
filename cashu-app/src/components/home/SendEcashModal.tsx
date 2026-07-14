@@ -7,6 +7,8 @@ import QRCode from 'react-qr-code';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
+import { AmountDisplay } from '../shared/AmountDisplay';
+import { NumberPad } from '../shared/NumberPad';
 
 interface SendEcashModalProps {
   mintUrl: string;
@@ -132,23 +134,13 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
             </div>
           ) : (
             /* Amount input */
-            <div className="flex flex-col gap-4">
-              <div className="relative">
-                <div className={`relative glow-effect transition-shadow duration-300 rounded-xl ${isInsufficient ? 'shadow-[0_0_15px_rgba(239,68,68,0.3)]' : ''}`}>
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px] font-bold">₿</div>
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className={`w-full bg-surface-container-lowest text-on-surface text-[22px] font-bold p-4 pl-10 rounded-xl border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none placeholder:text-on-surface-variant/30 ${isInsufficient ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`}
-                    placeholder="0"
-                    min="1"
-                  />
-                </div>
+              <div className="flex flex-col gap-4">
+                <AmountDisplay amount={amount} compact />
+                <NumberPad value={amount} onChange={setAmount} compact />
+                
                 {isInsufficient && (
-                  <p className="text-error text-[12px] font-label-caps mt-2 px-1">Insufficient balance</p>
+                  <p className="text-error text-[12px] font-label-caps text-center">Insufficient balance</p>
                 )}
-              </div>
 
               <button 
                 onClick={handleSend}

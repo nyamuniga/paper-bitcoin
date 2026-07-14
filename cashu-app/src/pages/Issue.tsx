@@ -16,6 +16,8 @@ export const Issue = () => {
     setMintUrls,
     strategy,
     setStrategy,
+    fundMethod,
+    setFundMethod,
     loading,
     invoicePayload,
     issuedNote,
@@ -76,6 +78,8 @@ export const Issue = () => {
       mintUrls={mintUrls}
       strategy={strategy}
       setStrategy={setStrategy}
+      fundMethod={fundMethod}
+      setFundMethod={setFundMethod}
       loading={loading}
       onIssue={handleIssue}
       onBack={() => setStep(2)}
