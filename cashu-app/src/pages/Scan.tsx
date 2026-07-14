@@ -20,6 +20,8 @@ export const Scan = () => {
     redeemSuccess,
     showScanner,
     setShowScanner,
+    redeemMethod,
+    setRedeemMethod,
     handleDecode,
     handleVerify,
     handleRedeem
@@ -73,6 +75,9 @@ export const Scan = () => {
                 error={error}
                 onRedeem={handleRedeem}
                 noteAmount={noteInfo.amount}
+                redeemMethod={redeemMethod}
+                setRedeemMethod={setRedeemMethod}
+                hasExtraProofs={verifyResult ? verifyResult.proof_total_sats > verifyResult.face_value_sats : false}
               />
             )}
             

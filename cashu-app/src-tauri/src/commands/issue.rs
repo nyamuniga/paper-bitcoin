@@ -151,3 +151,53 @@ pub async fn get_pdf_from_bin(bin_b64: String) -> CommandResult<Vec<u8>> {
     let bytes = result.map_err(|e| anyhow::anyhow!("Failed to generate PDF: {}", e))?;
     Ok(bytes)
 }
+
+#[tauri::command]
+pub async fn issue_note_direct(
+    state: State<'_, AppState>,
+    sats: u64,
+    mint_urls: Vec<String>,
+) -> CommandResult<IssuedNote> {
+    let path = state.wallet_path.clone();
+    
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock.clone().ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
+    };
+
+    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+
+    let mut actual_allocs = Vec::new();
+    let per_mint = sats / mint_urls.len() as u64;
+    let remainder = sats % mint_urls.len() as u64;
+    for (i, url) in mint_urls.iter().enumerate() {
+        let amt = if i == 0 { per_mint + remainder } else { per_mint };
+        actual_allocs.push((url.clone(), amt));
+    }
+    
+    let allocs_refs: Vec<(&str, u64)> = actual_allocs.iter().map(|(u, a)| (u.as_str(), *a)).collect();
+
+    let note = ecash_wallet::direct::issue_direct_note(
+        &mut w_state,
+        &path,
+        &passphrase,
+        &allocs_refs,
+    )
+    .await
+    .map_err(|e| crate::error::CommandError(e.to_string()))?;
+
+    let bin = ecash_core::compact::encode_full_note(&note)
+        .map_err(|e| crate::error::CommandError(format!("Failed to encode note: {:?}", e)))?;
+    use base64::Engine;
+    let bin_b64 = base64::engine::general_purpose::STANDARD.encode(&bin);
+    
+    let svg_string = ecash_encoder::generate_note_svg(&note).unwrap_or_default();
+    let svg_b64 = base64::engine::general_purpose::STANDARD.encode(svg_string.as_bytes());
+
+    Ok(IssuedNote {
+        serial: note.serial,
+        bin_b64,
+        svg_b64,
+        face_value: note.amount_sats,
+    })
+}

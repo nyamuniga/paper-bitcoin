@@ -22,3 +22,27 @@ pub async fn redeem_note(bin_b64: String, invoice: String, state: State<'_, AppS
 
     Ok(true)
 }
+
+#[tauri::command]
+pub async fn redeem_note_direct(bin_b64: String, state: State<'_, AppState>) -> CommandResult<bool> {
+    let path = state.wallet_path.clone();
+    
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock.clone().ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
+    };
+
+    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+
+    let bin_data = crate::utils::decode_qr_payload(&bin_b64)
+        .map_err(|e| crate::error::CommandError(format!("Invalid QR payload: {}", e)))?;
+        
+    let note = ecash_core::compact::decode_full_note(&bin_data)
+        .map_err(|e| crate::error::CommandError(format!("Invalid note format: {}", e)))?;
+
+    ecash_wallet::direct::redeem_direct_note(&mut w_state, &path, &passphrase, &note.public_data, &note.private_data.master_seed_hex)
+        .await
+        .map_err(|e| crate::error::CommandError(format!("Failed to redeem note: {}", e)))?;
+
+    Ok(true)
+}

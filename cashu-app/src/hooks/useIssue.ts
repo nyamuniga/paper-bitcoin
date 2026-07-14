@@ -35,17 +35,18 @@ export const useIssue = () => {
     addLog(`Calling issue_note with amt=${amt}, mintUrls=${mintUrls.join(', ')}`);
 
     try {
-      const res: any = await invoke('issue_note', { sats: amt, mintUrls: mintUrls, strategy: strategy });
-      addLog("issue_note resolved with PendingIssue: " + JSON.stringify(res));
-      
       if (fundMethod === 'wallet') {
-        addLog("Funding with wallet balance...");
-        await invoke('pay_invoice', { invoice: res.invoice, mintUrl: null });
-        addLog("pay_invoice succeeded, waiting for check_issue_status poll to catch it...");
+        addLog(`Calling issue_note_direct with amt=${amt}, mintUrls=${mintUrls.join(', ')}`);
+        const res: any = await invoke('issue_note_direct', { sats: amt, mintUrls: mintUrls });
+        addLog("issue_note_direct succeeded!");
+        setIssuedNote(res);
+        await refreshWallet();
+      } else {
+        const res: any = await invoke('issue_note', { sats: amt, mintUrls: mintUrls, strategy: strategy });
+        addLog("issue_note resolved with PendingIssue: " + JSON.stringify(res));
+        setInvoicePayload(res); 
+        await refreshWallet();
       }
-
-      setInvoicePayload(res); 
-      await refreshWallet();
     } catch (e: any) {
       addLog("issue_note failed: " + String(e));
       setError(e.toString());
