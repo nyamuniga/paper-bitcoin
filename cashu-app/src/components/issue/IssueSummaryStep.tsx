@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, ChevronLeft, Zap, Shield, Coins, Globe, Wallet } from 'lucide-react';
+import { Loader2, ChevronLeft, Gauge, Shield, Coins, Globe, Wallet, Zap } from 'lucide-react';
 import { PageHeader } from '../shared/PageHeader';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
@@ -110,7 +110,7 @@ export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
                   : 'bg-surface-container-high border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40'
               }`}
             >
-              <Zap size={20} className={strategy === 'dynamic' ? 'text-primary' : 'text-on-surface-variant'} />
+              <Gauge size={20} className={strategy === 'dynamic' ? 'text-primary' : 'text-on-surface-variant'} />
               <div className="font-bold text-[14px]">Dynamic</div>
               <div className="text-[11px] opacity-80 leading-tight">Cheaper fees. Best for immediate use.</div>
             </button>
