@@ -10,6 +10,7 @@ export const useIssue = () => {
   const [sats, setSats] = useState<string>('');
   const [mintUrls, setMintUrls] = useState<string[]>([]);
   const [strategy, setStrategy] = useState<'dynamic' | 'static'>('dynamic');
+  const [fundMethod, setFundMethod] = useState<'lightning' | 'wallet'>('lightning');
   const [loading, setLoading] = useState(false);
   const [invoicePayload, setInvoicePayload] = useState<any>(state?.pendingIssue || null);
   const [issuedNote, setIssuedNote] = useState<any>(null);
@@ -34,8 +35,15 @@ export const useIssue = () => {
     addLog(`Calling issue_note with amt=${amt}, mintUrls=${mintUrls.join(', ')}`);
 
     try {
-      const res = await invoke('issue_note', { sats: amt, mintUrls: mintUrls, strategy: strategy });
+      const res: any = await invoke('issue_note', { sats: amt, mintUrls: mintUrls, strategy: strategy });
       addLog("issue_note resolved with PendingIssue: " + JSON.stringify(res));
+      
+      if (fundMethod === 'wallet') {
+        addLog("Funding with wallet balance...");
+        await invoke('pay_invoice', { invoice: res.invoice, mintUrl: null });
+        addLog("pay_invoice succeeded, waiting for check_issue_status poll to catch it...");
+      }
+
       setInvoicePayload(res); 
       await refreshWallet();
     } catch (e: any) {
@@ -104,6 +112,8 @@ export const useIssue = () => {
     setMintUrls,
     strategy,
     setStrategy,
+    fundMethod,
+    setFundMethod,
     loading,
     invoicePayload,
     issuedNote,

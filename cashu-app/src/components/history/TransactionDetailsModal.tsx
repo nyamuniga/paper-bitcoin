@@ -16,9 +16,12 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   const isMelt = 'Melt' in tx.tx_type;
   const isRedeem = 'Redeem' in tx.tx_type;
   const isSend = 'Send' in tx.tx_type;
+  const isReceiveEcash = 'ReceiveEcash' in tx.tx_type;
+  const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
+  const isReceive = isReceiveEcash || isReceiveLightning;
 
-  const quoteId = isMint ? tx.tx_type.Mint.quote_id : (isMelt ? tx.tx_type.Melt.quote_id : (isIssue ? tx.tx_type.Issue.quote_id : ''));
-  const tokenString = isSend ? tx.tx_type.Send.token_string : null;
+  const quoteId = isMint ? tx.tx_type.Mint.quote_id : (isMelt ? tx.tx_type.Melt.quote_id : (isIssue ? tx.tx_type.Issue.quote_id : (isReceiveLightning ? tx.tx_type.ReceiveLightning.quote_id : '')));
+  const tokenString = isSend ? tx.tx_type.Send.token_string : (isReceiveEcash ? tx.tx_type.ReceiveEcash.token_string : null);
 
   const [copied, setCopied] = useState(false);
   
@@ -26,6 +29,8 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
 
   const getTxLabel = () => {
     if (isMint) return 'Received / Mint';
+    if (isReceiveEcash) return 'Received Ecash';
+    if (isReceiveLightning) return 'Received Lightning';
     if (isIssue) return 'Issued Note';
     if (isRedeem) return 'Redeemed Note';
     if (isSend) return 'Sent Ecash';
@@ -72,20 +77,20 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
           {/* Main info */}
           <div className="flex flex-col items-center text-center">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center border mb-4 ${
-              isMint ? 'bg-emerald-900/30 border-emerald-500/30' : 
+              isMint || isReceive ? 'bg-emerald-900/30 border-emerald-500/30' : 
               isIssue ? 'bg-primary-container/20 border-primary/20' : 
               isRedeem ? 'bg-amber-500/20 border-amber-500/20' :
               isSend ? 'bg-tertiary/20 border-tertiary/20' :
               'bg-error-container/20 border-error/20'
             }`}>
-              {isMint || isRedeem ? <ArrowDown className="text-emerald-400 w-8 h-8" /> :
+              {isMint || isRedeem || isReceive ? <ArrowDown className="text-emerald-400 w-8 h-8" /> :
                isIssue ? <FileText className="text-primary w-8 h-8" /> : 
                isSend ? <ArrowUp className="text-tertiary w-8 h-8" /> :
                <ArrowUp className="text-error w-8 h-8" />}
             </div>
             <h3 className="text-headline-md font-headline-md text-on-surface">{getTxLabel()}</h3>
-            <p className={`text-display-sm font-display-sm mt-2 ${isMint || isRedeem ? 'text-emerald-400' : isIssue ? 'text-primary' : isSend ? 'text-tertiary' : 'text-on-surface'}`}>
-              {isMint || isRedeem ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
+            <p className={`text-display-sm font-display-sm mt-2 ${isMint || isRedeem || isReceive ? 'text-emerald-400' : isIssue ? 'text-primary' : isSend ? 'text-tertiary' : 'text-on-surface'}`}>
+              {isMint || isRedeem || isReceive ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
             </p>
             {tx.fee > 0 && <p className="text-label-caps font-label-caps text-on-surface-variant mt-1">Fee: ₿{tx.fee.toLocaleString()}</p>}
           </div>

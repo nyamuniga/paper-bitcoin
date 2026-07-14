@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, ChevronLeft, Zap, Shield, Coins, Globe } from 'lucide-react';
+import { Loader2, ChevronLeft, Zap, Shield, Coins, Globe, Wallet } from 'lucide-react';
 import { PageHeader } from '../shared/PageHeader';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
@@ -9,6 +9,8 @@ interface IssueSummaryStepProps {
   mintUrls: string[];
   strategy: 'dynamic' | 'static';
   setStrategy: (strategy: 'dynamic' | 'static') => void;
+  fundMethod: 'lightning' | 'wallet';
+  setFundMethod: (method: 'lightning' | 'wallet') => void;
   loading: boolean;
   onIssue: () => void;
   onBack: () => void;
@@ -17,7 +19,7 @@ interface IssueSummaryStepProps {
 }
 
 export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
-  sats, mintUrls, strategy, setStrategy, loading, onIssue, onBack, error, debugLogs
+  sats, mintUrls, strategy, setStrategy, fundMethod, setFundMethod, loading, onIssue, onBack, error, debugLogs
 }) => {
   const amount = parseInt(sats) || 0;
 
@@ -65,9 +67,40 @@ export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
           </div>
         </div>
 
+        {/* Funding method */}
+        <div>
+          <label className="block text-label-caps font-label-caps text-on-surface-variant tracking-widest mb-3">FUNDING METHOD</label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setFundMethod('lightning')}
+              className={`p-4 md:p-5 rounded-2xl border cursor-pointer transition-all duration-200 flex flex-col items-center text-center gap-2 ${
+                fundMethod === 'lightning'
+                  ? 'bg-primary/10 border-primary/50 shadow-[0_0_15px_rgba(255,184,116,0.15)] text-primary'
+                  : 'bg-surface-container-high border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40'
+              }`}
+            >
+              <Zap size={20} className={fundMethod === 'lightning' ? 'text-primary' : 'text-on-surface-variant'} />
+              <div className="font-bold text-[14px]">Lightning</div>
+              <div className="text-[11px] opacity-80 leading-tight">Pay from external wallet.</div>
+            </button>
+            <button
+              onClick={() => setFundMethod('wallet')}
+              className={`p-4 md:p-5 rounded-2xl border cursor-pointer transition-all duration-200 flex flex-col items-center text-center gap-2 ${
+                fundMethod === 'wallet'
+                  ? 'bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.15)] text-emerald-500'
+                  : 'bg-surface-container-high border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40'
+              }`}
+            >
+              <Wallet size={20} className={fundMethod === 'wallet' ? 'text-emerald-500' : 'text-on-surface-variant'} />
+              <div className="font-bold text-[14px]">Local Wallet</div>
+              <div className="text-[11px] opacity-80 leading-tight">Use eCash balance.</div>
+            </button>
+          </div>
+        </div>
+
         {/* Strategy selection */}
         <div>
-          <label className="block text-label-caps font-label-caps text-on-surface-variant tracking-widest mb-3">FEE RESERVE STRATEGY</label>
+          <label className="block text-label-caps font-label-caps text-on-surface-variant tracking-widest mb-3 mt-2">FEE RESERVE STRATEGY</label>
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setStrategy('dynamic')}

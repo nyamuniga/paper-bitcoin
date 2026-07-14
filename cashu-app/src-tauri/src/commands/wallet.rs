@@ -32,8 +32,10 @@ pub async fn wallet_info(state: State<'_, AppState>) -> CommandResult<WalletInfo
 
     let w_state = WalletState::load_encrypted(&path, &passphrase)?;
     
-    let balances = w_state.balance_by_mint();
-    
+    let mut balances = w_state.balance_by_mint();
+    for mint in &w_state.mints {
+        balances.entry(mint.clone()).or_insert(0);
+    }
     
     Ok(WalletInfo {
         is_initialized: true,
@@ -87,6 +89,39 @@ pub async fn remove_mint(mint_url: String, state: State<'_, AppState>) -> Comman
     
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
     w_state.remove_mint(&mint_url)?;
+    w_state.save_encrypted(&path, &passphrase)?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn add_mint(mint_url: String, state: State<'_, AppState>) -> CommandResult<()> {
+    let mint_url = ecash_wallet::state::normalize_mint_url(&mint_url);
+    
+    // Check if the wallet is initialized
+    let path = state.wallet_path.clone();
+    if !path.exists() {
+        return Err(CommandError("Wallet not initialized".to_string()));
+    }
+
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+    };
+
+    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+
+    if w_state.mints.contains(&mint_url) {
+        return Err(CommandError("Mint is already in the wallet".to_string()));
+    }
+
+    // Try to fetch the keys to verify the mint is valid and responsive
+    let client = ecash_wallet::client::MintClient::new(&mint_url);
+    let keys = client.fetch_keyset().await
+        .map_err(|e| CommandError(format!("Failed to connect to mint or fetch keys: {}", e)))?
+        .keys;
+
+    w_state.cache_mint_keys(&mint_url, keys);
     w_state.save_encrypted(&path, &passphrase)?;
     
     Ok(())

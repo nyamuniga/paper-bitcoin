@@ -38,13 +38,15 @@ export const RecentTransactions: React.FC = () => {
       } catch (e: any) {
         toast.error(`Error: ${e}`, { id: tx.id });
       }
-    } else if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type) {
+    } else if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
       setSelectedTx(tx);
     }
   };
 
   const getTxLabel = (tx: Transaction) => {
     if ('Mint' in tx.tx_type) return 'Received';
+    if ('ReceiveEcash' in tx.tx_type) return 'Received Ecash';
+    if ('ReceiveLightning' in tx.tx_type) return 'Received Lightning';
     if ('Issue' in tx.tx_type) return 'Issued Note';
     if ('Redeem' in tx.tx_type) return 'Redeemed';
     if ('Send' in tx.tx_type) return 'Sent Ecash';
@@ -53,7 +55,7 @@ export const RecentTransactions: React.FC = () => {
   };
 
   const getTxIcon = (tx: Transaction) => {
-    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type) {
+    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
       return <ArrowDown className="text-emerald-400 w-4 h-4" />;
     }
     if ('Send' in tx.tx_type) {
@@ -66,7 +68,7 @@ export const RecentTransactions: React.FC = () => {
   };
 
   const getTxIconBg = (tx: Transaction) => {
-    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type) {
+    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
       return 'bg-emerald-900/30 border-emerald-500/30';
     }
     if ('Send' in tx.tx_type) {
@@ -79,14 +81,14 @@ export const RecentTransactions: React.FC = () => {
   };
 
   const getTxAmountColor = (tx: Transaction) => {
-    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type) return 'text-emerald-400';
+    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) return 'text-emerald-400';
     if ('Issue' in tx.tx_type) return 'text-primary';
     if ('Send' in tx.tx_type) return 'text-tertiary';
     return 'text-on-surface';
   };
 
   const getTxSign = (tx: Transaction) => {
-    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type) return '+';
+    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) return '+';
     if ('Issue' in tx.tx_type) return '';
     return '-';
   };
@@ -137,7 +139,7 @@ export const RecentTransactions: React.FC = () => {
         <div className="bg-surface-container-high rounded-2xl overflow-hidden border border-outline-variant/10 relative">
           <div className="absolute inset-0 texture-overlay opacity-20"></div>
           {transactions.map((tx, index) => {
-            const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type;
+            const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type;
             return (
             <div
               key={tx.id}

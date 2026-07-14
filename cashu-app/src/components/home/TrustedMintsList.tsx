@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ChevronRight, Zap, Coins, Info } from 'lucide-react';
-import { SendEcashModal } from './SendEcashModal';
+import { EcashModal } from './EcashModal';
+import { BitcoinModal } from './BitcoinModal';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
 import { MintInfoModal } from './MintInfoModal';
@@ -12,12 +13,12 @@ interface TrustedMintsListProps {
 }
 
 export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances, showAll = false }) => {
-  const navigate = useNavigate();
   const sortedMints = Object.entries(mintBalances).sort((a, b) => b[1] - a[1]);
   const displayMints = showAll ? sortedMints : sortedMints.slice(0, 6);
 
   const [revealedMint, setRevealedMint] = useState<string | null>(null);
   const [ecashMint, setEcashMint] = useState<string | null>(null);
+  const [bitcoinMint, setBitcoinMint] = useState<string | null>(null);
   const [infoMint, setInfoMint] = useState<string | null>(null);
 
   const toggleReveal = (mint: string) => {
@@ -53,29 +54,19 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
                 {/* Background Action Buttons */}
                 <div className="absolute inset-y-0 left-0 w-[210px] flex items-center justify-center gap-3 px-3">
                   <button 
-                    disabled={amt === 0}
-                    onClick={(e) => { e.stopPropagation(); navigate('/pay', { state: { mintUrl: mint } }); }}
-                    className={`flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
-                      amt === 0 
-                        ? 'text-amber-500/50 cursor-not-allowed' 
-                        : 'text-amber-500 hover:text-amber-400 hover:scale-105 active:scale-95'
-                    }`}
-                  >
-                    <Zap className="w-5 h-5" />
-                    <span className="text-[10px] font-label-caps uppercase tracking-wider">Pay</span>
-                  </button>
-                  <div className="w-px h-8 bg-outline-variant/20"></div>
-                  <button 
-                    disabled={amt === 0}
                     onClick={(e) => { e.stopPropagation(); setEcashMint(mint); setRevealedMint(null); }}
-                    className={`flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
-                      amt === 0 
-                        ? 'text-primary/50 cursor-not-allowed' 
-                        : 'text-primary hover:text-primary/80 hover:scale-105 active:scale-95'
-                    }`}
+                    className="flex flex-col items-center justify-center gap-1 transition-all duration-200 text-primary hover:text-primary/80 hover:scale-105 active:scale-95"
                   >
                     <Coins className="w-5 h-5" />
                     <span className="text-[10px] font-label-caps uppercase tracking-wider">Ecash</span>
+                  </button>
+                  <div className="w-px h-8 bg-outline-variant/20"></div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setBitcoinMint(mint); setRevealedMint(null); }}
+                    className="flex flex-col items-center justify-center gap-1 transition-all duration-200 text-amber-500 hover:text-amber-400 hover:scale-105 active:scale-95"
+                  >
+                    <Zap className="w-5 h-5" />
+                    <span className="text-[10px] font-label-caps uppercase tracking-wider">Bitcoin</span>
                   </button>
                   <div className="w-px h-8 bg-outline-variant/20"></div>
                   <button 
@@ -108,9 +99,16 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
       </div>
 
       {ecashMint && (
-        <SendEcashModal
+        <EcashModal
           mintUrl={ecashMint}
           onClose={() => setEcashMint(null)}
+        />
+      )}
+
+      {bitcoinMint && (
+        <BitcoinModal
+          mintUrl={bitcoinMint}
+          onClose={() => setBitcoinMint(null)}
         />
       )}
 

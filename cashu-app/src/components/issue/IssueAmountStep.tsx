@@ -1,6 +1,9 @@
 import React from 'react';
 import { PageHeader } from '../shared/PageHeader';
-import { Delete, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
+
+import { NumberPad } from '../shared/NumberPad';
+import { AmountDisplay } from '../shared/AmountDisplay';
 
 interface IssueAmountStepProps {
   sats: string;
@@ -9,19 +12,6 @@ interface IssueAmountStepProps {
 }
 
 export const IssueAmountStep: React.FC<IssueAmountStepProps> = ({ sats, setSats, onNext }) => {
-  const handleDigit = (digit: string) => {
-    if (digit === '.' && sats.includes('.')) return;
-    setSats(sats + digit);
-  };
-
-  const handleDelete = () => {
-    setSats(sats.slice(0, -1));
-  };
-
-  const handleClear = () => {
-    setSats('');
-  };
-
   const amount = parseInt(sats) || 0;
 
   return (
@@ -29,47 +19,10 @@ export const IssueAmountStep: React.FC<IssueAmountStepProps> = ({ sats, setSats,
       <PageHeader title="Issue Note" subtitle="Step 1 of 3" />
 
       {/* Amount display */}
-      <div className="flex-1 flex flex-col items-center justify-center py-6 md:py-10">
-        <span className="text-label-caps font-label-caps text-on-surface-variant tracking-widest mb-3">AMOUNT</span>
-        <div className="flex items-baseline gap-2 mb-1">
-          <h1 className={`font-display-lg text-on-surface tracking-tighter leading-none relative z-10 transition-all duration-300 ${
-            sats.length > 6 ? 'text-[40px] md:text-[52px]' : 'text-[56px] md:text-[72px]'
-          }`}>
-            ₿{sats || '0'}
-          </h1>
-        </div>
-      </div>
+      <AmountDisplay amount={sats} />
 
       {/* Number pad */}
-      <div className="grid grid-cols-3 gap-2 md:gap-3 mb-6">
-        {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
-          <button
-            key={digit}
-            onClick={() => handleDigit(digit)}
-            className="py-4 md:py-5 rounded-2xl bg-surface-container-high text-on-surface text-[22px] md:text-[24px] font-headline-lg-mobile hover:bg-surface-container-highest active:scale-95 transition-all duration-150 border border-outline-variant/10"
-          >
-            {digit}
-          </button>
-        ))}
-        <button
-          onClick={handleClear}
-          className="py-4 md:py-5 rounded-2xl bg-surface-container text-on-surface-variant text-[14px] font-label-caps tracking-wider hover:bg-surface-container-high active:scale-95 transition-all duration-150 border border-outline-variant/10"
-        >
-          CLR
-        </button>
-        <button
-          onClick={() => handleDigit('0')}
-          className="py-4 md:py-5 rounded-2xl bg-surface-container-high text-on-surface text-[22px] md:text-[24px] font-headline-lg-mobile hover:bg-surface-container-highest active:scale-95 transition-all duration-150 border border-outline-variant/10"
-        >
-          0
-        </button>
-        <button
-          onClick={handleDelete}
-          className="py-4 md:py-5 rounded-2xl bg-surface-container text-on-surface-variant hover:bg-surface-container-high active:scale-95 transition-all duration-150 flex items-center justify-center border border-outline-variant/10"
-        >
-          <Delete size={22} />
-        </button>
-      </div>
+      <NumberPad value={sats} onChange={setSats} />
 
       {/* Next button */}
       <button

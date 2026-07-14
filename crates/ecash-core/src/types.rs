@@ -233,12 +233,24 @@ pub struct SendTransactionData {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReceiveEcashTransactionData {
+    pub token_string: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReceiveLightningTransactionData {
+    pub quote_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransactionType {
     Mint(MintTransactionData),
     Melt(MeltTransactionData),
     Issue(IssueTransactionData),
     Redeem(RedeemTransactionData),
     Send(SendTransactionData),
+    ReceiveEcash(ReceiveEcashTransactionData),
+    ReceiveLightning(ReceiveLightningTransactionData),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
