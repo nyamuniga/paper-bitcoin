@@ -39,6 +39,35 @@ npm install
 npm run tauri dev
 ```
 
+### Building for Production
+
+You can build the app for multiple platforms. Note that for macOS builds on headless environments (like CI), you may need to bypass the Finder automation script by setting `CI=true`.
+
+**macOS:**
+```bash
+CI=true npm run tauri build --release
+```
+
+**Windows:**
+```bash
+npm run tauri build --target x86_64-pc-windows-msvc
+```
+
+**Linux:**
+```bash
+npm run tauri build
+```
+
+**Android:**
+```bash
+npm run tauri android build
+```
+
+**iOS:**
+```bash
+npm run tauri ios build
+```
+
 ### Running the CLI
 
 By default, the CLI uses a remote mint.
@@ -50,8 +79,17 @@ cargo build --release
 # Run step by step:
 cargo run -p ecash-cli -- init                  # create wallet
 cargo run -p ecash-cli -- issue 1000            # issue 1000 sat note → ./notes/
-cargo run -p ecash-cli -- verify ./notes/<serial>.json
-cargo run -p ecash-cli -- redeem ./notes/<serial>.json
+# Save payload to file
+echo "ECASHZ:NCFOA0/..." > note.txt
+
+# Verify using the file
+cargo run -p ecash-cli -- verify "$(cat note.txt)"
+
+# Save payload to file
+echo "ECASHZ:NCFOA0/..." > note.txt
+
+# Redeem using the file
+cargo run -p ecash-cli -- redeem "$(cat note.txt)"
 ```
 
 ## Production
@@ -78,7 +116,9 @@ cargo run -p ecash-cli -- issue 1000
 
 - This is a **prototype**. Cryptographic code has not been audited.
 - Full blind-signature verification at redemption is done server-side by the mint.
-- Offline verification checks format + integrity hash; DLEQ proofs (NUT-12) are a future upgrade.
+- **Direct Issuance & Redemption**: Notes can be funded directly from and redeemed directly back to your local ecash wallet without incurring Lightning Network routing fees. The DLEQ proofs are securely preserved and transferred into the note's compact payload.
+- **NUT-15 Multi-Path Payments (MPP)**: The system supports redeeming a single note containing tokens from multiple independent mints via a unified Lightning invoice payment. If any leg of the MPP payment fails due to routing errors, the backend gracefully recovers the unspent note proofs directly into your local wallet to ensure no funds are lost.
+- **QR Code Robustness**: Our QR processing features case-insensitive prefix decoding to seamlessly support third-party hardware scanners, mobile keyboards, and various OCR tools which might alter capitalization.
 
 ## References
 

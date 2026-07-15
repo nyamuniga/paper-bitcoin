@@ -1,7 +1,7 @@
 {
   "name": "bitnotes",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@ngraveio/bc-ur": "^1.1.13",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-biometric": "^2.3.2",
     "@tauri-apps/plugin-dialog": "^2.7.1",
@@ -17,6 +18,7 @@
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-stronghold": "^2.3.1",
     "@yudiel/react-qr-scanner": "^2.6.0",
+    "buffer": "^6.0.3",
     "jspdf": "^4.2.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

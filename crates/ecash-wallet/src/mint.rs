@@ -346,38 +346,7 @@ pub async fn resume_issue_note(
     let validation_hash = compute_validation_hash(&public_entries);
     let serial = serial_from_hash(&validation_hash);
 
-    let mut block_height = 0;
-
-    if let Ok(client) = reqwest::Client::builder()
-        .user_agent("PaperBitcoin/1.0")
-        .timeout(std::time::Duration::from_secs(5))
-        .build() 
-    {
-        match client.get("https://mempool.space/api/blocks/tip/height").send().await {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.text().await {
-                    Ok(text) => {
-                        block_height = text.trim().parse::<u64>().unwrap_or(0);
-                    }
-                    Err(e) => tracing::warn!("Failed to read mempool response body: {}", e),
-                }
-            }
-            Ok(resp) => {
-                tracing::warn!("Mempool API returned HTTP {}: {}", resp.status(), resp.status().canonical_reason().unwrap_or("unknown"));
-            }
-            Err(e) => {
-                tracing::warn!("Failed to reach mempool.space: {}", e);
-                // Try fallback API
-                if let Ok(fallback_resp) = client.get("https://blockstream.info/api/blocks/tip/height").send().await {
-                    if fallback_resp.status().is_success() {
-                        if let Ok(text) = fallback_resp.text().await {
-                            block_height = text.trim().parse::<u64>().unwrap_or(0);
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let block_height = crate::get_block_height().await;
 
     let note = PhysicalNote {
         amount_sats: original_amount,

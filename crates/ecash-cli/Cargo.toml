@@ -1,6 +1,6 @@
 [package]
 name = "ecash-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Physical ecash command-line interface"
 

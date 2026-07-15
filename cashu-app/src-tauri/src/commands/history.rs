@@ -37,17 +37,16 @@ pub async fn retry_mint(tx_id: String, state: State<'_, AppState>) -> CommandRes
 }
 
 #[tauri::command]
-pub async fn check_melt_status(tx_id: String, state: State<'_, AppState>) -> CommandResult<ecash_core::types::TransactionStatus> {
+pub async fn check_transaction_status(tx_id: String, state: State<'_, AppState>) -> CommandResult<ecash_core::types::TransactionStatus> {
     let path = state.wallet_path.clone();
     
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+        pass_lock.clone().ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
     };
 
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
-
-    let status = ecash_wallet::check_melt_status(&mut w_state, &path, &passphrase, &tx_id).await?;
+    let status = ecash_wallet::check_transaction_status(&mut w_state, &path, &passphrase, &tx_id).await?;
     
     Ok(status)
 }
@@ -163,3 +162,87 @@ pub async fn check_issue_status(tx_id: String, state: State<'_, AppState>) -> Co
         face_value: note.amount_sats,
     })
 }
+
+#[tauri::command]
+pub async fn check_token_spend_status(tx_id: String, state: State<'_, AppState>) -> CommandResult<String> {
+    let path = state.wallet_path.clone();
+    
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+    };
+
+    let w_state = WalletState::load_encrypted(&path, &passphrase)?;
+
+    let tx = w_state.transactions.iter().find(|t| t.id == tx_id)
+        .ok_or_else(|| CommandError("Transaction not found".to_string()))?;
+
+    // We only support checking state for outgoing transactions (Send, Issue).
+    let mut total_tokens = 0;
+    let mut spent_tokens = 0;
+
+    match &tx.tx_type {
+        ecash_core::types::TransactionType::Send(data) => {
+            // Send transactions are digital tokens with 1 mint.
+            let mint_url = &tx.mint_url;
+            let ys: Vec<String> = data.proofs.iter().map(|p| {
+                ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()))
+            }).collect();
+            
+            if ys.is_empty() { return Ok("Unspent".to_string()); }
+            
+            let client = ecash_wallet::client::MintClient::new(mint_url);
+            let state_results = client.check_state(&ys).await.unwrap_or_default();
+            
+            total_tokens += ys.len();
+            for y in ys {
+                if let Some(s) = state_results.get(&y) {
+                    if s == "SPENT" {
+                        spent_tokens += 1;
+                    }
+                }
+            }
+        },
+        ecash_core::types::TransactionType::Issue(data) => {
+            // Issue transactions can span multiple mints.
+            if let Some(note) = &data.note {
+                for entry in &note.public_data.entries {
+                    let mint_url = &entry.mint;
+                    let ys: Vec<String> = entry.proofs.iter().filter_map(|p| p.y.clone()).collect();
+                    
+                    if !ys.is_empty() {
+                        let client = ecash_wallet::client::MintClient::new(mint_url);
+                        let state_results = client.check_state(&ys).await.unwrap_or_default();
+                        
+                        total_tokens += ys.len();
+                        for y in ys {
+                            if let Some(s) = state_results.get(&y) {
+                                if s == "SPENT" {
+                                    spent_tokens += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                return Err(CommandError("Note is not fully minted yet".to_string()));
+            }
+        },
+        _ => {
+            return Err(CommandError("Can only check status of outgoing transactions".to_string()));
+        }
+    }
+
+    if total_tokens == 0 {
+        return Ok("Unspent".to_string());
+    }
+
+    if spent_tokens == total_tokens {
+        Ok("Spent".to_string())
+    } else if spent_tokens > 0 {
+        Ok("Partially Spent".to_string())
+    } else {
+        Ok("Unspent".to_string())
+    }
+}
+
