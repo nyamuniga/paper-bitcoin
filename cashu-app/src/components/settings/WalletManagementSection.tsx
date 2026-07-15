@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Lock, Trash2, AlertTriangle, X } from 'lucide-react';
+import { Lock, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 

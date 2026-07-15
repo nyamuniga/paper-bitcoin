@@ -26,6 +26,8 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  const [txId, setTxId] = useState<string | null>(null);
+  const [isClaimed, setIsClaimed] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Receive state
@@ -46,12 +48,32 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
   const isInsufficient = parsedAmount > availableBalance;
   const isValid = parsedAmount > 0 && !isInsufficient;
 
+  React.useEffect(() => {
+    if (!txId || isClaimed) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const status = await invoke<string>('check_transaction_status', { txId });
+        if (status === 'Spent') {
+          setIsClaimed(true);
+          toast.success('Token has been claimed!');
+          refreshWallet();
+        }
+      } catch (e) {
+        console.error('Failed to poll status', e);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [txId, isClaimed]);
+
   const handleSend = async () => {
     if (!isValid) return;
     setSending(true);
     try {
-      const result = await invoke<string>('send_ecash', { mintUrl, amount: parsedAmount });
-      setToken(result);
+      const result = await invoke<{token: string, tx_id: string}>('send_ecash', { mintUrl, amount: parsedAmount });
+      setToken(result.token);
+      setTxId(result.tx_id);
       refreshWallet();
     } catch (e: any) {
       toast.error(`Send failed: ${e}`);
@@ -91,7 +113,9 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
   const resetSend = () => {
     setAmount('');
     setToken(null);
+    setTxId(null);
     setCopied(false);
+    setIsClaimed(false);
   };
 
   const resetReceive = () => {
@@ -203,15 +227,27 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
                   </div>
 
                   <div className="relative">
-                    <div className="bg-white p-4 rounded-xl shadow-lg relative">
-                      <QRCode value={currentFrame || token} size={200} />
-                      {isAnimated && (
-                        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-label-caps">
-                          {currentFrameIndex + 1}/{totalFrames}
+                    {isClaimed ? (
+                      <div className="bg-emerald-500/10 p-8 rounded-xl shadow-lg relative border border-emerald-500/20 flex flex-col items-center gap-3">
+                        <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                          <Check className="w-8 h-8 text-emerald-400" />
                         </div>
-                      )}
-                    </div>
-                    <div className="absolute inset-0 bg-primary/20 rounded-xl blur-xl -z-10 animate-pulse"></div>
+                        <p className="text-headline-sm font-headline-sm text-emerald-400 text-center">Token Claimed!</p>
+                        <p className="text-body-sm font-body-sm text-emerald-400/80 text-center">The recipient has successfully received these funds.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="bg-white p-4 rounded-xl shadow-lg relative">
+                          <QRCode value={currentFrame || token} size={200} />
+                          {isAnimated && (
+                            <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-label-caps">
+                              {currentFrameIndex + 1}/{totalFrames}
+                            </div>
+                          )}
+                        </div>
+                        <div className="absolute inset-0 bg-primary/20 rounded-xl blur-xl -z-10 animate-pulse"></div>
+                      </>
+                    )}
                   </div>
 
                   <div className="w-full flex flex-col gap-2">
