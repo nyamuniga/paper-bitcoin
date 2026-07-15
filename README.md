@@ -118,6 +118,8 @@ cargo run -p ecash-cli -- issue 1000
 - Full blind-signature verification at redemption is done server-side by the mint.
 - **Direct Issuance & Redemption**: Notes can be funded directly from and redeemed directly back to your local ecash wallet without incurring Lightning Network routing fees. The DLEQ proofs are securely preserved and transferred into the note's compact payload.
 - **NUT-15 Multi-Path Payments (MPP)**: The system supports redeeming a single note containing tokens from multiple independent mints via a unified Lightning invoice payment. If any leg of the MPP payment fails due to routing errors, the backend gracefully recovers the unspent note proofs directly into your local wallet to ensure no funds are lost.
+- **Wallet Restoration (NUT-09)**: Supports full deterministic wallet recovery from a 24-word BIP39 seed phrase. Implements intelligent batch-chunking to bypass DoS limits on production mints, and robust dual-array parsing for strict mint implementations.
+- **URL Path Case-Preservation**: Robust normalization preserves exact casing for mint URLs (like `/Bitcoin` paths) to support all edge-case mint deployments without forcefully lowercasing paths.
 - **QR Code Robustness**: Our QR processing features case-insensitive prefix decoding to seamlessly support third-party hardware scanners, mobile keyboards, and various OCR tools which might alter capitalization.
 
 ## References
