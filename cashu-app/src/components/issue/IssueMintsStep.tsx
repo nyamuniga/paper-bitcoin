@@ -86,7 +86,7 @@ export const IssueMintsStep: React.FC<IssueMintsStepProps> = ({ mintUrls, setMin
               <input
                 type="text"
                 value={newMint}
-                onChange={(e) => setNewMint(e.target.value.toLowerCase())}
+                onChange={(e) => setNewMint(e.target.value)}
                 onKeyDown={handleKeyDown}
                 className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-4 text-on-surface text-[14px] shadow-inner focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-on-surface-variant/50"
                 placeholder="https://mint.example.com"

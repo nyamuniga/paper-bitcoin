@@ -15,12 +15,14 @@ pub const DEFAULT_MINT_URL: &str = "https://mint.28waves.com";
 
 
 pub mod state;
-pub mod invoice;
 pub mod client;
-pub mod mint;
-pub mod melt;
-pub mod history;
+pub mod invoice;
 pub mod swap;
+pub mod melt;
+pub mod mint;
+pub mod history;
+pub mod restore;
+pub mod direct;
 
 pub use state::*;
 pub use invoice::*;
@@ -29,4 +31,3 @@ pub use melt::*;
 pub use history::*;
 pub use swap::*;
 pub use client::estimate_routing_fee_from_info;
-pub mod direct;
