@@ -7,9 +7,10 @@ interface RestoreWalletFormProps {
   onCancel: () => void;
   onError: (msg: string) => void;
   onRestore: (mnemonic: string, passphrase: string, mintUrls: string[]) => Promise<boolean>;
+  restoreProgress?: string[];
 }
 
-export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, onError, onRestore }) => {
+export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, onError, onRestore, restoreProgress = [] }) => {
   const [step, setStep] = useState<1 | 2>(1);
   const [mnemonic, setMnemonic] = useState('');
   const [passphrase, setPassphrase] = useState('');
@@ -156,11 +157,19 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
         <button
           type="submit"
           disabled={loading}
-          className="flex-1 bg-primary hover:bg-primary/90 text-background font-bold py-3 rounded-xl transition-colors flex justify-center items-center h-12"
+          className="flex-1 bg-primary hover:bg-primary/90 text-background font-bold py-3 rounded-xl transition-colors flex justify-center items-center h-12 disabled:opacity-50"
         >
-          {loading ? <RefreshCw className="animate-spin" size={20} /> : 'Restore'}
+          {loading ? <RefreshCw className="animate-spin" size={20} /> : 'Restore Wallet'}
         </button>
       </div>
+
+      {loading && restoreProgress.length > 0 && (
+        <div className="mt-4 p-3 bg-black/40 border border-gray-800 rounded-xl max-h-40 overflow-y-auto font-mono text-[10px] text-gray-400 flex flex-col gap-1">
+          {restoreProgress.map((msg, i) => (
+            <div key={i} className="whitespace-pre-wrap">{msg}</div>
+          ))}
+        </div>
+      )}
     </form>
   );
 };

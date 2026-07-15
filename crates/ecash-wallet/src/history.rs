@@ -143,7 +143,7 @@ pub async fn check_transaction_status(state: &mut WalletState, wallet_path: &Pat
                     mint_proofs.retain(|p| !spent_secrets.contains(&p.secret));
                 }
                 // Restore to recover the change and the tokens
-                let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![tx.mint_url.clone()]).await;
+                let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![tx.mint_url.clone()], None).await;
                 TransactionStatus::Failed // We failed to create the token string, but funds are restored safely
             } else {
                 TransactionStatus::Failed
@@ -191,7 +191,7 @@ pub async fn check_transaction_status(state: &mut WalletState, wallet_path: &Pat
             let all_spent = !ys.is_empty() && states.values().all(|s| s == "SPENT" || s == "PENDING");
             
             let new_status = if all_spent {
-                let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![tx.mint_url.clone()]).await;
+                let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![tx.mint_url.clone()], None).await;
                 TransactionStatus::Success
             } else {
                 TransactionStatus::Failed
@@ -242,13 +242,13 @@ pub async fn check_transaction_status(state: &mut WalletState, wallet_path: &Pat
                 
                 // Restore change to wallet
                 let mints: Vec<String> = issue_data.allocations.iter().map(|a| a.0.clone()).collect();
-                let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, mints.clone()).await;
+                let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, mints.clone(), None).await;
                 
                 // Sweep tokens from the note's seed back into the wallet
                 let mut temp_state = state.clone();
                 temp_state.seed_hex = issue_data.master_seed_hex.clone();
                 temp_state.derivation_index = 0;
-                let _ = crate::restore::restore_from_mints(&mut temp_state, wallet_path, passphrase, mints).await;
+                let _ = crate::restore::restore_from_mints(&mut temp_state, wallet_path, passphrase, mints, None).await;
                 
                 // Merge recovered note proofs into main wallet state
                 for (mint, proofs) in temp_state.proofs {
@@ -303,7 +303,7 @@ pub async fn check_transaction_status(state: &mut WalletState, wallet_path: &Pat
                         return Ok(TransactionStatus::Pending);
                     }
                 } else {
-                    let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![tx.mint_url.clone()]).await;
+                    let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![tx.mint_url.clone()], None).await;
                 }
                 
                 let new_status = TransactionStatus::Success;
