@@ -81,19 +81,34 @@ pub async fn create_wallet(passphrase: String, state: State<'_, AppState>) -> Co
 }
 
 #[tauri::command]
-pub async fn restore_wallet(mnemonic: String, passphrase: String, state: State<'_, AppState>) -> CommandResult<crate::commands::wallet::WalletInfo> {
+pub async fn restore_wallet(mnemonic: String, passphrase: String, mint_urls: Vec<String>, state: State<'_, AppState>) -> CommandResult<crate::commands::wallet::WalletInfo> {
     let path = state.wallet_path.clone();
     let seed_hex = ecash_wallet::mnemonic_to_seed_hex(&mnemonic)?;
     let mut w_state = WalletState::new(seed_hex, Some(mnemonic.clone()));
+    
+    // We can do restore logic if we have mint URLs
+    if !mint_urls.is_empty() {
+        if let Err(e) = ecash_wallet::restore::restore_from_mints(&mut w_state, &path, &passphrase, mint_urls).await {
+            println!("Restore from mints failed: {}", e);
+            // We continue, the state still has the seed
+        }
+    }
+    
     w_state.save_encrypted(&path, &passphrase)?;
     
     let mut pass_lock = state.passphrase.lock().unwrap();
     *pass_lock = Some(passphrase);
 
+    let mut mint_balances = w_state.balance_by_mint();
+    for mint in &w_state.mints {
+        mint_balances.entry(mint.clone()).or_insert(0);
+    }
+    let balance = w_state.total_balance();
+
     Ok(crate::commands::wallet::WalletInfo {
         is_initialized: true,
-        balance_sats: 0,
+        balance_sats: balance,
         mnemonic: Some(mnemonic),
-        mint_balances: std::collections::HashMap::new(),
+        mint_balances,
     })
 }

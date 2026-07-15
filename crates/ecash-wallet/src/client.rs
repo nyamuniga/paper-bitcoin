@@ -223,6 +223,32 @@ impl MintClient {
         Ok(sigs.clone())
     }
 
+    /// Send a restore request (NUT-13).
+    /// Used to fetch previously issued tokens using deterministic secrets.
+    pub async fn restore_tokens(
+        &self,
+        outputs: Vec<serde_json::Value>,
+    ) -> Result<(Vec<serde_json::Value>, Vec<serde_json::Value>)> {
+        let req = serde_json::json!({
+            "outputs": outputs
+        });
+
+        let v: serde_json::Value = self.http.post(format!("{}/v1/restore", self.url))
+            .json(&req).send().await?.json().await?;
+
+        check_api_error(&v, "Restore")?;
+
+        let outputs_arr = v.get("outputs").and_then(|s| s.as_array()).cloned().unwrap_or_default();
+        let sigs_arr = v.get("signatures").and_then(|s| s.as_array()).cloned().unwrap_or_default();
+        
+        if outputs_arr.is_empty() && sigs_arr.is_empty() {
+            // It's possible the mint just didn't find any tokens, which is fine, we return empty
+            return Ok((vec![], vec![]));
+        }
+
+        Ok((outputs_arr, sigs_arr))
+    }
+
     pub async fn check_state(&self, ys: &[String]) -> Result<HashMap<String, String>> {
         let v: serde_json::Value = self.http.post(format!("{}/v1/checkstate", self.url))
             .json(&serde_json::json!({ "Ys": ys })).send().await?.json().await?;

@@ -81,7 +81,7 @@ export const AddMintModal: React.FC<AddMintModalProps> = ({ onClose }) => {
             <input
               type="text"
               value={mintUrl}
-              onChange={(e) => setMintUrl(e.target.value.toLowerCase())}
+              onChange={(e) => setMintUrl(e.target.value)}
               placeholder="https://mint.example.com"
               autoCapitalize="none"
               autoCorrect="off"

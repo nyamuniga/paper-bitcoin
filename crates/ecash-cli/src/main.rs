@@ -94,6 +94,9 @@ mod ui {
                 ecash_core::types::TransactionType::Melt(_) => "Melt",
                 ecash_core::types::TransactionType::Issue(_) => "Issue",
                 ecash_core::types::TransactionType::Redeem(_) => "Redeem",
+                ecash_core::types::TransactionType::Send(_) => "Send",
+                ecash_core::types::TransactionType::ReceiveEcash(_) => "ReceiveEcash",
+                ecash_core::types::TransactionType::ReceiveLightning(_) => "ReceiveLightning",
             };
             let status_str = match tx.status {
                 ecash_core::types::TransactionStatus::Pending => "Pending".yellow().to_string(),
@@ -675,7 +678,7 @@ async fn cmd_pay(wallet_path: &PathBuf, invoice: &str) -> Result<()> {
     }
 
     let pb = ui::progress_spinner("Paying invoice…");
-    match pay_invoice(&mut state, wallet_path, &passphrase, invoice).await {
+    match pay_invoice(&mut state, wallet_path, &passphrase, invoice, None).await {
         Ok(paid_amt) => pb.finish_with_message(format!("Paid {} sats!", paid_amt)),
         Err(e) => pb.finish_with_message(format!("Payment failed: {}", e)),
     }
@@ -712,6 +715,9 @@ async fn cmd_resume(wallet_path: &PathBuf, tx_id: &str) -> Result<()> {
         ecash_core::types::TransactionType::Melt(_) => "Melt",
         ecash_core::types::TransactionType::Issue(_) => "Issue",
         ecash_core::types::TransactionType::Redeem(_) => "Redeem",
+        ecash_core::types::TransactionType::Send(_) => "Send",
+        ecash_core::types::TransactionType::ReceiveEcash(_) => "ReceiveEcash",
+        ecash_core::types::TransactionType::ReceiveLightning(_) => "ReceiveLightning",
     });
 
     match tx.tx_type {
@@ -744,6 +750,11 @@ async fn cmd_resume(wallet_path: &PathBuf, tx_id: &str) -> Result<()> {
         ecash_core::types::TransactionType::Mint(_) => {
             ecash_wallet::retry_mint(&mut state, wallet_path, &passphrase, tx_id).await?;
             println!("Successfully retried mint and salvaged funds into wallet!");
+        }
+        ecash_core::types::TransactionType::Send(_) | 
+        ecash_core::types::TransactionType::ReceiveEcash(_) | 
+        ecash_core::types::TransactionType::ReceiveLightning(_) => {
+            println!("Resuming this transaction type is not supported yet.");
         }
     }
 
@@ -937,7 +948,7 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
                 }
 
                 let pb = ui::progress_spinner("Paying invoice…");
-                match pay_invoice(&mut state, wallet_path, &passphrase, &ln_invoice).await {
+                match pay_invoice(&mut state, wallet_path, &passphrase, &ln_invoice, None).await {
                     Ok(paid_amt) => pb.finish_with_message(format!("Paid {} sats!", paid_amt)),
                     Err(e) => pb.finish_with_message(format!("Payment failed: {}", e)),
                 }
