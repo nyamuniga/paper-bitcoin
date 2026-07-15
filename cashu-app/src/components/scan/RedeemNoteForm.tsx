@@ -6,8 +6,6 @@ interface RedeemNoteFormProps {
   invoice: string;
   setInvoice: (val: string) => void;
   redeeming: boolean;
-  redeemSuccess: boolean;
-  error: string | null;
   onRedeem: () => void;
   noteAmount: number;
   redeemMethod: 'lightning' | 'wallet';
@@ -16,7 +14,7 @@ interface RedeemNoteFormProps {
 }
 
 export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({ 
-  invoice, setInvoice, redeeming, redeemSuccess, error, onRedeem, noteAmount, redeemMethod, setRedeemMethod, hasExtraProofs
+  invoice, setInvoice, redeeming, onRedeem, noteAmount, redeemMethod, setRedeemMethod, hasExtraProofs
 }) => {
   const [showScanner, setShowScanner] = useState(false);
 
@@ -56,13 +54,7 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
   return (
     <div className="pt-6 border-t border-outline-variant/20 mt-4">
       <h3 className="text-headline-lg-mobile text-lg font-headline-lg-mobile mb-4">Redeem Options</h3>
-      {redeemSuccess ? (
-        <div className="text-center text-emerald-400 py-6 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-          <CheckCircle className="w-12 h-12 mx-auto mb-3" />
-          <div className="font-bold text-lg">Successfully Redeemed!</div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4">
           <label className="block text-label-caps font-label-caps text-on-surface-variant tracking-widest mt-2">REDEEM METHOD</label>
           <div className="grid grid-cols-2 gap-3 mb-2">
             <button
@@ -148,7 +140,6 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
             </div>
           )}
 
-          {error && <div className="text-error text-sm text-center">{error}</div>}
           <button
             onClick={onRedeem}
             disabled={redeeming || (redeemMethod === 'lightning' && (!invoice || isInvalidAmount))}
@@ -159,7 +150,6 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
             {redeeming ? <Loader2 className="animate-spin w-6 h-6" /> : redeemMethod === 'wallet' ? 'Redeem to Wallet' : 'Pay to Invoice'}
           </button>
         </div>
-      )}
     </div>
   );
 };
