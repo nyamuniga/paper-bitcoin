@@ -168,6 +168,15 @@ The `WalletState` (saved in `~/.ecash/wallet.json`) acts as both the fallback sa
 - **Offline Ignorance:** When paying an invoice directly from the dashboard, the wallet iterates through the known mints. If a mint is offline (e.g., local mock mints), the CLI gracefully catches the network timeout and skips to the next mint, ensuring offline infrastructure doesn't block access to healthy funds.
 - **Change Collection:** Any Lightning invoice payment made from the wallet automatically calculates maximum possible change, generates blind signatures, and sweeps the change back into the local state.
 
+### Wallet Restoration (NUT-09)
+The `ecash-wallet` implements deterministic wallet restoration according to the Cashu NUT-09 specification.
+- **Deterministic Secrets**: Derives token secrets sequentially from a single BIP39 seed phrase, allowing users to restore their balances across all mints just by entering their recovery phrase.
+- **Batch Chunking (DoS Protection)**: Scanning a large gap limit of indices across multiple token denominations (e.g., 64 amounts * 100 indices = 6,400 tokens) can trigger "Payload Too Large" DoS limits on production mints. The wallet engine automatically chunks `/v1/restore` and `/v1/checkstate` requests into safe batch sizes (e.g., 500 items) to guarantee reliable recovery on constrained mints.
+- **Dual-Array Parsing**: Robustly parses mint responses by zipping `outputs` and `signatures` arrays to flawlessly map recovered `B_` values to `C_` signatures, even from strict mints that enforce array segregation.
+
+### URL Normalization & Case Sensitivity
+To support non-standard mint URL paths (e.g., `mint.minibits.cash/Bitcoin`), the wallet engine's URL normalizer intelligently prepends `https://` schemas while preserving exact path casing. This prevents forced `.toLowerCase()` destruction of paths, ensuring compatibility with all mint deployments.
+
 ## 7. Codebase Navigation
 
 The project is structured as a modular Cargo workspace. If you are exploring the source code, here is where to look to understand the system:
