@@ -26,7 +26,7 @@ export const ConfirmResetDialog: React.FC<ConfirmResetDialogProps> = ({ onCancel
 
   return (
     <div className="flex h-screen flex-col items-center justify-center p-6 bg-background">
-      <div className="w-full max-w-sm bg-surface/50 backdrop-blur-xl border border-red-900/50 rounded-3xl p-8 shadow-2xl">
+      <div className="w-full max-w-sm bg-surface-container-high border border-red-900/50 rounded-3xl p-8 shadow-2xl">
         <h1 className="text-2xl font-bold mb-4 text-center text-red-500">Delete Wallet?</h1>
         <p className="text-gray-300 text-center text-sm mb-8">
           WARNING: This will permanently delete your existing wallet. If you do not have your 24-word recovery phrase, your funds will be lost forever. Are you absolutely sure?

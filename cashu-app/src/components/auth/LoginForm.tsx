@@ -18,7 +18,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onRestore, onReset, onErro
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passphrase) return onError('Please enter your passphrase');
-    
+
     setLoading(true);
     onClearError();
     try {
@@ -50,10 +50,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onRestore, onReset, onErro
         {loading ? <RefreshCw className="animate-spin" size={20} /> : <span className="flex items-center gap-2"><Unlock size={18} /> Unlock Wallet</span>}
       </button>
       <div className="flex flex-col items-center mt-2 space-y-2">
-        <button type="button" onClick={onRestore} className="text-sm text-gray-500 hover:text-primary transition-colors">
+        <button type="button" onClick={onRestore} className="text-sm text-gray-300 hover:text-primary transition-colors">
           Forgot passphrase? Restore from backup
         </button>
-        <button type="button" onClick={onReset} className="text-sm text-red-500/70 hover:text-red-500 transition-colors">
+        <button type="button" onClick={onReset} className="text-sm text-red-400 hover:text-red-500 transition-colors">
           Lost everything? Delete wallet & start fresh
         </button>
       </div>
