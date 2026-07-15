@@ -147,7 +147,8 @@ To prevent data loss and optimize network performance, the backend engine execut
 
 - **Concurrent Swaps:** When redeeming from multiple child mints, the engine spawns asynchronous futures (via `join_all`) to melt proofs simultaneously across all mints. 
 - **Idempotency & Retries:** If a Mint connection times out during issuance, it might return an `outputs already signed` error on retry. The frontend handles these transient idempotency errors gracefully through background polling without alarming the user.
-- **Journaled Transactions:** Before sweeping or minting, a `Pending` transaction is persisted to the `WalletState`. If the app crashes or network dies mid-flight, the `resume_pending_transactions` routine automatically recovers signatures and finalizes the operation upon restart.
+- **Journaled Transactions:** Before sweeping, minting, or paying a Lightning invoice, a `Pending` transaction is strictly persisted to the `WalletState`. If the app crashes or the network dies mid-flight (e.g. waiting for a lightning invoice to be paid), the transaction remains in the history.
+- **Unified Recovery UI:** The frontend leverages a robust `check_transaction_status` backend command. Users can click "Check Status & Recover" on any Pending transaction in their UI history to safely resume the operation, fetch stranded tokens from the mint, or gracefully mark it as failed without losing funds.
 - **Atomic Commits:** The engine saves the modified proofs to disk *before* propagating success to the user, ensuring funds are never orphaned.
 
 ### Offline Mints During Redemption (The "All-or-Nothing" Rule)
@@ -197,7 +198,8 @@ Offline integrity checking.
 ### 5. `cashu-app` (The Frontend App)
 A native cross-platform application built with Tauri and React.
 - **`src-tauri/src/commands/`**: Rust backend bindings. For example, `redeem.rs` and `issue.rs` expose the `ecash-wallet` engine to the React frontend.
-- **`src/pages/`**: The React UI. `Issue.tsx` provides the multi-mint selection menu and handles background polling to prevent race conditions. `Scan.tsx` requests camera permissions and decodes the physical notes.
+- **`src/hooks/`**: Clean UI architecture. All asynchronous state, Tauri backend invocations, transaction polling, and error handling are encapsulated in custom React hooks (e.g., `useHistory`, `useBitcoin`, `useEcash`, `useMints`).
+- **`src/pages/`**: The React UI. Composed of pure UI components that consume the custom hooks. `Issue.tsx` provides the multi-mint selection menu, and `Scan.tsx` decodes physical notes.
 
 ### 6. `ecash-cli` (The Terminal interface)
 The command-line wrapper.
