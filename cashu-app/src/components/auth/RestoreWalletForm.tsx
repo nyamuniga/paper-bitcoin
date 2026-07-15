@@ -56,7 +56,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
       >
         {loading ? <RefreshCw className="animate-spin" size={20} /> : 'Restore Wallet'}
       </button>
-      <button type="button" onClick={onCancel} className="text-sm text-gray-500 hover:text-primary transition-colors mt-2">
+      <button type="button" onClick={onCancel} className="text-sm text-gray-300 hover:text-primary transition-colors mt-2">
         Cancel
       </button>
     </form>
