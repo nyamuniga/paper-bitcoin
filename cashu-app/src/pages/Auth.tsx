@@ -22,7 +22,8 @@ export const Auth = () => {
     unlockWallet,
     createWallet,
     restoreWallet,
-    resetWallet
+    resetWallet,
+    restoreProgress
   } = useAuth();
 
   if (isSetup === null) {
@@ -101,6 +102,7 @@ export const Auth = () => {
             onCancel={() => setMode(isSetup ? 'login' : 'create')}
             onError={triggerError}
             onRestore={restoreWallet}
+            restoreProgress={restoreProgress}
           />
         )}
       </div>

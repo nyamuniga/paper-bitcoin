@@ -81,14 +81,29 @@ pub async fn create_wallet(passphrase: String, state: State<'_, AppState>) -> Co
 }
 
 #[tauri::command]
-pub async fn restore_wallet(mnemonic: String, passphrase: String, mint_urls: Vec<String>, state: State<'_, AppState>) -> CommandResult<crate::commands::wallet::WalletInfo> {
+pub async fn restore_wallet(
+    app_handle: tauri::AppHandle,
+    mnemonic: String,
+    passphrase: String,
+    mint_urls: Vec<String>,
+    state: State<'_, AppState>
+) -> CommandResult<crate::commands::wallet::WalletInfo> {
     let path = state.wallet_path.clone();
     let seed_hex = ecash_wallet::mnemonic_to_seed_hex(&mnemonic)?;
     let mut w_state = WalletState::new(seed_hex, Some(mnemonic.clone()));
     
     // We can do restore logic if we have mint URLs
     if !mint_urls.is_empty() {
-        if let Err(e) = ecash_wallet::restore::restore_from_mints(&mut w_state, &path, &passphrase, mint_urls).await {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let app = app_handle.clone();
+        tokio::spawn(async move {
+            while let Some(msg) = rx.recv().await {
+                use tauri::Emitter;
+                app.emit("restore-progress", msg).ok();
+            }
+        });
+
+        if let Err(e) = ecash_wallet::restore::restore_from_mints(&mut w_state, &path, &passphrase, mint_urls, Some(tx)).await {
             println!("Restore from mints failed: {}", e);
             // We continue, the state still has the seed
         }

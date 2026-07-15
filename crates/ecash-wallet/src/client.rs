@@ -18,6 +18,7 @@ pub fn check_api_error(v: &serde_json::Value, prefix: &str) -> Result<()> {
     Ok(())
 }
 
+#[derive(Clone)]
 pub struct MintClient {
     pub http: reqwest::Client,
     pub url: String,

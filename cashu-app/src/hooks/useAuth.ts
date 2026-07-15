@@ -10,6 +10,19 @@ export const useAuth = () => {
   const [showConfirmReset, setShowConfirmReset] = useState(false);
   const [generatedMnemonic, setGeneratedMnemonic] = useState('');
   const [loading, setLoading] = useState(false);
+  const [restoreProgress, setRestoreProgress] = useState<string[]>([]);
+  
+  useEffect(() => {
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('restore-progress', (event) => {
+        setRestoreProgress(prev => {
+            const next = [...prev, event.payload as string];
+            if (next.length > 50) return next.slice(next.length - 50); // Keep last 50 logs
+            return next;
+        });
+      });
+    });
+  }, []);
   
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
@@ -63,6 +76,7 @@ export const useAuth = () => {
 
   const restoreWallet = async (mnemonic: string, passphrase: string, mintUrls: string[]) => {
     setLoading(true);
+    setRestoreProgress([]);
     handleClearError();
     try {
       await invoke('restore_wallet', { mnemonic, passphrase, mintUrls });
@@ -124,6 +138,7 @@ export const useAuth = () => {
     createWallet,
     restoreWallet,
     resetWallet,
-    lockWallet
+    lockWallet,
+    restoreProgress
   };
 };

@@ -15,6 +15,7 @@ pub async fn restore_from_mints(
     wallet_path: &PathBuf,
     passphrase: &str,
     mint_urls: Vec<String>,
+    progress_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> Result<u64> {
     let mut total_restored = 0;
     let mut max_used_index = -1_i64;
@@ -66,21 +67,47 @@ pub async fn restore_from_mints(
             }
         }
 
+        if let Some(tx) = &progress_tx {
+            tx.send(format!("Requesting restore of {} outputs from {}", output_json.len(), mint_url)).ok();
+        }
         println!("Requesting restore of {} outputs from {}", output_json.len(), mint_url);
 
         let mut out_arr = Vec::new();
         let mut sig_arr = Vec::new();
         
-        for chunk in output_json.chunks(500) {
-            match client.restore_tokens(chunk.to_vec()).await {
-                Ok((o, s)) => {
-                    out_arr.extend(o);
-                    sig_arr.extend(s);
+        use futures::StreamExt;
+        
+        // Chunk size 200 is small enough for mobile proxy limits (~30KB),
+        // and concurrency of 5 prevents dropping the network while speeding it up.
+        let chunks: Vec<_> = output_json.chunks(200).map(|c| c.to_vec()).collect();
+        let mut stream = futures::stream::iter(chunks)
+            .map(|chunk| {
+                let client = client.clone();
+                let mint_url = mint_url.clone();
+                async move {
+                    let mut retries = 3;
+                    loop {
+                        match client.restore_tokens(chunk.clone()).await {
+                            Ok((o, s)) => return Some((o, s)),
+                            Err(e) => {
+                                retries -= 1;
+                                if retries == 0 {
+                                    println!("Restore failed for chunk on {} after 3 retries: {}", mint_url, e);
+                                    return None;
+                                }
+                                println!("Restore chunk failed on {}, retrying... ({})", mint_url, e);
+                                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                            }
+                        }
+                    }
                 }
-                Err(e) => {
-                    println!("Restore failed for chunk on {}: {}", mint_url, e);
-                    // continue with next chunk or break? Let's just continue
-                }
+            })
+            .buffer_unordered(5); // 5 concurrent requests
+
+        while let Some(res) = stream.next().await {
+            if let Some((o, s)) = res {
+                out_arr.extend(o);
+                sig_arr.extend(s);
             }
         }
 
@@ -146,10 +173,20 @@ pub async fn restore_from_mints(
         }
         
         if !unspent.is_empty() {
+            if let Some(tx) = &progress_tx {
+                tx.send(format!("Restored {} unspent proofs from {}", unspent.len(), mint_url)).ok();
+            }
             println!("Restored {} unspent proofs from {}", unspent.len(), mint_url);
             state.proofs.entry(mint_url.clone()).or_default().extend(unspent);
-            if !state.mints.contains(&mint_url) {
-                state.mints.push(mint_url);
+            if max_used_index >= 0 {
+                state.derivation_index = (max_used_index + 1) as u64;
+                if !state.mints.contains(&mint_url) {
+                    state.mints.push(mint_url.clone());
+                }
+            }
+        } else {
+            if let Some(tx) = &progress_tx {
+                tx.send(format!("No unspent proofs found on {}", mint_url)).ok();
             }
         }
     }
