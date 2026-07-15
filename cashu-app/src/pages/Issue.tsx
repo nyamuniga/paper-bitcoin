@@ -4,6 +4,7 @@ import { InvoicePaymentPending } from '../components/issue/InvoicePaymentPending
 import { IssueAmountStep } from '../components/issue/IssueAmountStep';
 import { IssueMintsStep } from '../components/issue/IssueMintsStep';
 import { IssueSummaryStep } from '../components/issue/IssueSummaryStep';
+import { IssueLoadingStep } from '../components/issue/IssueLoadingStep';
 import { useIssue } from '../hooks/useIssue';
 
 import { WalletPaymentPending } from '../components/issue/WalletPaymentPending';
@@ -62,6 +63,18 @@ export const Issue = () => {
     );
   }
 
+  const isProcessing = loading || (!invoicePayload && !issuedNote && error);
+
+  if (isProcessing && step === 3) {
+    return (
+      <IssueLoadingStep
+        debugLogs={debugLogs}
+        error={error}
+        onBack={() => setError('')}
+      />
+    );
+  }
+
   if (step === 1) {
     return (
       <IssueAmountStep
@@ -94,8 +107,6 @@ export const Issue = () => {
       loading={loading}
       onIssue={handleIssue}
       onBack={() => setStep(2)}
-      error={error}
-      debugLogs={debugLogs}
     />
   );
 };

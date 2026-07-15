@@ -14,12 +14,10 @@ interface IssueSummaryStepProps {
   loading: boolean;
   onIssue: () => void;
   onBack: () => void;
-  error: string;
-  debugLogs: string[];
 }
 
 export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
-  sats, mintUrls, strategy, setStrategy, fundMethod, setFundMethod, loading, onIssue, onBack, error, debugLogs
+  sats, mintUrls, strategy, setStrategy, fundMethod, setFundMethod, loading, onIssue, onBack
 }) => {
   const amount = parseInt(sats) || 0;
 
@@ -129,15 +127,6 @@ export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
           </div>
         </div>
 
-        {/* Error */}
-        {error && <div className="text-error text-sm text-center bg-error/10 p-3 rounded-xl border border-error/20">{error}</div>}
-
-        {/* Debug logs */}
-        {debugLogs.length > 0 && (
-          <div className="bg-surface-container-lowest p-4 rounded-xl text-xs font-mono text-on-surface-variant max-h-32 overflow-y-auto border border-outline-variant/30 shadow-inner">
-            {debugLogs.map((l, i) => <div key={i}>{l}</div>)}
-          </div>
-        )}
       </div>
 
       {/* Navigation buttons */}

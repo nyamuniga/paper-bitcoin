@@ -143,8 +143,7 @@ pub async fn issue_direct_note(
     
     let total_sats = allocations.iter().map(|a| a.1).sum();
 
-    // Just use 0 for block height in direct notes, or fetch it if needed.
-    let block_height = 0; 
+    let block_height = crate::get_block_height().await;
 
     let note = PhysicalNote {
         amount_sats: total_sats,

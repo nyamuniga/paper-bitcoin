@@ -77,6 +77,7 @@ export const useScan = () => {
     setNoteInfo,
     loading,
     error,
+    setError,
     verified,
     verifyResult,
     invoice,
