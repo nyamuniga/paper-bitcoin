@@ -23,8 +23,14 @@ fn select_exact_proofs(proofs: &[Proof], target_amount: u64) -> Option<Vec<Proof
     None
 }
 
+#[derive(serde::Serialize)]
+pub struct SendEcashResult {
+    pub token: String,
+    pub tx_id: String,
+}
+
 #[tauri::command]
-pub async fn send_ecash(mint_url: String, amount: u64, state: State<'_, AppState>) -> CommandResult<String> {
+pub async fn send_ecash(mint_url: String, amount: u64, state: State<'_, AppState>) -> CommandResult<SendEcashResult> {
     let path = state.wallet_path.clone();
     
     let passphrase = {
@@ -121,7 +127,7 @@ pub async fn send_ecash(mint_url: String, amount: u64, state: State<'_, AppState
         .as_millis());
 
     let tx = Transaction {
-        id: tx_id,
+        id: tx_id.clone(),
         tx_type: TransactionType::Send(SendTransactionData {
             token_string: encoded.clone(),
             proofs: final_send_proofs,
@@ -140,7 +146,7 @@ pub async fn send_ecash(mint_url: String, amount: u64, state: State<'_, AppState
     // Save wallet state
     w_state.save_encrypted(&path, &passphrase)?;
 
-    Ok(encoded)
+    Ok(SendEcashResult { token: encoded, tx_id: tx_id.clone() })
 }
 
 #[tauri::command]

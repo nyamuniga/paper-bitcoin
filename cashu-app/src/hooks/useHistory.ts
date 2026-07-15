@@ -98,6 +98,22 @@ export const useHistory = () => {
     }
   };
 
+  const handleCheckStatus = async (txId: string) => {
+    try {
+      toast.loading('Checking token status...', { id: txId });
+      const status = await invoke<string>('check_transaction_status', { txId });
+      if (status === 'Spent') {
+        toast.success('Tokens have been successfully claimed!', { id: txId });
+      } else if (status === 'Partially Spent') {
+        toast.success('Some tokens were claimed, but some remain unspent.', { id: txId });
+      } else {
+        toast.error('Tokens are still unspent.', { id: txId });
+      }
+    } catch (e: any) {
+      toast.error(`Error checking status: ${e}`, { id: txId });
+    }
+  };
+
   return {
     transactions,
     loading,
@@ -105,6 +121,7 @@ export const useHistory = () => {
     handleRetryMint,
     handleCheckMelt,
     handleCheckIssue,
-    handleDownloadNote
+    handleDownloadNote,
+    handleCheckStatus
   };
 };

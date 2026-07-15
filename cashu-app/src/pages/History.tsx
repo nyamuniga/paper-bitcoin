@@ -17,7 +17,8 @@ export default function History() {
     handleRetryMint,
     handleCheckMelt,
     handleCheckIssue,
-    handleDownloadNote
+    handleDownloadNote,
+    handleCheckStatus
   } = useHistory();
 
   const handleCardClick = (tx: Transaction) => {
@@ -67,6 +68,7 @@ export default function History() {
         <TransactionDetailsModal
           tx={selectedTx}
           onClose={() => setSelectedTx(null)}
+          onCheckStatus={() => handleCheckStatus(selectedTx.id)}
         />
       )}
     </main>

@@ -173,6 +173,21 @@ export const RecentTransactions: React.FC = () => {
         <TransactionDetailsModal
           tx={selectedTx}
           onClose={() => setSelectedTx(null)}
+          onCheckStatus={async () => {
+            try {
+              toast.loading('Checking token status...', { id: selectedTx.id });
+              const status = await invoke<string>('check_transaction_status', { txId: selectedTx.id });
+              if (status === 'Spent') {
+                toast.success('Tokens have been successfully claimed!', { id: selectedTx.id });
+              } else if (status === 'Partially Spent') {
+                toast.success('Some tokens were claimed, but some remain unspent.', { id: selectedTx.id });
+              } else {
+                toast.error('Tokens are still unspent.', { id: selectedTx.id });
+              }
+            } catch (e: any) {
+              toast.error(`Error checking status: ${e}`, { id: selectedTx.id });
+            }
+          }}
         />
       )}
     </section>

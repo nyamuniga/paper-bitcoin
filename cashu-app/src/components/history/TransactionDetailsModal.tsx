@@ -8,9 +8,10 @@ import { useUrEncoder } from '../../hooks/useUrEncoder';
 interface TransactionDetailsModalProps {
   tx: Transaction;
   onClose: () => void;
+  onCheckStatus?: () => void;
 }
 
-export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ tx, onClose }) => {
+export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ tx, onClose, onCheckStatus }) => {
   const isMint = 'Mint' in tx.tx_type;
   const isIssue = 'Issue' in tx.tx_type;
   const isMelt = 'Melt' in tx.tx_type;
@@ -146,6 +147,16 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 <span className="text-label-caps font-label-caps text-on-surface-variant flex-shrink-0">PROOFS MELTED</span>
                 <span className="text-body-md font-body-md text-on-surface text-right">{tx.tx_type.Melt.proofs?.length || 0}</span>
               </div>
+            )}
+            
+            {(isSend || isIssue) && onCheckStatus && (
+              <button
+                onClick={onCheckStatus}
+                className="mt-2 w-full py-2.5 bg-surface-container-highest hover:bg-surface-bright text-on-surface rounded-xl font-label-lg transition-colors border border-outline-variant/20 flex items-center justify-center gap-2"
+              >
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
+                Check if Claimed
+              </button>
             )}
           </div>
 
