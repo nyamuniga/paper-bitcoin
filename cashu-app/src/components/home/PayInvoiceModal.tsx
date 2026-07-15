@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { X, Loader2, Zap } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
-import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
+import { useBitcoin } from '../../hooks/useBitcoin';
+import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
 
@@ -13,8 +13,7 @@ interface PayInvoiceModalProps {
 
 export const PayInvoiceModal: React.FC<PayInvoiceModalProps> = ({ mintUrl, onClose }) => {
   const [invoice, setInvoice] = useState('');
-  const [paying, setPaying] = useState(false);
-  const refreshWallet = useWalletStore((s) => s.refreshWallet);
+  const { paying, payInvoice } = useBitcoin(mintUrl);
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const availableBalance = mintBalances[mintUrl] || 0;
 
@@ -45,16 +44,9 @@ export const PayInvoiceModal: React.FC<PayInvoiceModalProps> = ({ mintUrl, onClo
 
   const handlePay = async () => {
     if (!invoice || isInsufficient) return;
-    setPaying(true);
-    try {
-      await invoke('pay_invoice', { invoice, mintUrl });
-      toast.success('Invoice paid successfully!');
-      refreshWallet();
+    const success = await payInvoice(invoice);
+    if (success) {
       onClose();
-    } catch (e: any) {
-      toast.error(`Payment failed: ${e}`);
-    } finally {
-      setPaying(false);
     }
   };
 
@@ -123,6 +115,9 @@ export const PayInvoiceModal: React.FC<PayInvoiceModalProps> = ({ mintUrl, onClo
           </button>
         </div>
       </div>
+      {paying && (
+        <FullScreenLoader title="Sending Bitcoin..." message="Paying the lightning invoice." />
+      )}
     </div>
   );
 };

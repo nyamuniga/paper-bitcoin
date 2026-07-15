@@ -1,30 +1,26 @@
 import React, { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, Plus, X } from 'lucide-react';
-import { useWalletStore } from '../../store/wallet';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
 
 interface RestoreWalletFormProps {
   onCancel: () => void;
   onError: (msg: string) => void;
-  onClearError: () => void;
+  onRestore: (mnemonic: string, passphrase: string, mintUrls: string[]) => Promise<boolean>;
 }
 
-export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, onError, onClearError }) => {
+export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, onError, onRestore }) => {
   const [step, setStep] = useState<1 | 2>(1);
   const [mnemonic, setMnemonic] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const [mintUrls, setMintUrls] = useState<string[]>([]);
   const [newMint, setNewMint] = useState('');
   const [loading, setLoading] = useState(false);
-  const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();
     if (!mnemonic) return onError('Please enter your 24-word recovery phrase');
     if (!passphrase) return onError('Please choose a new passphrase for encryption');
-    onClearError();
     setStep(2);
   };
 
@@ -56,18 +52,12 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
     }
   };
 
-  const handleRestore = async (e: React.FormEvent) => {
+  const handleRestoreSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     setLoading(true);
-    onClearError();
-    try {
-      await invoke('restore_wallet', { mnemonic, passphrase, mintUrls });
-      await refreshWallet();
-    } catch (e) {
-      console.error(e);
-      onError(String(e));
-    } finally {
+    const success = await onRestore(mnemonic, passphrase, mintUrls);
+    if (!success) {
       setLoading(false);
     }
   };
@@ -103,7 +93,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
   }
 
   return (
-    <form onSubmit={handleRestore} className="flex flex-col gap-4">
+    <form onSubmit={handleRestoreSubmit} className="flex flex-col gap-4">
       <div className="text-sm text-gray-300 text-center mb-2">
         Optionally, add Mint URLs to restore historical tokens from. If left blank, the wallet will just be imported with a 0 balance.
       </div>

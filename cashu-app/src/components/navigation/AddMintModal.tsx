@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Loader2, Plus, Landmark } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'react-hot-toast';
-import { useWalletStore } from '../../store/wallet';
+import { useMints } from '../../hooks/useMints';
 
 interface AddMintModalProps {
   onClose: () => void;
@@ -11,8 +10,7 @@ interface AddMintModalProps {
 
 export const AddMintModal: React.FC<AddMintModalProps> = ({ onClose }) => {
   const [mintUrl, setMintUrl] = useState('');
-  const [adding, setAdding] = useState(false);
-  const refreshWallet = useWalletStore((s) => s.refreshWallet);
+  const { loading: adding, addMint } = useMints();
 
   const handleAddMint = async () => {
     let finalUrl = mintUrl.trim();
@@ -34,16 +32,9 @@ export const AddMintModal: React.FC<AddMintModalProps> = ({ onClose }) => {
       return;
     }
 
-    setAdding(true);
-    try {
-      await invoke('add_mint', { mintUrl: finalUrl });
-      toast.success('Mint added successfully!');
-      refreshWallet();
+    const success = await addMint(finalUrl);
+    if (success) {
       onClose();
-    } catch (e: any) {
-      toast.error(`Failed to add mint: ${e}`);
-    } finally {
-      setAdding(false);
     }
   };
 

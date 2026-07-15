@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw } from 'lucide-react';
 
 interface CreateWalletFormProps {
   onRestore: () => void;
   onError: (msg: string) => void;
-  onClearError: () => void;
+  onCreate: (passphrase: string) => Promise<string | null>;
   onSuccess: (mnemonic: string) => void;
 }
 
-export const CreateWalletForm: React.FC<CreateWalletFormProps> = ({ onRestore, onError, onClearError, onSuccess }) => {
+export const CreateWalletForm: React.FC<CreateWalletFormProps> = ({ onRestore, onError, onCreate, onSuccess }) => {
   const [passphrase, setPassphrase] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -19,14 +18,10 @@ export const CreateWalletForm: React.FC<CreateWalletFormProps> = ({ onRestore, o
     if (passphrase.length < 8) return onError('Passphrase must be at least 8 characters');
 
     setLoading(true);
-    onClearError();
-    try {
-      const res: any = await invoke('create_wallet', { passphrase });
-      onSuccess(res.mnemonic);
-    } catch (e) {
-      console.error(e);
-      onError(String(e));
-    } finally {
+    const mnemonic = await onCreate(passphrase);
+    if (mnemonic) {
+      onSuccess(mnemonic);
+    } else {
       setLoading(false);
     }
   };

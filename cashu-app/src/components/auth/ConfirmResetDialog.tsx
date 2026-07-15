@@ -1,25 +1,21 @@
 import React, { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw } from 'lucide-react';
 
 interface ConfirmResetDialogProps {
   onCancel: () => void;
   onResetComplete: () => void;
-  onError: (msg: string) => void;
+  onConfirm: () => Promise<boolean>;
 }
 
-export const ConfirmResetDialog: React.FC<ConfirmResetDialogProps> = ({ onCancel, onResetComplete, onError }) => {
+export const ConfirmResetDialog: React.FC<ConfirmResetDialogProps> = ({ onCancel, onResetComplete, onConfirm }) => {
   const [loading, setLoading] = useState(false);
 
   const handleReset = async () => {
     setLoading(true);
-    try {
-      await invoke('reset_wallet');
+    const success = await onConfirm();
+    if (success) {
       onResetComplete();
-    } catch (e) {
-      console.error(e);
-      onError(String(e));
-    } finally {
+    } else {
       setLoading(false);
     }
   };

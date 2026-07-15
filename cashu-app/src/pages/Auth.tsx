@@ -19,7 +19,10 @@ export const Auth = () => {
     generatedMnemonic,
     setGeneratedMnemonic,
     triggerError,
-    handleClearError
+    unlockWallet,
+    createWallet,
+    restoreWallet,
+    resetWallet
   } = useAuth();
 
   if (isSetup === null) {
@@ -44,7 +47,7 @@ export const Auth = () => {
           setMode('create');
           setShowConfirmReset(false);
         }}
-        onError={triggerError}
+        onConfirm={resetWallet}
       />
     );
   }
@@ -80,7 +83,7 @@ export const Auth = () => {
             onRestore={() => setMode('restore')}
             onReset={() => setShowConfirmReset(true)}
             onError={triggerError}
-            onClearError={handleClearError}
+            onLogin={unlockWallet}
           />
         )}
 
@@ -88,7 +91,7 @@ export const Auth = () => {
           <CreateWalletForm
             onRestore={() => setMode('restore')}
             onError={triggerError}
-            onClearError={handleClearError}
+            onCreate={createWallet}
             onSuccess={setGeneratedMnemonic}
           />
         )}
@@ -97,7 +100,7 @@ export const Auth = () => {
           <RestoreWalletForm
             onCancel={() => setMode(isSetup ? 'login' : 'create')}
             onError={triggerError}
-            onClearError={handleClearError}
+            onRestore={restoreWallet}
           />
         )}
       </div>

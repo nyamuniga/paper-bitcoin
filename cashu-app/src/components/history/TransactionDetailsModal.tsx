@@ -8,10 +8,11 @@ import { useUrEncoder } from '../../hooks/useUrEncoder';
 interface TransactionDetailsModalProps {
   tx: Transaction;
   onClose: () => void;
-  onCheckStatus?: () => void;
+  onRecover?: () => void;
+  onCheckClaimed?: () => void;
 }
 
-export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ tx, onClose, onCheckStatus }) => {
+export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ tx, onClose, onRecover, onCheckClaimed }) => {
   const isMint = 'Mint' in tx.tx_type;
   const isIssue = 'Issue' in tx.tx_type;
   const isMelt = 'Melt' in tx.tx_type;
@@ -149,9 +150,19 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               </div>
             )}
             
-            {(isSend || isIssue) && onCheckStatus && (
+            {tx.status === 'Pending' && onRecover && (
               <button
-                onClick={onCheckStatus}
+                onClick={onRecover}
+                className="mt-2 w-full py-2.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-500 rounded-xl font-label-lg transition-colors border border-amber-500/30 flex items-center justify-center gap-2"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Check Status & Recover
+              </button>
+            )}
+
+            {tx.status !== 'Pending' && (isSend || isIssue) && onCheckClaimed && (
+              <button
+                onClick={onCheckClaimed}
                 className="mt-2 w-full py-2.5 bg-surface-container-highest hover:bg-surface-bright text-on-surface rounded-xl font-label-lg transition-colors border border-outline-variant/20 flex items-center justify-center gap-2"
               >
                 <CheckCircle className="w-4 h-4 text-emerald-400" />

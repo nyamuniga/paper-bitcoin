@@ -1,33 +1,24 @@
 import React, { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, Unlock } from 'lucide-react';
-import { useWalletStore } from '../../store/wallet';
 
 interface LoginFormProps {
   onRestore: () => void;
   onReset: () => void;
   onError: (msg: string) => void;
-  onClearError: () => void;
+  onLogin: (passphrase: string) => Promise<boolean>;
 }
 
-export const LoginForm: React.FC<LoginFormProps> = ({ onRestore, onReset, onError, onClearError }) => {
+export const LoginForm: React.FC<LoginFormProps> = ({ onRestore, onReset, onError, onLogin }) => {
   const [passphrase, setPassphrase] = useState('');
   const [loading, setLoading] = useState(false);
-  const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passphrase) return onError('Please enter your passphrase');
 
     setLoading(true);
-    onClearError();
-    try {
-      await invoke('unlock_wallet', { passphrase });
-      await refreshWallet();
-    } catch (e) {
-      console.error(e);
-      onError(String(e));
-    } finally {
+    const success = await onLogin(passphrase);
+    if (!success) {
       setLoading(false);
     }
   };

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Loader2 } from 'lucide-react';
 import { PageHeader } from '../shared/PageHeader';
 import QRCode from 'react-qr-code';
 import { useWalletStore } from '../../store/wallet';
+import { useBitcoin } from '../../hooks/useBitcoin';
 
 interface InvoicePaymentPendingProps {
   invoicePayload: any;
@@ -24,18 +24,18 @@ export const InvoicePaymentPending: React.FC<InvoicePaymentPendingProps> = ({
 }) => {
   const [internalLoading, setInternalLoading] = useState(false);
   const balance = useWalletStore((s) => s.balanceSats);
+  const { paying, payInvoice } = useBitcoin();
 
   const handlePayFromWallet = async () => {
     setInternalLoading(true);
-    try {
-      await invoke('pay_invoice', { invoice: invoicePayload.invoice });
-    } catch (e: any) {
-      onError("Payment failed: " + e.toString());
+    const success = await payInvoice(invoicePayload.invoice);
+    if (!success) {
+      onError("Payment failed");
       setInternalLoading(false);
     }
   };
 
-  const isLoading = loading || internalLoading;
+  const isLoading = loading || internalLoading || paying;
 
   return (
     <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col items-center">

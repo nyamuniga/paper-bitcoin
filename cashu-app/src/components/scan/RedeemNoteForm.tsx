@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle, Loader2, Zap, Wallet, QrCode } from 'lucide-react';
+import { Loader2, Zap, Wallet, QrCode } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 
 interface RedeemNoteFormProps {

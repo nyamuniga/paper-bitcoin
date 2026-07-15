@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { X, Loader2, Copy, Check, Coins, ArrowUp, ArrowDown, QrCode } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
+import { useEcash } from '../../hooks/useEcash';
 import QRCode from 'react-qr-code';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
@@ -10,6 +10,7 @@ import { useUrDecoder } from '../../hooks/useUrDecoder';
 import { AmountDisplay } from '../shared/AmountDisplay';
 import { NumberPad } from '../shared/NumberPad';
 import { MintIcon } from '../shared/MintIcon';
+import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { formatMintUrl } from '../../utils/format';
 
 interface EcashModalProps {
@@ -24,21 +25,19 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
 
   // Send state
   const [amount, setAmount] = useState('');
-  const [sending, setSending] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [txId, setTxId] = useState<string | null>(null);
-  const [isClaimed, setIsClaimed] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Receive state
   const [receiveToken, setReceiveToken] = useState('');
   const [showScanner, setShowScanner] = useState(false);
-  const [receiving, setReceiving] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState<number | null>(null);
+  
+  const { sending, receiving, isClaimed, setIsClaimed, sendEcash, receiveEcash, pollTransactionStatus, stopPolling } = useEcash(mintUrl);
   
   const urDecoder = useUrDecoder();
 
-  const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const availableBalance = mintBalances[mintUrl] || 0;
 
@@ -50,35 +49,18 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
 
   React.useEffect(() => {
     if (!txId || isClaimed) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const status = await invoke<string>('check_transaction_status', { txId });
-        if (status === 'Spent') {
-          setIsClaimed(true);
-          toast.success('Token has been claimed!');
-          refreshWallet();
-        }
-      } catch (e) {
-        console.error('Failed to poll status', e);
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
+    const cleanup = pollTransactionStatus(txId);
+    return () => {
+      cleanup?.then(c => c && c());
+    };
   }, [txId, isClaimed]);
 
   const handleSend = async () => {
     if (!isValid) return;
-    setSending(true);
-    try {
-      const result = await invoke<{token: string, tx_id: string}>('send_ecash', { mintUrl, amount: parsedAmount });
+    const result = await sendEcash(parsedAmount);
+    if (result) {
       setToken(result.token);
       setTxId(result.tx_id);
-      refreshWallet();
-    } catch (e: any) {
-      toast.error(`Send failed: ${e}`);
-    } finally {
-      setSending(false);
     }
   };
 
@@ -97,16 +79,9 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
   const handleReceive = async () => {
     const trimmed = receiveToken.trim();
     if (!trimmed) return;
-    setReceiving(true);
-    try {
-      const amt = await invoke<number>('receive_ecash', { tokenString: trimmed });
-      setReceivedAmount(amt);
-      await refreshWallet();
-      toast.success(`Received ₿${amt.toLocaleString()} sats!`);
-    } catch (e: any) {
-      toast.error(`Receive failed: ${e}`);
-    } finally {
-      setReceiving(false);
+    const amount = await receiveEcash(trimmed);
+    if (amount !== null) {
+      setReceivedAmount(amount);
     }
   };
 
@@ -116,6 +91,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
     setTxId(null);
     setCopied(false);
     setIsClaimed(false);
+    stopPolling();
   };
 
   const resetReceive = () => {
@@ -322,7 +298,10 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
                       >
                         Cancel Scanner
                       </button>
-                    </div>
+                      {receiving && (
+        <FullScreenLoader title="Receiving eCash..." message="Claiming tokens to your wallet." />
+      )}
+    </div>
                   ) : (
                     <div className="relative">
                       <textarea
@@ -358,6 +337,12 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
           )}
         </div>
       </div>
+      {sending && (
+        <FullScreenLoader title="Sending eCash..." message="Creating your tokens." />
+      )}
+      {receiving && (
+        <FullScreenLoader title="Receiving eCash..." message="Claiming tokens to your wallet." />
+      )}
     </div>
   );
 };

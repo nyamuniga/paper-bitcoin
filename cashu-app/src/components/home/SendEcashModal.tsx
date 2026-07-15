@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { X, Loader2, Copy, Check, Coins } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
-import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
+import { toast } from 'react-hot-toast';
+import { useEcash } from '../../hooks/useEcash';
 import QRCode from 'react-qr-code';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
 import { AmountDisplay } from '../shared/AmountDisplay';
 import { NumberPad } from '../shared/NumberPad';
+import { FullScreenLoader } from '../shared/FullScreenLoader';
 
 interface SendEcashModalProps {
   mintUrl: string;
@@ -17,11 +18,10 @@ interface SendEcashModalProps {
 
 export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose }) => {
   const [amount, setAmount] = useState('');
-  const [sending, setSending] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const { sending, sendEcash } = useEcash(mintUrl);
 
-  const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const availableBalance = mintBalances[mintUrl] || 0;
 
@@ -33,15 +33,9 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
 
   const handleSend = async () => {
     if (!isValid) return;
-    setSending(true);
-    try {
-      const result = await invoke<string>('send_ecash', { mintUrl, amount: parsedAmount });
-      setToken(result);
-      refreshWallet();
-    } catch (e: any) {
-      toast.error(`Send failed: ${e}`);
-    } finally {
-      setSending(false);
+    const result = await sendEcash(parsedAmount);
+    if (result) {
+      setToken(result.token);
     }
   };
 
@@ -155,6 +149,9 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
           )}
         </div>
       </div>
+      {sending && (
+        <FullScreenLoader title="Creating eCash Token..." message="Preparing your tokens for sending." />
+      )}
     </div>
   );
 };

@@ -37,17 +37,16 @@ pub async fn retry_mint(tx_id: String, state: State<'_, AppState>) -> CommandRes
 }
 
 #[tauri::command]
-pub async fn check_melt_status(tx_id: String, state: State<'_, AppState>) -> CommandResult<ecash_core::types::TransactionStatus> {
+pub async fn check_transaction_status(tx_id: String, state: State<'_, AppState>) -> CommandResult<ecash_core::types::TransactionStatus> {
     let path = state.wallet_path.clone();
     
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+        pass_lock.clone().ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
     };
 
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
-
-    let status = ecash_wallet::check_melt_status(&mut w_state, &path, &passphrase, &tx_id).await?;
+    let status = ecash_wallet::check_transaction_status(&mut w_state, &path, &passphrase, &tx_id).await?;
     
     Ok(status)
 }
@@ -165,7 +164,7 @@ pub async fn check_issue_status(tx_id: String, state: State<'_, AppState>) -> Co
 }
 
 #[tauri::command]
-pub async fn check_transaction_status(tx_id: String, state: State<'_, AppState>) -> CommandResult<String> {
+pub async fn check_token_spend_status(tx_id: String, state: State<'_, AppState>) -> CommandResult<String> {
     let path = state.wallet_path.clone();
     
     let passphrase = {

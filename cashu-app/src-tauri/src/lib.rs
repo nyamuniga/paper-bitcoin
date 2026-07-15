@@ -39,7 +39,6 @@ pub fn run() {
             commands::send::send_ecash,
             commands::send::receive_ecash,
             commands::receive::receive_lightning,
-            commands::receive::check_receive_lightning,
             commands::auth::is_wallet_setup,
             commands::auth::unlock_wallet,
             commands::auth::lock_wallet,
@@ -49,10 +48,10 @@ pub fn run() {
             commands::auth::restore_wallet,
             commands::history::get_transactions,
             commands::history::retry_mint,
-            commands::history::check_melt_status,
+            commands::history::check_transaction_status,
+            commands::history::check_token_spend_status,
             commands::history::get_note_svg,
             commands::history::check_issue_status,
-            commands::history::check_transaction_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
