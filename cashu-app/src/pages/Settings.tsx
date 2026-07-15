@@ -1,4 +1,5 @@
 import { RecoveryPhraseSection } from '../components/settings/RecoveryPhraseSection';
+import { WalletManagementSection } from '../components/settings/WalletManagementSection';
 import { PageHeader } from '../components/shared/PageHeader';
 
 export const Settings = () => {
@@ -8,6 +9,7 @@ export const Settings = () => {
       <PageHeader title="Settings & Security" subtitle="Manage your wallet keys and app preferences." />
 
       <RecoveryPhraseSection />
+      <WalletManagementSection />
     </main>
   );
 };

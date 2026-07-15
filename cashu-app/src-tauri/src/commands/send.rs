@@ -156,7 +156,7 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
 
     let mut input_proofs: Vec<Proof> = Vec::new();
     let mut total_amount: u64 = 0;
-    let mut mint_url = String::new();
+    let mint_url;
 
     if token_string.starts_with("cashuA") {
         let token_body = token_string.strip_prefix("cashuA").unwrap();

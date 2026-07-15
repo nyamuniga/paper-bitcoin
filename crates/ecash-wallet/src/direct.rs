@@ -1,7 +1,7 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use ecash_core::{
     dhke::{point_from_hex, BlindingSession},
-    types::{PhysicalNote, Proof, TokenEntry, CashuToken, PublicNoteData, PrivateNoteData, Transaction, TransactionType, IssueTransactionData, TransactionStatus},
+    types::{PhysicalNote, TokenEntry, PublicNoteData, PrivateNoteData, Transaction, TransactionType, IssueTransactionData, TransactionStatus},
     derivation::TokenDerivation,
 };
 use crate::{
