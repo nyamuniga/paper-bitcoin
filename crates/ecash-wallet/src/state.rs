@@ -156,6 +156,19 @@ impl WalletState {
         }
     }
 
+    pub fn remove_mint(&mut self, mint_url: &str) -> Result<()> {
+        let mint_url = normalize_mint_url(mint_url);
+        let balances = self.balance_by_mint();
+        if balances.get(&mint_url).copied().unwrap_or(0) > 0 {
+            return Err(anyhow::anyhow!("Cannot remove a mint with a non-zero balance"));
+        }
+        
+        self.mints.retain(|m| m != &mint_url);
+        self.trusted_keys.remove(&mint_url);
+        self.proofs.remove(&mint_url);
+        Ok(())
+    }
+
     pub fn normalize_mints(&mut self) {
         // Safe lowercase mints list
         let mut new_mints = Vec::new();
@@ -214,10 +227,19 @@ impl WalletState {
 
 pub fn normalize_mint_url(url_str: &str) -> String {
     let clean = url_str.trim_end_matches('/');
-    if let Ok(parsed) = reqwest::Url::parse(clean) {
+    
+    // Automatically prepend https:// if no scheme is provided
+    let with_scheme = if !clean.starts_with("http://") && !clean.starts_with("https://") {
+        format!("https://{}", clean)
+    } else {
+        clean.to_string()
+    };
+    
+    if let Ok(parsed) = reqwest::Url::parse(&with_scheme) {
         parsed.to_string().trim_end_matches('/').to_string()
     } else {
-        clean.to_lowercase()
+        // Fallback: don't use to_lowercase as it destroys path casing like /Bitcoin
+        with_scheme
     }
 }
 
