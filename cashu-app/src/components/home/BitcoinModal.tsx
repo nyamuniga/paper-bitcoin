@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 import { formatMintUrl } from '../../utils/format';
+import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { MintIcon } from '../shared/MintIcon';
 import { AmountDisplay } from '../shared/AmountDisplay';
 import { NumberPad } from '../shared/NumberPad';
@@ -105,14 +106,22 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl, onClose }) 
     const poll = async () => {
       while (pollingRef.current && isMounted) {
         try {
-          await invoke('check_receive_lightning', { mintUrl, quoteId, amount: parsedReceiveAmount });
+          const status = await invoke<string>('check_transaction_status', { txId: quoteId });
           if (!isMounted) return;
-          setReceiveSuccess(true);
-          await refreshWallet();
-          toast.success(`Received ₿${parsedReceiveAmount.toLocaleString()} sats!`);
-          return;
+          
+          if (status === 'Success') {
+            setReceiveSuccess(true);
+            await refreshWallet();
+            toast.success(`Received ₿${parsedReceiveAmount.toLocaleString()} sats!`);
+            return;
+          } else if (status === 'Failed') {
+            toast.error("Transaction failed.");
+            return;
+          }
+          // If Pending, continue polling
+          await new Promise(r => setTimeout(r, 2000));
         } catch {
-          // Not paid yet, keep polling
+          // Network error or other error, keep polling
           await new Promise(r => setTimeout(r, 2000));
         }
       }
@@ -361,7 +370,11 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl, onClose }) 
             )
           )}
         </div>
-      </div>
+        
+        {paying && (
+          <FullScreenLoader title="Sending Bitcoin..." message="Paying the lightning invoice." />
+        )}
+ </div>
     </div>
   );
 };

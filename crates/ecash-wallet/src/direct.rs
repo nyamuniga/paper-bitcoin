@@ -30,6 +30,34 @@ pub async fn issue_direct_note(
     rand::thread_rng().fill_bytes(&mut seed_bytes);
     let note_seed_hex = hex::encode(seed_bytes);
     let mut note_deriv = TokenDerivation::from_hex(&note_seed_hex)?;
+    let total_sats = allocations.iter().map(|a| a.1).sum();
+
+    let mut allocs = Vec::new();
+    for (m, a) in allocations { allocs.push((m.to_string(), *a)); }
+
+    // Record the pending issue tx
+    let tx_id = format!("tx_issue_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+    let pending_tx = Transaction {
+        id: tx_id.clone(),
+        tx_type: TransactionType::Issue(IssueTransactionData {
+            note: None,
+            allocations: allocs,
+            hub_mint: "Direct Wallet Issue".to_string(),
+            quote_id: "".to_string(),
+            master_seed_hex: note_seed_hex.clone(),
+            fee_strategy: "direct".to_string(),
+            hub_blinding_sessions_hex: vec![],
+            hub_outputs: vec![],
+            child_quotes: vec![],
+        }),
+        amount: total_sats,
+        fee: 0,
+        status: TransactionStatus::Pending,
+        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+        mint_url: "Local Wallet".to_string(),
+    };
+    state.transactions.push(pending_tx);
+    state.save_encrypted(wallet_path, passphrase)?;
 
     let mut entries = Vec::new();
     let mut public_entries = Vec::new();
@@ -37,12 +65,14 @@ pub async fn issue_direct_note(
     // 3. For each mint allocation, perform a swap to get fresh tokens
     for (mint_url, amt) in allocations {
         let client = MintClient::new(*mint_url);
-        let keyset = client.fetch_keyset().await?;
+        let keyset = client.fetch_keyset().await.map_err(|e| {
+            if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) { tx.status = TransactionStatus::Failed; }
+            state.save_encrypted(wallet_path, passphrase).ok();
+            anyhow!("Failed to fetch keyset: {}", e)
+        })?;
         
         // Find inputs to melt
         let mut sorted_proofs = state.proofs.get(*mint_url).unwrap().clone();
-        sorted_proofs.sort_by_key(|p| std::cmp::Reverse(p.amount)); // larger first to reduce inputs? Or smallest first? 
-        // Actually smallest first is better to clear dust, let's do smallest first
         sorted_proofs.sort_by_key(|p| p.amount);
         
         let mut selected_for_swap = Vec::new();
@@ -99,7 +129,16 @@ pub async fn issue_direct_note(
         state.save_encrypted(wallet_path, passphrase)?;
 
         // Call swap
-        let sigs = client.swap_tokens(input_json, output_json).await?;
+        let sigs_result = client.swap_tokens(input_json, output_json).await;
+        let sigs = match sigs_result {
+            Ok(s) => s,
+            Err(e) => {
+                // Network error mid-loop. It's pending. Keep pending and abort.
+                // The user can recover via history.
+                return Err(anyhow!("Network error during swap with {}: {}. Transaction is pending.", mint_url, e));
+            }
+        };
+
         if sigs.len() != sessions.len() {
             return Err(anyhow!("Mint {} returned {} signatures, expected {}", mint_url, sigs.len(), sessions.len()));
         }
@@ -140,8 +179,6 @@ pub async fn issue_direct_note(
 
     let validation_hash = ecash_core::dhke::compute_validation_hash(&public_entries);
     let serial = crate::serial_from_hash(&validation_hash);
-    
-    let total_sats = allocations.iter().map(|a| a.1).sum();
 
     let block_height = crate::get_block_height().await;
 
@@ -160,31 +197,12 @@ pub async fn issue_direct_note(
         private_data: PrivateNoteData { master_seed_hex: note_seed_hex },
     };
 
-    // Record the issue tx
-    let tx_id = format!("tx_issue_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
-    let mut allocs = Vec::new();
-    for (m, a) in allocations { allocs.push((m.to_string(), *a)); }
-    
-    let tx = Transaction {
-        id: tx_id,
-        tx_type: TransactionType::Issue(IssueTransactionData {
-            note: Some(note.clone()),
-            allocations: allocs,
-            hub_mint: "Direct Wallet Issue".to_string(),
-            quote_id: "".to_string(),
-            master_seed_hex: note.private_data.master_seed_hex.clone(),
-            fee_strategy: "direct".to_string(),
-            hub_blinding_sessions_hex: vec![],
-            hub_outputs: vec![],
-            child_quotes: vec![],
-        }),
-        amount: total_sats,
-        fee: 0,
-        status: TransactionStatus::Success,
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-        mint_url: "Local Wallet".to_string(),
-    };
-    state.transactions.push(tx);
+    if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+        if let TransactionType::Issue(data) = &mut tx.tx_type {
+            data.note = Some(note.clone());
+        }
+        tx.status = TransactionStatus::Success;
+    }
     state.save_encrypted(wallet_path, passphrase)?;
 
     Ok(note)

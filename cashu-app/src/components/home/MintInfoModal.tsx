@@ -4,8 +4,7 @@ import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
 import { useMintInfo } from '../../hooks/useMintInfo';
 import { useWalletStore } from '../../store/wallet';
-import { invoke } from '@tauri-apps/api/core';
-import { toast } from 'react-hot-toast';
+import { useMints } from '../../hooks/useMints';
 
 interface MintInfoModalProps {
   mintUrl: string;
@@ -15,17 +14,13 @@ interface MintInfoModalProps {
 export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }) => {
   const { info, loading, error } = useMintInfo(mintUrl);
   const mintBalances = useWalletStore((s) => s.mintBalances);
-  const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const balance = mintBalances[mintUrl] || 0;
+  const { removeMint } = useMints();
 
   const handleRemoveMint = async () => {
-    try {
-      await invoke('remove_mint', { mintUrl });
-      await refreshWallet();
-      toast.success('Mint removed successfully');
+    const success = await removeMint(mintUrl);
+    if (success) {
       onClose();
-    } catch (err: any) {
-      toast.error(err.toString());
     }
   };
 

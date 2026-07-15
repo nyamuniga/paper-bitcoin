@@ -240,6 +240,10 @@ pub struct ReceiveEcashTransactionData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReceiveLightningTransactionData {
     pub quote_id: String,
+    #[serde(default)]
+    pub outputs: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub blinding_sessions_hex: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

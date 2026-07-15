@@ -65,40 +65,79 @@ pub async fn send_ecash(mint_url: String, amount: u64, state: State<'_, AppState
     } else {
         // 2. We need to split proofs via swap
         // Select proofs summing to >= amount (prefer smallest to clean up dust)
-        let mut sorted_proofs = proofs.clone();
-        sorted_proofs.sort_by_key(|p| p.amount);
+    let mut sorted_proofs = proofs.clone();
+    sorted_proofs.sort_by_key(|p| p.amount);
 
-        let mut selected_for_swap = Vec::new();
-        let mut swap_total = 0;
+    let mut selected_for_swap = Vec::new();
+    let mut swap_total = 0;
 
-        for proof in &sorted_proofs {
-            if swap_total >= amount {
-                break;
+    for proof in &sorted_proofs {
+        if swap_total >= amount {
+            break;
+        }
+        selected_for_swap.push(proof.clone());
+        swap_total += proof.amount;
+    }
+
+    if swap_total < amount {
+        return Err(crate::error::CommandError(format!(
+            "Insufficient balance. Have {} sats, need {} sats", swap_total, amount
+        )));
+    }
+
+    // Record pending transaction before swap
+    let tx_id = format!("tx_send_{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+
+    let pending_tx = Transaction {
+        id: tx_id.clone(),
+        tx_type: TransactionType::Send(SendTransactionData {
+            token_string: "".to_string(), // Will populate after successful swap
+            proofs: selected_for_swap.clone(),
+        }),
+        amount,
+        fee: 0,
+        status: TransactionStatus::Pending,
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        mint_url: mint_url.clone(),
+    };
+    w_state.transactions.push(pending_tx);
+    w_state.save_encrypted(&path, &passphrase)?;
+
+    let change_amount = swap_total - amount;
+    let desired_denoms = split_into_powers_of_2(amount);
+    let change_denoms = split_into_powers_of_2(change_amount);
+
+    // perform_swap handles updating the wallet state with the change
+    let swap_result = swap_proofs(
+        &mut w_state,
+        &path,
+        &passphrase,
+        &mint_url,
+        selected_for_swap,
+        desired_denoms,
+        change_denoms,
+    ).await;
+
+    final_send_proofs = match swap_result {
+        Ok(proofs) => proofs,
+        Err(e) => {
+            // Update to failed if the swap fails with a network error
+            if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                // Keep it pending if we are unsure, but if we fail here it's safer to leave pending
+                // Actually, if we get here, the swap failed. But we leave it as Pending because 
+                // the proofs might be SPENT on the mint. The user will use "Check Status" to verify.
+                tx.status = TransactionStatus::Pending;
             }
-            selected_for_swap.push(proof.clone());
-            swap_total += proof.amount;
+            w_state.save_encrypted(&path, &passphrase).ok();
+            return Err(crate::error::CommandError(format!("Failed to split tokens: {}", e)));
         }
-
-        if swap_total < amount {
-            return Err(crate::error::CommandError(format!(
-                "Insufficient balance. Have {} sats, need {} sats", swap_total, amount
-            )));
-        }
-
-        let change_amount = swap_total - amount;
-        let desired_denoms = split_into_powers_of_2(amount);
-        let change_denoms = split_into_powers_of_2(change_amount);
-
-        // perform_swap handles updating the wallet state with the change
-        final_send_proofs = swap_proofs(
-            &mut w_state,
-            &path,
-            &passphrase,
-            &mint_url,
-            selected_for_swap,
-            desired_denoms,
-            change_denoms,
-        ).await.map_err(|e| crate::error::CommandError(format!("Failed to split tokens: {}", e)))?;
+    };
     }
 
     // Build the CashuToken strictly (NUT-00 format), ignoring internal wallet proof fields
@@ -120,33 +159,42 @@ pub async fn send_ecash(mint_url: String, amount: u64, state: State<'_, AppState
     let json_str = serde_json::to_string(&token_json).unwrap();
     let encoded = format!("cashuA{}", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(json_str.as_bytes()));
 
-    // Record transaction
-    let tx_id = format!("tx_{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis());
-
-    let tx = Transaction {
-        id: tx_id.clone(),
-        tx_type: TransactionType::Send(SendTransactionData {
-            token_string: encoded.clone(),
-            proofs: final_send_proofs,
-        }),
-        amount,
-        fee: 0,
-        status: TransactionStatus::Success,
-        timestamp: std::time::SystemTime::now()
+    // Update transaction to Success
+    let tx_id_for_success = if let Some(tx) = w_state.transactions.iter_mut().find(|t| matches!(&t.tx_type, TransactionType::Send(_)) && t.status == TransactionStatus::Pending) {
+        if let TransactionType::Send(data) = &mut tx.tx_type {
+            data.token_string = encoded.clone();
+            data.proofs = final_send_proofs.clone();
+        }
+        tx.status = TransactionStatus::Success;
+        tx.id.clone()
+    } else {
+        let tx_id = format!("tx_send_{}", std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs(),
-        mint_url,
+            .as_millis());
+        let tx = Transaction {
+            id: tx_id.clone(),
+            tx_type: TransactionType::Send(SendTransactionData {
+                token_string: encoded.clone(),
+                proofs: final_send_proofs,
+            }),
+            amount,
+            fee: 0,
+            status: TransactionStatus::Success,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            mint_url,
+        };
+        w_state.transactions.push(tx);
+        tx_id
     };
-    w_state.transactions.push(tx);
 
     // Save wallet state
     w_state.save_encrypted(&path, &passphrase)?;
 
-    Ok(SendEcashResult { token: encoded, tx_id: tx_id.clone() })
+    Ok(SendEcashResult { token: encoded, tx_id: tx_id_for_success })
 }
 
 #[tauri::command]
@@ -292,9 +340,32 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
         return Err(crate::error::CommandError("Token has zero value".to_string()));
     }
 
+    // Record pending transaction before swap
+    let tx_id = format!("tx_receive_{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+
+    let pending_tx = Transaction {
+        id: tx_id.clone(),
+        tx_type: TransactionType::ReceiveEcash(ReceiveEcashTransactionData {
+            token_string: token_string.clone(),
+        }),
+        amount: total_amount,
+        fee: 0,
+        status: TransactionStatus::Pending,
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        mint_url: mint_url.clone(),
+    };
+    w_state.transactions.push(pending_tx);
+    w_state.save_encrypted(&path, &passphrase)?;
+
     // Swap proofs with the mint to re-blind them (prevents sender tracking)
     let desired_amounts = split_into_powers_of_2(total_amount);
-    let new_proofs = swap_proofs(
+    let swap_result = swap_proofs(
         &mut w_state,
         &path,
         &passphrase,
@@ -302,7 +373,18 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
         input_proofs,
         desired_amounts,
         vec![], // no change needed — we want all of it
-    ).await.map_err(|e| crate::error::CommandError(format!("Failed to receive ecash: {}", e)))?;
+    ).await;
+
+    let new_proofs = match swap_result {
+        Ok(proofs) => proofs,
+        Err(e) => {
+            if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                tx.status = TransactionStatus::Pending;
+            }
+            w_state.save_encrypted(&path, &passphrase).ok();
+            return Err(crate::error::CommandError(format!("Failed to receive ecash: {}", e)));
+        }
+    };
 
     // Store the new proofs in the wallet
     w_state.proofs.entry(mint_url.clone()).or_default().extend(new_proofs);
@@ -312,27 +394,10 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
         w_state.mints.push(mint_url.clone());
     }
 
-    // Record transaction
-    let tx_id = format!("tx_{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis());
-
-    let tx = Transaction {
-        id: tx_id,
-        tx_type: TransactionType::ReceiveEcash(ReceiveEcashTransactionData {
-            token_string: token_string.clone(),
-        }),
-        amount: total_amount,
-        fee: 0,
-        status: TransactionStatus::Success,
-        timestamp: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-        mint_url,
-    };
-    w_state.transactions.push(tx);
+    // Update transaction to Success
+    if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
+        tx.status = TransactionStatus::Success;
+    }
     w_state.save_encrypted(&path, &passphrase)?;
 
     Ok(total_amount)

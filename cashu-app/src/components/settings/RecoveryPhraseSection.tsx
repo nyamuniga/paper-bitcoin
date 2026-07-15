@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Eye, EyeOff, Copy, CheckCircle2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../../hooks/useAuth';
 
 export const RecoveryPhraseSection = () => {
   const [showMnemonic, setShowMnemonic] = useState(false);
@@ -10,6 +11,7 @@ export const RecoveryPhraseSection = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [mnemonic, setMnemonic] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const { unlockWallet } = useAuth();
 
   const toggleMnemonic = () => {
     if (!showMnemonic) {
@@ -29,17 +31,21 @@ export const RecoveryPhraseSection = () => {
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsVerifying(true);
-    try {
-      await invoke('unlock_wallet', { passphrase });
-      const words = await invoke<string[]>('get_recovery_words');
-      setMnemonic(words.join(' '));
-      setShowMnemonic(true);
-      setShowPrompt(false);
-    } catch (err: any) {
+    
+    const success = await unlockWallet(passphrase);
+    if (success) {
+      try {
+        const words = await invoke<string[]>('get_recovery_words');
+        setMnemonic(words.join(' '));
+        setShowMnemonic(true);
+        setShowPrompt(false);
+      } catch (err: any) {
+        toast.error('Failed to get recovery words');
+      }
+    } else {
       toast.error('Incorrect passphrase');
-    } finally {
-      setIsVerifying(false);
     }
+    setIsVerifying(false);
   };
 
   const copyMnemonic = () => {

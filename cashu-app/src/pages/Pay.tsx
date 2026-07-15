@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Zap, QrCode } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
-import { invoke } from '@tauri-apps/api/core';
-import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../store/wallet';
+import { useBitcoin } from '../hooks/useBitcoin';
+import { FullScreenLoader } from '../components/shared/FullScreenLoader';
 import { PageHeader } from '../components/shared/PageHeader';
 import { formatMintUrl } from '../utils/format';
 import { MintIcon } from '../components/shared/MintIcon';
@@ -16,10 +16,8 @@ export const Pay = () => {
   const mintUrl = state?.mintUrl;
 
   const [invoice, setInvoice] = useState('');
-  const [paying, setPaying] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-
-  const refreshWallet = useWalletStore((s) => s.refreshWallet);
+  const { paying, payInvoice } = useBitcoin(mintUrl);
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const availableBalance = mintUrl ? (mintBalances[mintUrl] || 0) : 0;
 
@@ -62,16 +60,9 @@ export const Pay = () => {
 
   const handlePay = async () => {
     if (!invoice || isInvalidAmount) return;
-    setPaying(true);
-    try {
-      await invoke('pay_invoice', { invoice, mintUrl });
-      toast.success('Invoice paid successfully!');
-      await refreshWallet();
+    const success = await payInvoice(invoice);
+    if (success) {
       navigate('/');
-    } catch (e: any) {
-      toast.error(`Payment failed: ${e}`);
-    } finally {
-      setPaying(false);
     }
   };
 
@@ -177,6 +168,9 @@ export const Pay = () => {
           </div>
         </div>
       </div>
+      {paying && (
+        <FullScreenLoader title="Sending Bitcoin..." message="Paying the lightning invoice." />
+      )}
     </main>
   );
 };

@@ -15,10 +15,10 @@ export default function History() {
     loading,
     fetchHistory,
     handleRetryMint,
-    handleCheckMelt,
+    handleRecoverPendingTransaction,
     handleCheckIssue,
     handleDownloadNote,
-    handleCheckStatus
+    handleCheckTokenSpendStatus
   } = useHistory();
 
   const handleCardClick = (tx: Transaction) => {
@@ -55,7 +55,7 @@ export default function History() {
               key={tx.id} 
               tx={tx} 
               onRetryMint={handleRetryMint}
-              onCheckMelt={handleCheckMelt}
+              onCheckMelt={handleRecoverPendingTransaction}
               onCheckIssue={(txId) => handleCheckIssue(txId, navigate)}
               onDownloadNote={handleDownloadNote}
               onClick={'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type ? () => handleCardClick(tx) : undefined}
@@ -68,7 +68,8 @@ export default function History() {
         <TransactionDetailsModal
           tx={selectedTx}
           onClose={() => setSelectedTx(null)}
-          onCheckStatus={() => handleCheckStatus(selectedTx.id)}
+          onRecover={() => handleRecoverPendingTransaction(selectedTx.id)}
+          onCheckClaimed={() => handleCheckTokenSpendStatus(selectedTx.id)}
         />
       )}
     </main>

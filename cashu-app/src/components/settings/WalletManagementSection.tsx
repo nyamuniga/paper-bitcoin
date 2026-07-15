@@ -1,32 +1,33 @@
 import { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Lock, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
+import { useAuth } from '../../hooks/useAuth';
 
 export const WalletManagementSection = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const setInitialized = useWalletStore((s) => s.setInitialized);
+  const { lockWallet, resetWallet } = useAuth();
 
   const handleLock = async () => {
-    try {
-      await invoke('lock_wallet');
+    const success = await lockWallet();
+    if (success) {
       setInitialized(false);
       toast.success('Wallet locked');
-    } catch (e: any) {
-      toast.error(e.toString());
+    } else {
+      toast.error('Failed to lock wallet');
     }
   };
 
   const handleDelete = async () => {
-    try {
-      setIsDeleting(true);
-      await invoke('reset_wallet');
+    setIsDeleting(true);
+    const success = await resetWallet();
+    if (success) {
       setInitialized(false);
       toast.success('Wallet deleted');
-    } catch (e: any) {
-      toast.error(e.toString());
+    } else {
+      toast.error('Failed to delete wallet');
       setIsDeleting(false);
       setShowDeleteConfirm(false);
     }
