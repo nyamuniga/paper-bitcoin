@@ -10,8 +10,11 @@ export const useBitcoin = (mintUrl?: string) => {
   
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const pollingRef = useRef(false);
+  const isPayingRef = useRef(false);
+  const isRequestingRef = useRef(false);
 
   const payInvoice = async (invoice: string, overrideMintUrl?: string) => {
+    if (isPayingRef.current) return false;
     const targetMint = overrideMintUrl || mintUrl;
     
     setPaying(true);
@@ -29,16 +32,19 @@ export const useBitcoin = (mintUrl?: string) => {
       return false;
     } finally {
       setPaying(false);
+      isPayingRef.current = false;
     }
   };
 
   const receiveLightning = async (amount: number, overrideMintUrl?: string) => {
+    if (isRequestingRef.current) return null;
     const targetMint = overrideMintUrl || mintUrl;
     if (!targetMint) {
       toast.error('No mint specified for receiving');
       return null;
     }
 
+    isRequestingRef.current = true;
     setRequesting(true);
     try {
       const res: any = await invoke('receive_lightning', { mintUrl: targetMint, amount });
@@ -48,27 +54,33 @@ export const useBitcoin = (mintUrl?: string) => {
       return null;
     } finally {
       setRequesting(false);
+      isRequestingRef.current = false;
     }
   };
 
-  const pollReceiveStatus = async (quoteId: string, amount: number, overrideMintUrl?: string) => {
-    const targetMint = overrideMintUrl || mintUrl;
-    if (!targetMint) return;
-    
+  const pollReceiveStatus = async (quoteId: string, amount: number) => {
     let isMounted = true;
     pollingRef.current = true;
 
     const poll = async () => {
       while (pollingRef.current && isMounted) {
         try {
-          await invoke('check_receive_lightning', { mintUrl: targetMint, quoteId, amount });
+          const status = await invoke<string>('check_transaction_status', { txId: quoteId });
           if (!isMounted) return;
-          setReceiveSuccess(true);
-          await refreshWallet();
-          toast.success(`Received ₿${amount.toLocaleString()} sats!`);
-          return;
+          
+          if (status === 'Success') {
+            setReceiveSuccess(true);
+            await refreshWallet();
+            toast.success(`Received ₿${amount.toLocaleString()} sats!`);
+            return;
+          } else if (status === 'Failed') {
+            toast.error("Transaction failed.");
+            return;
+          }
+          // If Pending, continue polling
+          await new Promise(r => setTimeout(r, 2000));
         } catch {
-          // Not paid yet, keep polling
+          // Network error or other error, keep polling
           await new Promise(r => setTimeout(r, 2000));
         }
       }

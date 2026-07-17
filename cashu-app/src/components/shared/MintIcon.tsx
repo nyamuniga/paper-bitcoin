@@ -13,13 +13,13 @@ export const MintIcon: React.FC<MintIconProps> = ({
   className = "w-8 h-8 md:w-9 md:h-9 rounded-full bg-primary/15 border border-primary/20", 
   textClassName = "text-primary text-[12px] font-bold"
 }) => {
-  const { info } = useMintInfo(mintUrl);
+  const { info } = useMintInfo(mintUrl || '');
   const [imageError, setImageError] = useState(false);
 
   const fallback = (
     <div className={`${className} flex items-center justify-center flex-shrink-0`}>
       <span className={textClassName}>
-        {formatMintUrl(mintUrl).charAt(0).toUpperCase()}
+        {mintUrl ? formatMintUrl(mintUrl).charAt(0).toUpperCase() : '?'}
       </span>
     </div>
   );

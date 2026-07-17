@@ -10,14 +10,19 @@ export const useEcash = (mintUrl?: string) => {
   
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const pollingRef = useRef(false);
+  const isSendingRef = useRef(false);
+  const isReceivingRef = useRef(false);
 
   const sendEcash = async (amount: number, overrideMintUrl?: string) => {
+    if (isSendingRef.current) return null;
+    
     const targetMint = overrideMintUrl || mintUrl;
     if (!targetMint) {
       toast.error('No mint specified for sending');
       return null;
     }
 
+    isSendingRef.current = true;
     setSending(true);
     try {
       const result: {token: string, tx_id: string} = await invoke('send_ecash', { 
@@ -31,10 +36,13 @@ export const useEcash = (mintUrl?: string) => {
       return null;
     } finally {
       setSending(false);
+      isSendingRef.current = false;
     }
   };
 
   const receiveEcash = async (token: string) => {
+    if (isReceivingRef.current) return null;
+    isReceivingRef.current = true;
     setReceiving(true);
     try {
       const amount = await invoke<number>('receive_ecash', { tokenString: token });
@@ -46,6 +54,7 @@ export const useEcash = (mintUrl?: string) => {
       return null;
     } finally {
       setReceiving(false);
+      isReceivingRef.current = false;
     }
   };
 
@@ -56,7 +65,7 @@ export const useEcash = (mintUrl?: string) => {
     const poll = async () => {
       while (pollingRef.current && isMounted && !isClaimed) {
         try {
-          const status = await invoke<string>('check_transaction_status', { txId });
+          const status = await invoke<string>('check_token_spend_status', { txId });
           if (status === 'Spent') {
             if (!isMounted) return;
             setIsClaimed(true);

@@ -45,18 +45,11 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
       <div className="relative z-10">
         <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
-              isMint || isReceive ? 'bg-emerald-900/30 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 
-              isIssue ? 'bg-primary-container/20 border-primary/20' : 
-              isRedeem ? 'bg-amber-500/20 border-amber-500/20' :
-              isSend ? 'bg-tertiary/20 border-tertiary/20' :
-              'bg-error-container/20 border-error/20'
-            }`}>
-              {isMint || isReceive ? <ArrowDown className="text-emerald-400 w-4 h-4" /> : 
+            <div className="w-10 h-10 rounded-full flex items-center justify-center border bg-primary/20 border-primary/20">
+              {isMint || isReceive ? <ArrowDown className="text-primary w-4 h-4" /> : 
                isIssue ? <FileText className="text-primary w-4 h-4" /> : 
-               isRedeem ? <ArrowDown className="text-amber-400 w-4 h-4" /> :
-               isSend ? <ArrowUp className="text-tertiary w-4 h-4" /> :
-               <ArrowUp className="text-error w-4 h-4" />}
+               isRedeem ? <ArrowDown className="text-primary w-4 h-4" /> :
+               <ArrowUp className="text-primary w-4 h-4" />}
             </div>
             <div>
               <h3 className="text-body-md font-body-md font-semibold text-on-surface">
@@ -68,7 +61,7 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
             </div>
           </div>
           <div className="text-right">
-            <span className={`text-body-md font-body-md font-bold block ${isMint || isRedeem || isReceive ? 'text-emerald-400' : isIssue ? 'text-primary' : isSend ? 'text-tertiary' : 'text-on-surface'}`}>
+            <span className="text-body-md font-body-md font-bold block text-primary">
               {isMint || isRedeem || isReceive ? '+' : isIssue ? '' : '-'}₿{tx.amount}
             </span>
             {tx.fee > 0 && <span className="text-label-caps font-label-caps text-on-surface-variant mt-1 block">Fee: ₿{tx.fee}</span>}

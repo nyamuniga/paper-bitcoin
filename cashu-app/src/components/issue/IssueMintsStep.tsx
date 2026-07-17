@@ -4,6 +4,7 @@ import { PageHeader } from '../shared/PageHeader';
 import { useWalletStore } from '../../store/wallet';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
+import { MintName } from '../shared/MintName';
 
 interface IssueMintsStepProps {
   mintUrls: string[];
@@ -64,9 +65,14 @@ export const IssueMintsStep: React.FC<IssueMintsStepProps> = ({ mintUrls, setMin
               <div className="absolute inset-0 texture-overlay opacity-20"></div>
               <div className="flex items-center gap-3 min-w-0 pr-4 relative z-10">
                 <MintIcon mintUrl={url} className="w-9 h-9 rounded-full bg-primary/15 border border-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[12px] font-bold" />
-                <div className="flex flex-col min-w-0">
-                  <p className="text-body-md font-body-md text-on-surface text-[14px] truncate">{formatMintUrl(url)}</p>
-                  <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] truncate">{url}</p>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <MintName mintUrl={url} className="text-body-md font-body-md text-on-surface text-[14px] truncate" />
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] truncate">{url}</p>
+                    {mintBalances[url] !== undefined && (
+                      <span className="text-[10px] font-bold text-primary flex-shrink-0">₿{mintBalances[url].toLocaleString()}</span>
+                    )}
+                  </div>
                 </div>
               </div>
               <button
@@ -121,8 +127,11 @@ export const IssueMintsStep: React.FC<IssueMintsStepProps> = ({ mintUrls, setMin
                 >
                   <MintIcon mintUrl={url} className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20" textClassName="text-primary text-[10px] font-bold" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-body-md font-body-md text-on-surface text-[14px] truncate">{formatMintUrl(url)}</p>
-                    <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] truncate">{url}</p>
+                    <MintName mintUrl={url} className="text-body-md font-body-md text-on-surface text-[14px] truncate" />
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] truncate">{url}</p>
+                      <span className="text-[10px] font-bold text-primary flex-shrink-0">₿{(mintBalances[url] || 0).toLocaleString()}</span>
+                    </div>
                   </div>
                   <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
                     <Plus size={14} />

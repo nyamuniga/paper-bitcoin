@@ -199,3 +199,83 @@ pub async fn restore_from_mints(
 
     Ok(total_restored)
 }
+
+/// Scans all proofs currently in the wallet and asks the mint for their state.
+/// Removes any proofs that the mint reports as "SPENT".
+pub async fn clean_wallet_proofs(
+    state: &mut WalletState,
+    wallet_path: &PathBuf,
+    passphrase: &str,
+) -> Result<u64> {
+    let mut total_removed = 0;
+    
+    // We need to iterate over all mints and their proofs
+    for (mint_url, proofs) in state.proofs.clone().into_iter() {
+        if proofs.is_empty() { continue; }
+        
+        let client = MintClient::new(&mint_url);
+        
+        // Collect Ys
+        let mut ys = Vec::new();
+        let mut y_to_secret = std::collections::HashMap::new();
+        for p in &proofs {
+            let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()));
+            ys.push(y.clone());
+            y_to_secret.insert(y, p.secret.clone());
+        }
+        
+        // Check state in chunks
+        let mut states = std::collections::HashMap::new();
+        for chunk in ys.chunks(100) {
+            if let Ok(st) = client.check_state(chunk).await {
+                states.extend(st);
+            }
+        }
+        
+        // Find spent secrets
+        let mut spent_secrets = std::collections::HashSet::new();
+        for (y, s) in states {
+            if s == "SPENT" {
+                if let Some(secret) = y_to_secret.get(&y) {
+                    spent_secrets.insert(secret.clone());
+                }
+            }
+        }
+        
+        // Remove spent proofs from state
+        if !spent_secrets.is_empty() {
+            if let Some(mint_proofs) = state.proofs.get_mut(&mint_url) {
+                mint_proofs.retain(|p| {
+                    if spent_secrets.contains(&p.secret) {
+                        total_removed += p.amount;
+                        false
+                    } else {
+                        true
+                    }
+                });
+            }
+        }
+    }
+    
+    // Run restore_from_mints to patch derivation_index and recover any missing unspent proofs
+    let mint_urls = state.mints.clone();
+    let _ = restore_from_mints(state, wallet_path, passphrase, mint_urls, None).await;
+
+    // Deduplicate proofs (since restore_from_mints might have added ones we already had)
+    for (_, proofs) in state.proofs.iter_mut() {
+        let mut seen = std::collections::HashSet::new();
+        proofs.retain(|p| {
+            if seen.contains(&p.secret) {
+                false
+            } else {
+                seen.insert(p.secret.clone());
+                true
+            }
+        });
+    }
+    
+    // Save to disk with the fixed derivation index and clean proofs
+    state.save_encrypted(wallet_path, passphrase)?;
+    
+    Ok(total_removed)
+}
