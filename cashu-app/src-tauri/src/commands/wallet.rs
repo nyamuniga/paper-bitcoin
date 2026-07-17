@@ -126,3 +126,22 @@ pub async fn add_mint(mint_url: String, state: State<'_, AppState>) -> CommandRe
     
     Ok(())
 }
+
+#[tauri::command]
+pub async fn clean_wallet(state: State<'_, AppState>) -> CommandResult<u64> {
+    let path = state.wallet_path.clone();
+    if !path.exists() {
+        return Err(CommandError("Wallet not initialized".to_string()));
+    }
+
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+    };
+
+    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+
+    let removed = ecash_wallet::restore::clean_wallet_proofs(&mut w_state, &path, &passphrase).await?;
+    
+    Ok(removed)
+}

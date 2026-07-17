@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Zap, Coins, Info } from 'lucide-react';
+import { ChevronRight, Zap, Coins, Info, Plus } from 'lucide-react';
+import { AddMintModal } from '../navigation/AddMintModal';
 import { EcashModal } from './EcashModal';
 import { BitcoinModal } from './BitcoinModal';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
+import { MintName } from '../shared/MintName';
 import { MintInfoModal } from './MintInfoModal';
 
 interface TrustedMintsListProps {
@@ -20,6 +22,7 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
   const [ecashMint, setEcashMint] = useState<string | null>(null);
   const [bitcoinMint, setBitcoinMint] = useState<string | null>(null);
   const [infoMint, setInfoMint] = useState<string | null>(null);
+  const [showAddMint, setShowAddMint] = useState(false);
 
   const toggleReveal = (mint: string) => {
     if (revealedMint === mint) {
@@ -41,6 +44,17 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
         )}
       </div>
       <div className="flex flex-col gap-2 overflow-hidden px-1 -mx-1 py-1 -my-1">
+        <div 
+          onClick={() => setShowAddMint(true)}
+          className="bg-surface-container-lowest rounded-2xl p-3.5 md:p-4 flex items-center justify-center gap-3 shadow-inner border-2 border-dotted border-primary/50 relative group hover:bg-surface-container-low hover:border-primary/80 transition-all duration-300 cursor-pointer"
+        >
+          <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
+          <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 relative z-10 pointer-events-none group-hover:scale-105 transition-transform">
+            <Plus className="text-primary w-5 h-5" />
+          </div>
+          <span className="text-body-md font-body-md text-primary font-bold relative z-10 pointer-events-none tracking-wide">Add New Mint</span>
+        </div>
+
         {sortedMints.length === 0 ? (
           <div className="text-center text-on-surface-variant py-6 bg-surface-container-high rounded-2xl border border-outline-variant/10 text-body-md font-body-md">No mints connected yet</div>
         ) : (
@@ -85,11 +99,14 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
                 >
                   <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
                   <div className="flex items-center gap-3 relative z-10 min-w-0 mr-4 pointer-events-none">
-                    <MintIcon mintUrl={mint} className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-primary/15 border border-primary/20" textClassName="text-primary text-[12px] font-bold" />
-                    <span className="text-body-md font-body-md text-on-surface truncate text-[14px]" title={mint}>{formatMintUrl(mint)}</span>
+                    <MintIcon mintUrl={mint} className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-primary/15 border border-primary/20 flex-shrink-0" textClassName="text-primary text-[12px] font-bold" />
+                    <div className="flex flex-col min-w-0">
+                      <MintName mintUrl={mint} className="text-body-md font-body-md text-on-surface truncate text-[14px]" />
+                      <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] truncate">{mint}</p>
+                    </div>
                   </div>
                   <div className="flex items-baseline gap-1 flex-shrink-0 whitespace-nowrap">
-                    <span className="text-body-md font-body-md font-semibold text-on-surface">₿{amt.toLocaleString()}</span>
+                    <span className="text-body-md font-body-md font-bold text-primary">₿{amt.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
@@ -117,6 +134,10 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
           mintUrl={infoMint}
           onClose={() => setInfoMint(null)}
         />
+      )}
+
+      {showAddMint && (
+        <AddMintModal onClose={() => setShowAddMint(false)} />
       )}
     </section>
   );

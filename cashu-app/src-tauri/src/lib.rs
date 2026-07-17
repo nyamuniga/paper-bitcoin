@@ -26,6 +26,7 @@ pub fn run() {
             commands::wallet::get_recovery_words,
             commands::wallet::add_mint,
             commands::wallet::remove_mint,
+            commands::wallet::clean_wallet,
             commands::issue::issue_note,
             commands::issue::issue_note_direct,
             commands::issue::get_pending_issue,

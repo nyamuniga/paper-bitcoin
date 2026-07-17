@@ -1,6 +1,6 @@
 [package]
 name = "bitnotes"
-version = "0.1.1"
+version = "0.1.2"
 description = "Physical cashu system"
 authors = ["you"]
 edition = "2021"

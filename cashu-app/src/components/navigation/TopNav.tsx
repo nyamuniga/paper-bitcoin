@@ -1,13 +1,10 @@
 import { Link } from 'react-router-dom';
-import { Clock, Settings as SettingsIcon, Plus, Landmark } from 'lucide-react';
+import { Clock, Settings as SettingsIcon, Landmark } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet';
-import { useState } from 'react';
-import { AddMintModal } from './AddMintModal';
 
 export const TopNav = () => {
   const pendingTxs = useWalletStore((s) => s.pendingTxs);
   const hasPending = pendingTxs > 0;
-  const [showAddMint, setShowAddMint] = useState(false);
 
   return (
     <header style={{ paddingTop: 'env(safe-area-inset-top)' }} className="bg-background/80 backdrop-blur-xl docked full-width top-0 z-40 sticky border-b border-outline-variant/10">
@@ -18,16 +15,13 @@ export const TopNav = () => {
         </div>
 
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => setShowAddMint(true)}
+          <Link
+            to="/mints"
             className="p-2.5 text-on-surface-variant hover:text-primary transition-colors active:scale-95 duration-200 rounded-full hover:bg-surface-container-high relative group"
-            title="Add Mint"
+            title="Trusted Mints"
           >
             <Landmark className="w-5 h-5 text-current" />
-            <div className="absolute top-1.5 right-1.5 bg-surface rounded-full">
-              <Plus size={10} className="text-primary" strokeWidth={3} />
-            </div>
-          </button>
+          </Link>
           <Link
             to="/history"
             className="p-2.5 text-on-surface-variant hover:text-primary transition-colors active:scale-95 duration-200 rounded-full hover:bg-surface-container-high relative"
@@ -47,7 +41,6 @@ export const TopNav = () => {
         </div>
       </div>
       
-      {showAddMint && <AddMintModal onClose={() => setShowAddMint(false)} />}
     </header>
   );
 };
