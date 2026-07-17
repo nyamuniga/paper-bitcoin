@@ -43,7 +43,7 @@ export const Scan = () => {
   return (
     <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col items-center">
       <div className="w-full max-w-2xl mb-6">
-        <PageHeader title="Scan Note" />
+        <PageHeader title="Scanner" />
       </div>
 
       {!noteInfo ? (

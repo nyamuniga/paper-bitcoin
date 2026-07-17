@@ -1,6 +1,6 @@
 [package]
 name = "ecash-wallet"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Multi-mint Cashu wallet for issuing and redeeming physical notes"
 

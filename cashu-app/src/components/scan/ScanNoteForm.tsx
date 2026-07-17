@@ -36,11 +36,9 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
                     onDecode(decoded);
                   }
                 } else {
-                  const validQr = result.find(r => r.rawValue.toUpperCase().startsWith('ECASHZ:'));
-                  const val = validQr ? validQr.rawValue : text;
-                  if (val) {
+                  if (text) {
                     setShowScanner(false);
-                    onDecode(val);
+                    onDecode(text);
                   }
                 }
               }}
@@ -89,7 +87,7 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
               value={binB64}
               onChange={(e) => setBinB64(e.target.value)}
               className="w-full bg-surface-container-lowest text-on-background rounded-lg border-none px-4 py-4 min-h-[100px] resize-none focus:ring-1 focus:ring-primary/50 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] text-body-md font-body-md placeholder:text-on-surface-variant/40 transition-all glow-effect focus:bg-surface-container-lowest/80"
-              placeholder="Paste binary base45/base64..."
+              placeholder="Paste ecash token, lightning invoice, or note data..."
               spellCheck="false"
             ></textarea>
           </div>
@@ -101,7 +99,7 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
             disabled={loading || !binB64}
             className="w-full bg-gradient-to-r from-[#d4a055] to-[#f7931a] hover:from-[#e8b566] hover:to-[#ffa633] text-on-primary font-headline-lg-mobile text-body-md rounded-full py-4 transition-all transform active:scale-[0.98] shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <span className="font-bold tracking-wide">Decode Note</span>}
+            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <span className="font-bold tracking-wide">Process</span>}
           </button>
         </div>
       </div>

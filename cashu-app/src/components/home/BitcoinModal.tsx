@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Copy, Check, Loader2, Zap, ArrowUp, ArrowDown, QrCode } from 'lucide-react';
+import { X, Copy, Check, Loader2, Zap, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
+import { useBitcoin } from '../../hooks/useBitcoin';
 import { formatMintUrl } from '../../utils/format';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { MintIcon } from '../shared/MintIcon';
+import { MintName } from '../shared/MintName';
 import { AmountDisplay } from '../shared/AmountDisplay';
 import { NumberPad } from '../shared/NumberPad';
 import QRCode from 'react-qr-code';
@@ -13,32 +15,33 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 
 interface BitcoinModalProps {
   mintUrl: string;
+  initialTab?: 'send' | 'receive';
+  initialInvoice?: string;
   onClose: () => void;
 }
 
 type Tab = 'send' | 'receive';
 
-export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl, onClose }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('send');
+export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialInvoice = '', onClose }) => {
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  const [mintUrl, setMintUrl] = useState(initialMintUrl);
+  const [showMintDropdown, setShowMintDropdown] = useState(false);
 
   // Send state
-  const [invoice, setInvoice] = useState('');
+  const [invoice, setInvoice] = useState(initialInvoice);
   const [showScanner, setShowScanner] = useState(false);
-  const [paying, setPaying] = useState(false);
 
   // Receive state
   const [receiveAmount, setReceiveAmount] = useState('');
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [receiveInvoice, setReceiveInvoice] = useState<string | null>(null);
-  const [requesting, setRequesting] = useState(false);
-  const [receiveSuccess, setReceiveSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const mintBalances = useWalletStore((s) => s.mintBalances);
+  const mintUrls = Object.keys(mintBalances || {});
   const availableBalance = mintBalances[mintUrl] || 0;
 
-  const pollingRef = useRef(false);
+  const { paying, requesting, receiveSuccess, setReceiveSuccess, payInvoice, receiveLightning, pollReceiveStatus, stopPolling } = useBitcoin(mintUrl);
 
   const getInvoiceAmountSats = (inv: string): number | null => {
     try {
@@ -66,74 +69,29 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl, onClose }) 
 
   const handlePay = async () => {
     if (!invoice || isInsufficient) return;
-    setPaying(true);
-    try {
-      await invoke('pay_invoice', { invoice, mintUrl });
-      toast.success('Invoice paid successfully!');
-      refreshWallet();
-      onClose();
-    } catch (e: any) {
-      toast.error(`Payment failed: ${e}`);
-    } finally {
-      setPaying(false);
-    }
+    const success = await payInvoice(invoice);
+    if (success) onClose();
   };
 
   const parsedReceiveAmount = parseInt(receiveAmount) || 0;
 
   const handleRequestInvoice = async () => {
     if (parsedReceiveAmount <= 0) return;
-    setRequesting(true);
-    try {
-      const res: any = await invoke('receive_lightning', { mintUrl, amount: parsedReceiveAmount });
-      setQuoteId(res.quote_id);
-      setReceiveInvoice(res.invoice);
-    } catch (e: any) {
-      toast.error(`Failed to create invoice: ${e}`);
-    } finally {
-      setRequesting(false);
+    const res = await receiveLightning(parsedReceiveAmount);
+    if (res) {
+      setQuoteId(res.quoteId);
+      setReceiveInvoice(res.receiveInvoice);
     }
   };
-
 
   // Poll for payment
   useEffect(() => {
     if (!quoteId || !receiveInvoice || receiveSuccess) return;
-
-    let isMounted = true;
-    pollingRef.current = true;
-
-    const poll = async () => {
-      while (pollingRef.current && isMounted) {
-        try {
-          const status = await invoke<string>('check_transaction_status', { txId: quoteId });
-          if (!isMounted) return;
-          
-          if (status === 'Success') {
-            setReceiveSuccess(true);
-            await refreshWallet();
-            toast.success(`Received ₿${parsedReceiveAmount.toLocaleString()} sats!`);
-            return;
-          } else if (status === 'Failed') {
-            toast.error("Transaction failed.");
-            return;
-          }
-          // If Pending, continue polling
-          await new Promise(r => setTimeout(r, 2000));
-        } catch {
-          // Network error or other error, keep polling
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-    };
-
-    poll();
-
+    const cleanup = pollReceiveStatus(quoteId, parsedReceiveAmount);
     return () => {
-      isMounted = false;
-      pollingRef.current = false;
+      cleanup.then(c => c && c());
     };
-  }, [quoteId, receiveInvoice, receiveSuccess]);
+  }, [quoteId, receiveInvoice, receiveSuccess, parsedReceiveAmount]);
 
   const handleCopyInvoice = async () => {
     if (!receiveInvoice) return;
@@ -157,7 +115,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl, onClose }) 
       setQuoteId(null);
       setReceiveInvoice(null);
       setReceiveSuccess(false);
-      pollingRef.current = false;
+      stopPolling();
     }
   };
 
@@ -212,15 +170,41 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl, onClose }) 
                 ? 'Pay lightning invoice from:'
                 : (receiveSuccess ? 'Lightning received to:' : receiveInvoice ? 'Waiting for payment to:' : 'Receive lightning to:')}
             </p>
-            <div className="flex items-center justify-between bg-surface-container-highest p-3 rounded-xl border border-outline-variant/10">
-              <div className="flex items-center gap-2 min-w-0 pr-4">
-                <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
-                <span className="text-body-md font-body-md text-on-surface font-medium truncate">{formatMintUrl(mintUrl)}</span>
-              </div>
-              <div className="flex items-baseline gap-1 flex-shrink-0 whitespace-nowrap">
-                <span className="text-body-md font-body-md font-semibold text-on-surface">{availableBalance.toLocaleString()}</span>
-                <span className="text-label-caps font-label-caps text-on-surface-variant text-[10px]">₿</span>
-              </div>
+            <div className="relative">
+              {showMintDropdown && (
+                <div className="fixed inset-0 z-40" onClick={() => setShowMintDropdown(false)}></div>
+              )}
+              <button 
+                onClick={() => setShowMintDropdown(!showMintDropdown)}
+                className="w-full flex items-center justify-between bg-surface-container-highest p-3 rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-colors relative z-50"
+              >
+                <div className="flex items-center gap-2 min-w-0 pr-4">
+                  <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
+                  <MintName mintUrl={mintUrl} className="text-body-md font-body-md text-on-surface font-medium truncate" />
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap">
+                  <span className="text-body-md font-body-md font-semibold text-on-surface">₿{availableBalance.toLocaleString()}</span>
+                  <ChevronDown size={16} className="text-on-surface-variant flex-shrink-0" />
+                </div>
+              </button>
+              
+              {showMintDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-surface-container-highest rounded-2xl shadow-2xl border border-outline-variant/20 overflow-hidden flex flex-col animate-fade-in z-50 max-h-[250px] overflow-y-auto">
+                  {mintUrls.map((m, index) => (
+                    <button 
+                      key={m}
+                      onClick={() => { setMintUrl(m); setShowMintDropdown(false); }}
+                      className={`flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left w-full ${index > 0 ? 'border-t border-outline-variant/10' : ''}`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 pr-2">
+                        <MintIcon mintUrl={m} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
+                        <MintName mintUrl={m} className="text-body-sm font-body-sm text-on-surface truncate" />
+                      </div>
+                      <span className="text-body-sm font-body-sm font-bold text-on-surface flex-shrink-0">₿{(mintBalances![m] || 0).toLocaleString()}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
