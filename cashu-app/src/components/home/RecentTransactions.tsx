@@ -10,7 +10,7 @@ export const RecentTransactions: React.FC = () => {
   const { transactions, loading, handleCheckIssue, handleRecoverPendingTransaction, handleCheckTokenSpendStatus } = useHistory();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
-  const recentTxs = transactions.slice(0, 3);
+  const recentTxs = transactions.slice(0, 5);
 
 
 
@@ -35,35 +35,23 @@ export const RecentTransactions: React.FC = () => {
 
   const getTxIcon = (tx: Transaction) => {
     if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
-      return <ArrowDown className="text-emerald-400 w-4 h-4" />;
+      return <ArrowDown className="text-primary w-4 h-4" />;
     }
     if ('Send' in tx.tx_type) {
-      return <ArrowUp className="text-tertiary w-4 h-4" />;
+      return <ArrowUp className="text-primary w-4 h-4" />;
     }
     if ('Issue' in tx.tx_type) {
       return <FileText className="text-primary w-4 h-4" />;
     }
-    return <ArrowUp className="text-error w-4 h-4" />;
+    return <ArrowUp className="text-primary w-4 h-4" />;
   };
 
   const getTxIconBg = (tx: Transaction) => {
-    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
-      return 'bg-emerald-900/30 border-emerald-500/30';
-    }
-    if ('Send' in tx.tx_type) {
-      return 'bg-tertiary/20 border-tertiary/20';
-    }
-    if ('Issue' in tx.tx_type) {
-      return 'bg-primary-container/20 border-primary/20';
-    }
-    return 'bg-error-container/20 border-error/20';
+    return 'bg-primary/20 border-primary/20';
   };
 
   const getTxAmountColor = (tx: Transaction) => {
-    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) return 'text-emerald-400';
-    if ('Issue' in tx.tx_type) return 'text-primary';
-    if ('Send' in tx.tx_type) return 'text-tertiary';
-    return 'text-on-surface';
+    return 'text-primary';
   };
 
   const getTxSign = (tx: Transaction) => {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Loader2, Copy, Check, Coins, ArrowUp, ArrowDown, QrCode } from 'lucide-react';
+import { X, Loader2, Copy, Check, Coins, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 import { useEcash } from '../../hooks/useEcash';
@@ -10,18 +10,23 @@ import { useUrDecoder } from '../../hooks/useUrDecoder';
 import { AmountDisplay } from '../shared/AmountDisplay';
 import { NumberPad } from '../shared/NumberPad';
 import { MintIcon } from '../shared/MintIcon';
+import { MintName } from '../shared/MintName';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
-import { formatMintUrl } from '../../utils/format';
+import { formatMintUrl, extractMintFromToken } from '../../utils/format';
 
 interface EcashModalProps {
   mintUrl: string;
+  initialTab?: 'send' | 'receive';
+  initialToken?: string;
   onClose: () => void;
 }
 
 type Tab = 'send' | 'receive';
 
-export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('send');
+export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialToken, onClose }) => {
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  const [mintUrl, setMintUrl] = useState(initialMintUrl);
+  const [showMintDropdown, setShowMintDropdown] = useState(false);
 
   // Send state
   const [amount, setAmount] = useState('');
@@ -30,15 +35,36 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
   const [copied, setCopied] = useState(false);
 
   // Receive state
-  const [receiveToken, setReceiveToken] = useState('');
+  const [receiveToken, setReceiveToken] = useState(initialToken || '');
   const [showScanner, setShowScanner] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState<number | null>(null);
-  
+
   const { sending, receiving, isClaimed, setIsClaimed, sendEcash, receiveEcash, pollTransactionStatus, stopPolling } = useEcash(mintUrl);
-  
+
   const urDecoder = useUrDecoder();
 
+  const handleTokenInput = (text: string) => {
+    setReceiveToken(text);
+    const extractedMint = extractMintFromToken(text.trim());
+    if (extractedMint) {
+      const normalizedExtracted = extractedMint.replace(/\/$/, '');
+      const matchedMint = mintUrls.find(m => m.replace(/\/$/, '') === normalizedExtracted) || extractedMint;
+
+      if (matchedMint !== mintUrl) {
+        setMintUrl(matchedMint);
+
+      }
+    }
+  };
+
+  React.useEffect(() => {
+    if (initialToken) {
+      handleTokenInput(initialToken);
+    }
+  }, [initialToken]);
+
   const mintBalances = useWalletStore((s) => s.mintBalances);
+  const mintUrls = Object.keys(mintBalances || {});
   const availableBalance = mintBalances[mintUrl] || 0;
 
   const { currentFrame, isAnimated, currentFrameIndex, totalFrames } = useUrEncoder(token || '', 150, 400);
@@ -111,13 +137,13 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
       <div className="bg-surface-container-high rounded-2xl w-full max-w-lg border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative max-h-[90vh]">
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
-        
+
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-outline-variant/10 relative z-10">
           <h2 className="text-headline-sm font-headline-sm text-on-surface flex items-center gap-2">
             <Coins className="text-primary w-5 h-5" /> Ecash
           </h2>
-          <button 
+          <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors"
           >
@@ -129,21 +155,19 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
         <div className="flex border-b border-outline-variant/10 relative z-10">
           <button
             onClick={() => switchTab('send')}
-            className={`flex-1 py-3 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-colors ${
-              activeTab === 'send' 
-                ? 'text-primary border-b-2 border-primary' 
+            className={`flex-1 py-3 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'send'
+                ? 'text-primary border-b-2 border-primary'
                 : 'text-on-surface-variant hover:text-on-surface'
-            }`}
+              }`}
           >
             <ArrowUp size={16} /> SEND
           </button>
           <button
             onClick={() => switchTab('receive')}
-            className={`flex-1 py-3 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-colors ${
-              activeTab === 'receive' 
-                ? 'text-primary border-b-2 border-primary' 
+            className={`flex-1 py-3 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'receive'
+                ? 'text-primary border-b-2 border-primary'
                 : 'text-on-surface-variant hover:text-on-surface'
-            }`}
+              }`}
           >
             <ArrowDown size={16} /> RECEIVE
           </button>
@@ -154,18 +178,45 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
           {/* Mint info */}
           <div className="flex flex-col gap-2">
             <p className="text-body-md font-body-md text-on-surface-variant">
-              {activeTab === 'send' 
+              {activeTab === 'send'
                 ? (token ? 'Ecash token created from:' : 'Send ecash token from:')
                 : (receivedAmount !== null ? 'Ecash received to:' : 'Receive ecash token to:')}
             </p>
-            <div className="flex items-center justify-between bg-surface-container-highest p-3 rounded-xl border border-outline-variant/10">
-              <div className="flex items-center gap-2 min-w-0 pr-4">
-                <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
-                <span className="text-body-md font-body-md text-on-surface font-medium truncate">{formatMintUrl(mintUrl)}</span>
-              </div>
-              <div className="flex items-baseline gap-1 flex-shrink-0 whitespace-nowrap">
-                <span className="text-body-md font-body-md font-semibold text-on-surface">₿{availableBalance.toLocaleString()}</span>
-              </div>
+            <div className="relative">
+              {showMintDropdown && (
+                <div className="fixed inset-0 z-40" onClick={() => setShowMintDropdown(false)}></div>
+              )}
+              <button
+                onClick={() => setShowMintDropdown(!showMintDropdown)}
+                className="w-full flex items-center justify-between bg-surface-container-highest p-3 rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-colors relative z-50"
+              >
+                <div className="flex items-center gap-2 min-w-0 pr-4">
+                  <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
+                  <MintName mintUrl={mintUrl} className="text-body-md font-body-md text-on-surface font-medium truncate" />
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap">
+                  <span className="text-body-md font-body-md font-semibold text-on-surface">₿{availableBalance.toLocaleString()}</span>
+                  <ChevronDown size={16} className="text-on-surface-variant flex-shrink-0" />
+                </div>
+              </button>
+
+              {showMintDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-surface-container-highest rounded-2xl shadow-2xl border border-outline-variant/20 overflow-hidden flex flex-col animate-fade-in z-50 max-h-[250px] overflow-y-auto">
+                  {mintUrls.map((m, index) => (
+                    <button
+                      key={m}
+                      onClick={() => { setMintUrl(m); setShowMintDropdown(false); }}
+                      className={`flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left w-full ${index > 0 ? 'border-t border-outline-variant/10' : ''}`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 pr-2">
+                        <MintIcon mintUrl={m} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
+                        <MintName mintUrl={m} className="text-body-sm font-body-sm text-on-surface truncate" />
+                      </div>
+                      <span className="text-body-sm font-body-sm font-bold text-on-surface flex-shrink-0">₿{(mintBalances![m] || 0).toLocaleString()}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -184,12 +235,11 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
                   <p className="text-error text-[12px] font-label-caps text-center">Insufficient balance</p>
                 )}
 
-                <button 
+                <button
                   onClick={handleSend}
                   disabled={sending || !isValid}
-                  className={`btn-gradient w-full py-4 rounded-full text-on-primary font-headline-lg-mobile text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${
-                    sending || !isValid ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
-                  }`}
+                  className={`btn-gradient w-full py-4 rounded-full text-on-primary font-headline-lg-mobile text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${sending || !isValid ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                    }`}
                 >
                   {sending ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Token'}
                 </button>
@@ -227,7 +277,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
                   </div>
 
                   <div className="w-full flex flex-col gap-2">
-                    <div 
+                    <div
                       onClick={handleCopy}
                       className="w-full bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30 shadow-inner cursor-pointer hover:border-primary/30 transition-colors"
                     >
@@ -266,22 +316,22 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
                 <div className="flex flex-col gap-4">
                   {showScanner ? (
                     <div className="relative rounded-xl overflow-hidden border border-outline-variant/30 aspect-square">
-                      <Scanner 
+                      <Scanner
                         onScan={(result) => {
                           if (result && result.length > 0) {
                             const text = result[0].rawValue;
                             if (text.toLowerCase().startsWith('ur:')) {
                               const decoded = urDecoder.receivePart(text);
                               if (decoded) {
-                                setReceiveToken(decoded);
+                                handleTokenInput(decoded);
                                 setShowScanner(false);
                               }
                             } else {
-                              setReceiveToken(text);
+                              handleTokenInput(text);
                               setShowScanner(false);
                             }
                           }
-                        }} 
+                        }}
                         onError={(e) => toast.error(e.message)}
                       />
                       {urDecoder.progress > 0 && !urDecoder.isSuccess && (
@@ -289,30 +339,30 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
                           Scanning: {Math.round(urDecoder.progress * 100)}%
                         </div>
                       )}
-                      <button 
+                      <button
                         onClick={() => {
                           setShowScanner(false);
                           urDecoder.reset();
-                        }} 
+                        }}
                         className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-highest px-4 py-2 rounded-full text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface"
                       >
                         Cancel Scanner
                       </button>
                       {receiving && (
-        <FullScreenLoader title="Receiving eCash..." message="Claiming tokens to your wallet." />
-      )}
-    </div>
+                        <FullScreenLoader title="Receiving eCash..." message="Claiming tokens to your wallet." />
+                      )}
+                    </div>
                   ) : (
                     <div className="relative">
                       <textarea
                         value={receiveToken}
-                        onChange={(e) => setReceiveToken(e.target.value)}
+                        onChange={(e) => handleTokenInput(e.target.value)}
                         className="w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-xl border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:ring-primary focus:outline-none resize-none placeholder:text-on-surface-variant/50"
                         placeholder="Paste cashuA token here to receive..."
                         rows={4}
                         spellCheck={false}
                       />
-                      <button 
+                      <button
                         onClick={() => setShowScanner(true)}
                         className="absolute right-3 top-3 p-2 bg-surface-container-highest rounded-lg text-primary hover:bg-surface-bright transition-colors"
                         title="Scan QR Code"
@@ -322,12 +372,11 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl, onClose }) => {
                     </div>
                   )}
 
-                  <button 
+                  <button
                     onClick={handleReceive}
                     disabled={receiving || !receiveToken.trim() || showScanner}
-                    className={`btn-gradient w-full py-4 rounded-full text-on-primary font-headline-lg-mobile text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${
-                      receiving || !receiveToken.trim() || showScanner ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
-                    }`}
+                    className={`btn-gradient w-full py-4 rounded-full text-on-primary font-headline-lg-mobile text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${receiving || !receiveToken.trim() || showScanner ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      }`}
                   >
                     {receiving ? <Loader2 className="animate-spin w-6 h-6" /> : 'Receive Ecash'}
                   </button>

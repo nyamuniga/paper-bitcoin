@@ -8,7 +8,9 @@ export const WalletManagementSection = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const setInitialized = useWalletStore((s) => s.setInitialized);
+  const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const { lockWallet, resetWallet } = useAuth();
+  const [isCleaning, setIsCleaning] = useState(false);
 
   const handleLock = async () => {
     const success = await lockWallet();
@@ -33,6 +35,25 @@ export const WalletManagementSection = () => {
     }
   };
 
+  const handleCleanWallet = async () => {
+    setIsCleaning(true);
+    const toastId = toast.loading('Scanning for spent proofs...');
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const removedSats = await invoke<number>('clean_wallet');
+      await refreshWallet();
+      if (removedSats > 0) {
+        toast.success(`Cleaned up ${removedSats} spent sats from wallet balance.`, { id: toastId });
+      } else {
+        toast.success('Wallet is already clean. No spent proofs found.', { id: toastId });
+      }
+    } catch (e: any) {
+      toast.error(`Failed to clean wallet: ${e}`, { id: toastId });
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
   return (
     <section className="bg-surface-container-high rounded-xl p-6 border border-outline-variant/30">
       <div className="mb-6">
@@ -52,6 +73,22 @@ export const WalletManagementSection = () => {
             <div className="text-left">
               <div className="font-bold text-on-surface text-sm">Lock Wallet</div>
               <div className="text-xs text-on-surface-variant">Require passphrase to access again</div>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={handleCleanWallet}
+          disabled={isCleaning}
+          className="flex items-center justify-between p-4 bg-surface-container-highest hover:bg-surface-bright rounded-xl border border-outline-variant/20 transition-colors group cursor-pointer disabled:opacity-50"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 text-primary rounded-lg">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="text-left">
+              <div className="font-bold text-on-surface text-sm">Clean Wallet</div>
+              <div className="text-xs text-on-surface-variant">Remove ghost spent proofs from balance</div>
             </div>
           </div>
         </button>

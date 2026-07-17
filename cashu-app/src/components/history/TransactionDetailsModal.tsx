@@ -78,20 +78,14 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
         <div className="p-6 flex flex-col gap-6 relative z-10 overflow-y-auto">
           {/* Main info */}
           <div className="flex flex-col items-center text-center">
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center border mb-4 ${
-              isMint || isReceive ? 'bg-emerald-900/30 border-emerald-500/30' : 
-              isIssue ? 'bg-primary-container/20 border-primary/20' : 
-              isRedeem ? 'bg-amber-500/20 border-amber-500/20' :
-              isSend ? 'bg-tertiary/20 border-tertiary/20' :
-              'bg-error-container/20 border-error/20'
-            }`}>
-              {isMint || isRedeem || isReceive ? <ArrowDown className="text-emerald-400 w-8 h-8" /> :
+            <div className="w-16 h-16 rounded-full flex items-center justify-center border mb-4 bg-primary/20 border-primary/20">
+              {isMint || isRedeem || isReceive ? <ArrowDown className="text-primary w-8 h-8" /> :
                isIssue ? <FileText className="text-primary w-8 h-8" /> : 
-               isSend ? <ArrowUp className="text-tertiary w-8 h-8" /> :
-               <ArrowUp className="text-error w-8 h-8" />}
+               isSend ? <ArrowUp className="text-primary w-8 h-8" /> :
+               <ArrowUp className="text-primary w-8 h-8" />}
             </div>
             <h3 className="text-headline-md font-headline-md text-on-surface">{getTxLabel()}</h3>
-            <p className={`text-display-sm font-display-sm mt-2 ${isMint || isRedeem || isReceive ? 'text-emerald-400' : isIssue ? 'text-primary' : isSend ? 'text-tertiary' : 'text-on-surface'}`}>
+            <p className="text-display-sm font-display-sm mt-2 text-primary">
               {isMint || isRedeem || isReceive ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
             </p>
             {tx.fee > 0 && <p className="text-label-caps font-label-caps text-on-surface-variant mt-1">Fee: ₿{tx.fee.toLocaleString()}</p>}
