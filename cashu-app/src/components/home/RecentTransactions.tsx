@@ -46,11 +46,11 @@ export const RecentTransactions: React.FC = () => {
     return <ArrowUp className="text-primary w-4 h-4" />;
   };
 
-  const getTxIconBg = (tx: Transaction) => {
+  const getTxIconBg = (_tx: Transaction) => {
     return 'bg-primary/20 border-primary/20';
   };
 
-  const getTxAmountColor = (tx: Transaction) => {
+  const getTxAmountColor = (_tx: Transaction) => {
     return 'text-primary';
   };
 

@@ -1,16 +1,16 @@
 use crate::error::CommandResult;
-use ecash_wallet::WalletState;
-use ecash_wallet::client::MintClient;
-use ecash_core::types::{
-    Transaction, TransactionType, ReceiveLightningTransactionData, 
-    TransactionStatus, split_into_powers_of_2,
-};
-use ecash_core::dhke::BlindingSession;
 use ecash_core::derivation::TokenDerivation;
+use ecash_core::dhke::BlindingSession;
+use ecash_core::types::{
+    split_into_powers_of_2, ReceiveLightningTransactionData, Transaction, TransactionStatus,
+    TransactionType,
+};
+use ecash_wallet::client::MintClient;
+use ecash_wallet::WalletState;
 use serde::{Deserialize, Serialize};
 
-use tauri::State;
 use crate::commands::auth::AppState;
+use tauri::State;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReceiveLightningQuote {
@@ -26,10 +26,12 @@ pub async fn receive_lightning(
     state: State<'_, AppState>,
 ) -> CommandResult<ReceiveLightningQuote> {
     let path = state.wallet_path.clone();
-    
+
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock.clone().ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
+        pass_lock
+            .clone()
+            .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
     };
 
     // Load wallet state
@@ -37,15 +39,19 @@ pub async fn receive_lightning(
 
     let mint_url = ecash_wallet::state::normalize_mint_url(&mint_url);
     let client = MintClient::new(&mint_url);
-    
-    let (quote_id, invoice) = client.request_mint_quote(amount).await
+
+    let (quote_id, invoice) = client
+        .request_mint_quote(amount)
+        .await
         .map_err(|e| crate::error::CommandError(format!("Failed to get mint quote: {}", e)))?;
 
-    let keyset = client.fetch_keyset().await
+    let keyset = client
+        .fetch_keyset()
+        .await
         .map_err(|e| crate::error::CommandError(format!("Failed to fetch keyset: {}", e)))?;
 
     let desired_amounts = split_into_powers_of_2(amount);
-    
+
     let mut deriv = TokenDerivation::from_hex(&w_state.seed_hex)
         .map_err(|e| crate::error::CommandError(format!("Derivation error: {}", e)))?;
     deriv.index = w_state.derivation_index;
@@ -66,18 +72,24 @@ pub async fn receive_lightning(
     }
 
     w_state.derivation_index = deriv.index;
-    
+
     let pending_tx = Transaction {
         id: quote_id.clone(), // Use quote_id as the transaction ID for easy polling
         tx_type: TransactionType::ReceiveLightning(ReceiveLightningTransactionData {
             quote_id: quote_id.clone(),
             outputs: outputs.clone(),
-            blinding_sessions_hex: sessions.iter().map(|(_, sess, _)| sess.secret.clone()).collect(),
+            blinding_sessions_hex: sessions
+                .iter()
+                .map(|(_, sess, _)| sess.secret.clone())
+                .collect(),
         }),
         amount,
         fee: 0,
         status: TransactionStatus::Pending,
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
         mint_url: mint_url.clone(),
     };
     w_state.transactions.insert(0, pending_tx);

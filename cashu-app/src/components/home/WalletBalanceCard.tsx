@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { QrCode, ArrowDownLeft, ArrowUpRight, Coins, Zap, FileText, ChevronDown } from 'lucide-react';
+import { QrCode, ArrowDownLeft, ArrowUpRight, Coins, Zap, FileText, ChevronDown, Phone } from 'lucide-react';
 import { ActionMenuModal } from './ActionMenuModal';
 import { EcashModal } from './EcashModal';
 import { BitcoinModal } from './BitcoinModal';
+import { MomoTransferModal } from './MomoTransferModal';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
-import { formatMintUrl } from '../../utils/format';
+
 
 interface WalletBalanceCardProps {
   balance: number;
@@ -19,9 +20,10 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
   const [showReceive, setShowReceive] = useState(false);
   const [showSend, setShowSend] = useState(false);
   const [showMintDropdown, setShowMintDropdown] = useState(false);
-  const [ecashModalConfig, setEcashModalConfig] = useState<{isOpen: boolean, tab: 'send' | 'receive', initialToken?: string} | null>(null);
-  const [bitcoinModalConfig, setBitcoinModalConfig] = useState<{isOpen: boolean, tab: 'send' | 'receive', initialInvoice?: string} | null>(null);
-  
+  const [ecashModalConfig, setEcashModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive', initialToken?: string } | null>(null);
+  const [bitcoinModalConfig, setBitcoinModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive', initialInvoice?: string } | null>(null);
+  const [momoModalConfig, setMomoModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive' } | null>(null);
+
   const mintUrls = Object.keys(mintBalances || {});
   const [selectedMint, setSelectedMint] = useState<string | null>(null);
 
@@ -52,9 +54,9 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
         {showMintDropdown && (
           <div className="fixed inset-0 z-10" onClick={() => setShowMintDropdown(false)}></div>
         )}
-        
+
         <div className="relative z-20 flex flex-col items-center">
-          <button 
+          <button
             onClick={() => setShowMintDropdown(!showMintDropdown)}
             className="flex items-center gap-2 bg-surface/40 hover:bg-surface/70 px-3 py-1.5 rounded-full transition-colors mb-2 border border-outline-variant/20 shadow-sm"
           >
@@ -68,11 +70,11 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
             )}
             <ChevronDown size={14} className="text-on-surface-variant flex-shrink-0" />
           </button>
-          
+
           {showMintDropdown && (
             <div className="absolute top-full mt-2 w-64 bg-surface-container-highest rounded-2xl shadow-2xl border border-outline-variant/20 overflow-hidden flex flex-col animate-fade-in z-50 max-h-[300px] overflow-y-auto">
               {mintUrls.map((mint, index) => (
-                <button 
+                <button
                   key={mint}
                   onClick={() => { setSelectedMint(mint); setShowMintDropdown(false); }}
                   className={`flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left ${index > 0 ? 'border-t border-outline-variant/10' : ''}`}
@@ -95,20 +97,20 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
 
       {/* Action buttons */}
       <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
-        <button 
+        <button
           onClick={() => setShowReceive(true)}
           className="flex items-center justify-center gap-2 py-3 px-2 rounded-2xl bg-surface-container-high text-on-surface font-headline-lg-mobile text-[14px] md:text-[15px] border border-outline-variant/30 hover:bg-surface-container-highest active:scale-[0.97] transition-all duration-200"
         >
           <ArrowDownLeft size={20} className="text-primary" />
           <span>Receive</span>
         </button>
-        <Link 
-          to="/scan" 
+        <Link
+          to="/scan"
           className="flex items-center justify-center w-14 h-14 rounded-full bg-primary text-on-primary shadow-[0_4px_20px_rgba(212,157,66,0.3)] hover:opacity-90 active:scale-[0.97] transition-all duration-200"
         >
           <QrCode size={24} />
         </Link>
-        <button 
+        <button
           onClick={() => setShowSend(true)}
           className="flex items-center justify-center gap-2 py-3 px-2 rounded-2xl bg-surface-container-high text-on-surface font-headline-lg-mobile text-[14px] md:text-[15px] border border-outline-variant/30 hover:bg-surface-container-highest active:scale-[0.97] transition-all duration-200"
         >
@@ -118,7 +120,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
       </div>
 
       {showReceive && (
-        <ActionMenuModal 
+        <ActionMenuModal
           title="Receive"
           onClose={() => setShowReceive(false)}
           options={[
@@ -126,7 +128,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               label: 'Ecash',
               icon: <Coins size={20} />,
               colorClass: 'bg-primary/20 text-primary',
-              onClick: () => { 
+              onClick: () => {
                 if (!activeMint && mintUrls.length === 0) return;
                 setEcashModalConfig({ isOpen: true, tab: 'receive' });
               }
@@ -134,10 +136,18 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
             {
               label: 'Bitcoin',
               icon: <Zap size={20} />,
-              colorClass: 'bg-orange-500/20 text-orange-500',
-              onClick: () => { 
+              colorClass: 'bg-primary/20 text-primary',
+              onClick: () => {
                 if (!activeMint && mintUrls.length === 0) return;
                 setBitcoinModalConfig({ isOpen: true, tab: 'receive' });
+              }
+            },
+            {
+              label: 'RWF (Mobile Money)',
+              icon: <Phone size={20} />,
+              colorClass: 'bg-primary/20 text-primary',
+              onClick: () => {
+                setMomoModalConfig({ isOpen: true, tab: 'receive' });
               }
             }
           ]}
@@ -145,21 +155,21 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
       )}
 
       {showSend && (
-        <ActionMenuModal 
+        <ActionMenuModal
           title="Send"
           onClose={() => setShowSend(false)}
           options={[
             {
               label: 'Issue Note',
               icon: <FileText size={20} />,
-              colorClass: 'bg-tertiary/20 text-tertiary',
+              colorClass: 'bg-primary/20 text-primary',
               onClick: () => { navigate('/issue'); }
             },
             {
               label: 'Ecash',
               icon: <Coins size={20} />,
               colorClass: 'bg-primary/20 text-primary',
-              onClick: () => { 
+              onClick: () => {
                 if (!activeMint && mintUrls.length === 0) return;
                 setEcashModalConfig({ isOpen: true, tab: 'send' });
               }
@@ -167,10 +177,18 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
             {
               label: 'Bitcoin',
               icon: <Zap size={20} />,
-              colorClass: 'bg-orange-500/20 text-orange-500',
-              onClick: () => { 
+              colorClass: 'bg-primary/20 text-primary',
+              onClick: () => {
                 if (!activeMint && mintUrls.length === 0) return;
                 setBitcoinModalConfig({ isOpen: true, tab: 'send' });
+              }
+            },
+            {
+              label: 'RWF (Mobile Money)',
+              icon: <Phone size={20} />,
+              colorClass: 'bg-primary/20 text-primary',
+              onClick: () => {
+                setMomoModalConfig({ isOpen: true, tab: 'send' });
               }
             }
           ]}
@@ -178,8 +196,8 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
       )}
 
       {ecashModalConfig && (
-        <EcashModal 
-          mintUrl={activeMint || mintUrls[0]} 
+        <EcashModal
+          mintUrl={activeMint || mintUrls[0]}
           initialTab={ecashModalConfig.tab}
           initialToken={ecashModalConfig.initialToken}
           onClose={() => setEcashModalConfig(null)}
@@ -187,11 +205,19 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
       )}
 
       {bitcoinModalConfig && (
-        <BitcoinModal 
-          mintUrl={activeMint || mintUrls[0]} 
+        <BitcoinModal
+          mintUrl={activeMint || mintUrls[0]}
           initialTab={bitcoinModalConfig.tab}
           initialInvoice={bitcoinModalConfig.initialInvoice}
           onClose={() => setBitcoinModalConfig(null)}
+        />
+      )}
+
+      {momoModalConfig && (
+        <MomoTransferModal
+          mintUrl={activeMint || mintUrls[0]}
+          initialTab={momoModalConfig.tab}
+          onClose={() => setMomoModalConfig(null)}
         />
       )}
     </section>
