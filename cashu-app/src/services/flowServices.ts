@@ -25,7 +25,8 @@ import {
   RWF_USD_PEG,
   POLLING_INTERVAL_MS,
   POLLING_TIMEOUT_MS,
-  TX_FEE_PERCENTAGE
+  TX_FEE_PERCENTAGE,
+  MOMO_API_BASE_URL
 } from "../constants.local";
 
 export const fetchCurrentRate = async (): Promise<number> => {
@@ -38,6 +39,23 @@ export const fetchCurrentRate = async (): Promise<number> => {
   const btcPriceInUsd = btcPriceInUsdRaw * (1 + SPREAD);
   const btcPriceInRwf = btcPriceInUsd * RWF_USD_PEG;
   return SATS_PER_BTC / btcPriceInRwf;
+};
+
+export const fetchProxyBlinkBalance = async (): Promise<number> => {
+  try {
+    const response = await fetch(`${MOMO_API_BASE_URL}/payment/balance`);
+    if (!response.ok) return 0;
+    const data = await response.json();
+    
+    // Parse the GraphQL response to find the BTC wallet balance
+    const wallets = data?.data?.me?.defaultAccount?.wallets || [];
+    const btcWallet = wallets.find((w: any) => w.walletCurrency === 'BTC');
+    
+    return btcWallet ? btcWallet.balance : 0;
+  } catch (error) {
+    console.error("Failed to fetch proxy blink balance", error);
+    return 0; // On error, maybe return a high number or 0? 0 is safer to prevent broken payments
+  }
 };
 
 export const calculateQuote = async (

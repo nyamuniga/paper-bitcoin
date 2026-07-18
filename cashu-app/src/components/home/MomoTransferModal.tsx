@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Phone, PhoneOutgoing, PhoneIncoming, ChevronDown } from 'lucide-react';
 import { AppPhase, TransactionDetails } from '../../types/momo';
-import { calculateQuote, startPaymentVerification, calculateSendQuote, executeSendPayment, initiateAndVerifyPayout, fetchCurrentRate } from '../../services/flowServices';
+import { calculateQuote, startPaymentVerification, calculateSendQuote, executeSendPayment, initiateAndVerifyPayout, fetchCurrentRate, fetchProxyBlinkBalance } from '../../services/flowServices';
 import { useWalletStore } from '../../store/wallet';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
@@ -40,11 +40,12 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   const [, setHistory] = useState<TransactionDetails[]>([]);
 
   const [currentRate, setCurrentRate] = useState<number | null>(null);
+  const [proxyBalance, setProxyBalance] = useState<number | null>(null);
   const [isFetchingRate, setIsFetchingRate] = useState(false);
 
   useEffect(() => {
-    const getRate = async () => {
-      if (activeTab === 'send' && !currentRate) {
+    const fetchRatesAndBalances = async () => {
+      if (!currentRate) {
         setIsFetchingRate(true);
         try {
           const rate = await fetchCurrentRate();
@@ -55,9 +56,18 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           setIsFetchingRate(false);
         }
       }
+
+      if (activeTab === 'receive' && proxyBalance === null) {
+        try {
+          const balance = await fetchProxyBlinkBalance();
+          setProxyBalance(balance);
+        } catch (e) {
+          console.error("Failed to fetch proxy balance", e);
+        }
+      }
     };
-    getRate();
-  }, [activeTab, currentRate]);
+    fetchRatesAndBalances();
+  }, [activeTab, currentRate, proxyBalance]);
 
   const amountNum = parseFloat(amount);
   let amountError = '';
@@ -74,6 +84,11 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
       const estimatedSats = Math.floor(totalRwf * currentRate);
       if (estimatedSats > availableBalance) {
         amountError = `Insufficient balance. Estimated cost: ~${estimatedSats.toLocaleString()} sats.`;
+      }
+    } else if (activeTab === 'receive' && currentRate && proxyBalance !== null) {
+      const estimatedSats = Math.floor(amountNum * currentRate);
+      if (estimatedSats > proxyBalance) {
+        amountError = `Gateway has insufficient liquidity to process this amount right now. Please try a smaller amount.`;
       }
     }
   }
