@@ -7,7 +7,7 @@ pub fn decode_qr_payload(payload: &str) -> anyhow::Result<Vec<u8>> {
         // Some scanners or OCR might mangle the case of the prefix.
         // If it starts with ECASHZ (case-insensitive), try decoding as base45 first.
         let data_part = &payload[7..];
-        
+
         // Base45 decode
         if let Ok(compressed) = base45::decode(data_part) {
             let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
@@ -16,7 +16,7 @@ pub fn decode_qr_payload(payload: &str) -> anyhow::Result<Vec<u8>> {
                 return Ok(decompressed);
             }
         }
-        
+
         // If base45 fails, try base64 (eCashZ fallback)
         let compressed = base64::engine::general_purpose::STANDARD.decode(data_part)?;
         let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);

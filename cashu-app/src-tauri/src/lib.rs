@@ -4,6 +4,7 @@ mod error;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_http::init())
         .setup(|app| {
             use tauri::Manager;
             let wallet_path = app.path().app_data_dir().unwrap().join("gui-wallet.json");
@@ -16,11 +17,12 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init());
-        
+
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let builder = builder.plugin(tauri_plugin_biometric::init());
 
-    builder.invoke_handler(tauri::generate_handler![
+    builder
+        .invoke_handler(tauri::generate_handler![
             commands::wallet::wallet_info,
             commands::wallet::get_balance,
             commands::wallet::get_recovery_words,

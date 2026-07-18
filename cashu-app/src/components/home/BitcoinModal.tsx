@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Loader2, Zap, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
+
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 import { useBitcoin } from '../../hooks/useBitcoin';
-import { formatMintUrl } from '../../utils/format';
+
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';

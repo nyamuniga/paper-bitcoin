@@ -16,18 +16,19 @@ pub async fn retry_mint(state: &mut WalletState, wallet_path: &PathBuf, passphra
         return Err(anyhow!("Transaction is not pending"));
     }
 
-    let mint_data = match tx.tx_type {
-        TransactionType::Mint(data) => data,
+    let (quote_id, outputs, blinding_sessions_hex) = match tx.tx_type {
+        TransactionType::Mint(data) => (data.quote_id, data.outputs, data.blinding_sessions_hex),
+        TransactionType::ReceiveLightning(data) => (data.quote_id, data.outputs, data.blinding_sessions_hex),
         _ => return Err(anyhow!("Not a mint transaction")),
     };
 
     let client = MintClient::new(&tx.mint_url);
     let keyset = client.fetch_keyset().await?;
     
-    let sigs = client.mint_tokens(&mint_data.quote_id, mint_data.outputs.clone()).await?;
+    let sigs = client.mint_tokens(&quote_id, outputs.clone()).await?;
 
     let mut sessions = Vec::new();
-    for (secret_hex, out) in mint_data.blinding_sessions_hex.iter().zip(mint_data.outputs.iter()) {
+    for (secret_hex, out) in blinding_sessions_hex.iter().zip(outputs.iter()) {
         let amount = out["amount"].as_u64().ok_or_else(|| anyhow!("Missing amount in outputs"))?;
         sessions.push((amount, secret_hex.clone()));
     }

@@ -12,7 +12,7 @@ import { NumberPad } from '../shared/NumberPad';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
-import { formatMintUrl, extractMintFromToken } from '../../utils/format';
+import { extractMintFromToken } from '../../utils/format';
 
 interface EcashModalProps {
   mintUrl: string;

@@ -41,6 +41,7 @@ svg2pdf = "0.13.0"
 base45 = "3.2.0"
 ciborium = "0.2.2"
 hex.workspace = true
+tauri-plugin-http = "2"
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-biometric = "2"
