@@ -277,7 +277,7 @@ export const calculateSendQuote = async (
   rwfAmount: string,
   momoPhoneNumber: string,
   activeTab: AppTab,
-  mintUrl: string,
+  _mintUrl: string,
   setPhase: (phase: AppPhase) => void,
   setError: (error: string) => void,
   setTransaction: (tx: TransactionDetails | null) => void,
