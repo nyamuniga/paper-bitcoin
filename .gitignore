@@ -11,7 +11,8 @@ notes/
 new-notes/
 newnotes/
 demo-notes/
-
+*.local
+*.local.ts
 # Scratch / research notes (not part of the codebase)
 qr_code_data_compression.md
 
