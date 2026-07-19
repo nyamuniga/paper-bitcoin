@@ -11,6 +11,7 @@ pub fn run() {
             app.manage(commands::auth::AppState {
                 passphrase: std::sync::Mutex::new(None),
                 wallet_path,
+                wallet_lock: tokio::sync::Mutex::new(()),
             });
             Ok(())
         })

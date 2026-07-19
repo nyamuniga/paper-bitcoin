@@ -19,6 +19,7 @@ export enum AppPhase {
   INITIATING_PAYOUT = "INITIATING_PAYOUT", 
   VERIFYING_PAYOUT = "VERIFYING_PAYOUT", 
   PAYOUT_COMPLETE = "PAYOUT_COMPLETE", 
+  PAYOUT_FAILED = "PAYOUT_FAILED",
   RETRYABLE_ERROR = "RETRYABLE_ERROR", 
   EXPIRED = "EXPIRED", 
 }
@@ -61,4 +62,5 @@ export interface TransactionDetails {
   fulfillmentStep?: FulfillmentStep; 
   currentPhase?: AppPhase; 
   currentTab?: "ecash" | "lightning" | "receive"; 
+  mintUrl?: string;
 }

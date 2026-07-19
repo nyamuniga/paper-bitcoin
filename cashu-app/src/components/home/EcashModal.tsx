@@ -31,7 +31,6 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   // Send state
   const [amount, setAmount] = useState('');
   const [token, setToken] = useState<string | null>(null);
-  const [txId, setTxId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   // Receive state
@@ -39,7 +38,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   const [showScanner, setShowScanner] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState<number | null>(null);
 
-  const { sending, receiving, isClaimed, setIsClaimed, sendEcash, receiveEcash, pollTransactionStatus, stopPolling } = useEcash(mintUrl);
+  const { sending, receiving, isClaimed, setIsClaimed, sendEcash, receiveEcash } = useEcash(mintUrl);
 
   const urDecoder = useUrDecoder();
 
@@ -73,20 +72,11 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   const isInsufficient = parsedAmount > availableBalance;
   const isValid = parsedAmount > 0 && !isInsufficient;
 
-  React.useEffect(() => {
-    if (!txId || isClaimed) return;
-    const cleanup = pollTransactionStatus(txId);
-    return () => {
-      cleanup?.then(c => c && c());
-    };
-  }, [txId, isClaimed]);
-
   const handleSend = async () => {
     if (!isValid) return;
     const result = await sendEcash(parsedAmount);
     if (result) {
       setToken(result.token);
-      setTxId(result.tx_id);
     }
   };
 
@@ -114,10 +104,8 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   const resetSend = () => {
     setAmount('');
     setToken(null);
-    setTxId(null);
     setCopied(false);
     setIsClaimed(false);
-    stopPolling();
   };
 
   const resetReceive = () => {

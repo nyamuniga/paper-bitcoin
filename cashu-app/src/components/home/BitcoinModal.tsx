@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Copy, Check, Loader2, Zap, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
 
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 import { useBitcoin } from '../../hooks/useBitcoin';
+import { useHistory } from '../../hooks/useHistory';
 
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { MintIcon } from '../shared/MintIcon';
@@ -41,7 +42,11 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const mintUrls = Object.keys(mintBalances || {});
   const availableBalance = mintBalances[mintUrl] || 0;
 
-  const { paying, requesting, receiveSuccess, setReceiveSuccess, payInvoice, receiveLightning, pollReceiveStatus, stopPolling } = useBitcoin(mintUrl);
+  const { transactions } = useHistory();
+  const { paying, requesting, payInvoice, receiveLightning } = useBitcoin(mintUrl);
+
+  const currentTx = quoteId ? transactions.find(t => t.id === quoteId) : null;
+  const receiveSuccess = currentTx?.status === 'Success';
 
   const getInvoiceAmountSats = (inv: string): number | null => {
     try {
@@ -84,15 +89,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
     }
   };
 
-  // Poll for payment
-  useEffect(() => {
-    if (!quoteId || !receiveInvoice || receiveSuccess) return;
-    const cleanup = pollReceiveStatus(quoteId, parsedReceiveAmount);
-    return () => {
-      cleanup.then(c => c && c());
-    };
-  }, [quoteId, receiveInvoice, receiveSuccess, parsedReceiveAmount]);
-
   const handleCopyInvoice = async () => {
     if (!receiveInvoice) return;
     try {
@@ -114,8 +110,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
       setReceiveAmount('');
       setQuoteId(null);
       setReceiveInvoice(null);
-      setReceiveSuccess(false);
-      stopPolling();
     }
   };
 

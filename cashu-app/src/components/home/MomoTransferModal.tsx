@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Phone, PhoneOutgoing, PhoneIncoming, ChevronDown } from 'lucide-react';
-import { AppPhase, TransactionDetails } from '../../types/momo';
-import { calculateQuote, startPaymentVerification, calculateSendQuote, executeSendPayment, initiateAndVerifyPayout, fetchCurrentRate, fetchProxyBlinkBalance } from '../../services/flowServices';
+import { AppPhase } from '../../types/momo';
+import { calculateQuote, calculateSendQuote, fetchCurrentRate, fetchProxyBlinkBalance } from '../../services/flowServices';
 import { useWalletStore } from '../../store/wallet';
+import { useTransactionStore } from '../../store/transactionStore';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
+
 interface MomoTransferModalProps {
   initialTab?: 'send' | 'receive';
   onClose: () => void;
@@ -16,7 +18,14 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   onClose,
   mintUrl: initialMintUrl = ''
 }) => {
-  const [activeTab, setActiveTab] = useState<'send' | 'receive'>(initialTab);
+  const { activeTransaction, error, setError, updateTransactionPhase, setActiveTransaction } = useTransactionStore();
+  const phase = activeTransaction?.currentPhase || AppPhase.IDLE;
+
+  const initialDerivedTab = activeTransaction 
+    ? (activeTransaction.direction === 'RWF_TO_SATS' ? 'receive' : 'send')
+    : initialTab;
+
+  const [activeTab, setActiveTab] = useState<'send' | 'receive'>(initialDerivedTab);
   const [amount, setAmount] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
 
@@ -24,7 +33,6 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   const [showMintDropdown, setShowMintDropdown] = useState(false);
 
   const mintBalances = useWalletStore((s) => s.mintBalances);
-  const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const mintUrls = Object.keys(mintBalances || {});
   const availableBalance = mintBalances ? mintBalances[mintUrl] || 0 : 0;
 
@@ -33,11 +41,6 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
       setMintUrl(mintUrls[0]);
     }
   }, [mintUrl, mintUrls]);
-
-  const [phase, setPhase] = useState<AppPhase>(AppPhase.IDLE);
-  const [error, setError] = useState('');
-  const [transaction, setTransaction] = useState<TransactionDetails | null>(null);
-  const [, setHistory] = useState<TransactionDetails[]>([]);
 
   const [currentRate, setCurrentRate] = useState<number | null>(null);
   const [proxyBalance, setProxyBalance] = useState<number | null>(null);
@@ -99,123 +102,46 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
 
   const isFormValid = amount && phoneNumber && !amountError && !phoneError && !isFetchingRate && phase === AppPhase.IDLE;
 
-  const pollingIntervalRef = useRef<any>(null);
-  const pollingTimeoutRef = useRef<any>(null);
-
-  const stopPolling = () => {
-    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-    if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
-  };
-
-  useEffect(() => {
-    return () => stopPolling();
-  }, []);
-
   const handleReceiveFromMomo = async () => {
-    try {
-      setError('');
-      await calculateQuote(
-        amount,
-        phoneNumber,
-        'ecash',
-        mintUrl,
-        setPhase,
-        setError,
-        setTransaction,
-        setHistory
-      );
-    } catch (e: any) {
-      setError(e.message);
-      setPhase(AppPhase.IDLE);
-    }
+    setError(null);
+    await calculateQuote(amount, phoneNumber, 'ecash', mintUrl);
   };
 
   const handleSendToMomo = async () => {
-    try {
-      setError('');
-      await calculateSendQuote(
-        amount,
-        phoneNumber,
-        'ecash',
-        mintUrl,
-        setPhase,
-        setError,
-        setTransaction,
-        setHistory
-      );
-    } catch (e: any) {
-      setError(e.message);
-      setPhase(AppPhase.IDLE);
-    }
+    setError(null);
+    await calculateSendQuote(amount, phoneNumber, 'ecash', mintUrl);
   };
-
-  // Watch for transaction changes to start polling
-  useEffect(() => {
-    if (phase === AppPhase.PENDING_PAYMENT && transaction) {
-      startPaymentVerification(
-        transaction,
-        'ecash',
-        setPhase,
-        setTransaction,
-        setHistory,
-        setError,
-        stopPolling,
-        pollingIntervalRef,
-        pollingTimeoutRef
-      );
-    }
-  }, [phase, transaction]);
-
-  // Send flow: Watch for phase to initiate payment
-  useEffect(() => {
-    if (phase === AppPhase.AWAITING_INVOICE_PAYMENT && transaction) {
-      executeSendPayment(
-        transaction,
-        mintUrl,
-        'ecash',
-        setPhase,
-        setTransaction,
-        setHistory,
-        setError
-      );
-    }
-  }, [phase, transaction, mintUrl]);
-
-  // Send flow: Watch for phase to verify payout
-  useEffect(() => {
-    if (phase === AppPhase.INITIATING_PAYOUT && transaction) {
-      refreshWallet(); // Instantly update balance after eCash is spent
-      initiateAndVerifyPayout(
-        transaction,
-        'ecash',
-        setPhase,
-        setTransaction,
-        setHistory,
-        setError,
-        stopPolling,
-        pollingIntervalRef,
-        pollingTimeoutRef
-      );
-    }
-  }, [phase, transaction, refreshWallet]);
 
   const switchTab = (tab: 'send' | 'receive') => {
     if (phase !== AppPhase.IDLE && phase !== AppPhase.READY_TO_CLAIM && phase !== AppPhase.RETRYABLE_ERROR) return;
     setActiveTab(tab);
     setAmount('');
     setPhoneNumber('');
-    setError('');
-    setPhase(AppPhase.IDLE);
+    setError(null);
+    if (phase === AppPhase.RETRYABLE_ERROR) {
+       setActiveTransaction(null);
+    }
   };
 
-  useEffect(() => {
-    if (phase === AppPhase.READY_TO_CLAIM) {
-      refreshWallet();
+  const handleClose = () => {
+    const isProcessPhase = phase !== AppPhase.IDLE && 
+                           phase !== AppPhase.READY_TO_CLAIM && 
+                           phase !== AppPhase.PAYMENT_FAILED && 
+                           phase !== AppPhase.RETRYABLE_ERROR;
+    
+    if (isProcessPhase) {
+      return;
     }
-  }, [phase, refreshWallet]);
+
+    if (phase === AppPhase.READY_TO_CLAIM || phase === AppPhase.PAYMENT_FAILED || phase === AppPhase.RETRYABLE_ERROR) {
+      setActiveTransaction(null);
+      setError(null);
+    }
+    onClose();
+  };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in" onClick={handleClose}>
       <div
         onClick={e => e.stopPropagation()}
         className="w-full max-w-lg bg-surface-container-high rounded-2xl border border-outline-variant/20 shadow-2xl flex flex-col overflow-hidden relative max-h-[90vh] animate-slide-up"
@@ -232,7 +158,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                 <h2 className="text-headline-sm font-headline-sm text-on-surface">RWF Mobile Money</h2>
               </div>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="w-8 h-8 rounded-full flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors"
               >
                 <X size={18} />
@@ -326,18 +252,33 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                   <h3 className="text-headline-md text-on-surface mb-2">Success!</h3>
                   <p className="text-body-md text-on-surface-variant">Sats have been minted to your wallet.</p>
                   <button
-                    onClick={onClose}
+                    onClick={handleClose}
                     className="w-full mt-6 bg-primary text-on-primary py-4 rounded-2xl font-label-lg"
                   >
                     Close
                   </button>
+                </div>
+              ) : phase === AppPhase.PAYMENT_FAILED || phase === AppPhase.RETRYABLE_ERROR ? (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 rounded-full bg-error/20 text-error flex items-center justify-center mx-auto mb-4">
+                    <X size={32} />
+                  </div>
+                  <h3 className="text-headline-md text-on-surface mb-2">Transfer Failed</h3>
+                  <p className="text-body-md text-on-surface-variant mb-6">{error || "Something went wrong."}</p>
+                  {phase === AppPhase.RETRYABLE_ERROR ? (
+                    <div className="flex gap-3">
+                      <button onClick={handleClose} className="flex-1 py-4 rounded-2xl font-label-lg border border-outline-variant/20 hover:bg-surface-container-highest">Cancel</button>
+                      <button onClick={() => updateTransactionPhase(AppPhase.VERIFYING_PAYMENT)} className="flex-1 bg-primary text-on-primary py-4 rounded-2xl font-label-lg">Retry</button>
+                    </div>
+                  ) : (
+                    <button onClick={handleClose} className="w-full bg-surface-container-highest text-on-surface py-4 rounded-2xl font-label-lg hover:bg-surface-bright">Close</button>
+                  )}
                 </div>
               ) : [AppPhase.FETCHING_RATE, AppPhase.INITIATING_PAYMENT, AppPhase.PENDING_PAYMENT, AppPhase.VERIFYING_PAYMENT, AppPhase.PAYING_INVOICE, AppPhase.FULFILLING].includes(phase) ? (
                 <div className="py-6 px-4">
                   <h3 className="text-headline-md text-on-surface mb-6 text-center">Processing Transfer</h3>
 
                   <div className="flex flex-col gap-4">
-                    {/* Step 1: Initiating */}
                     <div className="flex items-center gap-4">
                       <div className="relative flex items-center justify-center w-8 h-8">
                         {[AppPhase.FETCHING_RATE, AppPhase.INITIATING_PAYMENT].includes(phase) ? (
@@ -354,7 +295,6 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Step 2: MoMo Approval */}
                     <div className="flex items-center gap-4">
                       <div className="relative flex items-center justify-center w-8 h-8">
                         {phase === AppPhase.PENDING_PAYMENT || phase === AppPhase.VERIFYING_PAYMENT ? (
@@ -373,7 +313,6 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Step 3: Lightning Payment */}
                     <div className="flex items-center gap-4">
                       <div className="relative flex items-center justify-center w-8 h-8">
                         {phase === AppPhase.PAYING_INVOICE ? (
@@ -392,7 +331,6 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Step 4: Minting eCash */}
                     <div className="flex items-center gap-4">
                       <div className="relative flex items-center justify-center w-8 h-8">
                         {phase === AppPhase.FULFILLING ? (
@@ -454,18 +392,33 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                   <h3 className="text-headline-md text-on-surface mb-2">Transfer Complete!</h3>
                   <p className="text-body-md text-on-surface-variant">RWF has been sent successfully to the mobile money number.</p>
                   <button
-                    onClick={onClose}
+                    onClick={handleClose}
                     className="w-full mt-6 bg-primary text-on-primary py-4 rounded-2xl font-label-lg"
                   >
                     Close
                   </button>
+                </div>
+              ) : phase === AppPhase.PAYMENT_FAILED || phase === AppPhase.RETRYABLE_ERROR ? (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 rounded-full bg-error/20 text-error flex items-center justify-center mx-auto mb-4">
+                    <X size={32} />
+                  </div>
+                  <h3 className="text-headline-md text-on-surface mb-2">Transfer Failed</h3>
+                  <p className="text-body-md text-on-surface-variant mb-6">{error || "Something went wrong."}</p>
+                  {phase === AppPhase.RETRYABLE_ERROR ? (
+                    <div className="flex gap-3">
+                      <button onClick={handleClose} className="flex-1 py-4 rounded-2xl font-label-lg border border-outline-variant/20 hover:bg-surface-container-highest">Cancel</button>
+                      <button onClick={() => updateTransactionPhase(AppPhase.AWAITING_INVOICE_PAYMENT)} className="flex-1 bg-primary text-on-primary py-4 rounded-2xl font-label-lg">Retry</button>
+                    </div>
+                  ) : (
+                    <button onClick={handleClose} className="w-full bg-surface-container-highest text-on-surface py-4 rounded-2xl font-label-lg hover:bg-surface-bright">Close</button>
+                  )}
                 </div>
               ) : [AppPhase.GENERATING_INVOICE, AppPhase.AWAITING_INVOICE_PAYMENT, AppPhase.PAYING_INVOICE, AppPhase.INITIATING_PAYOUT, AppPhase.VERIFYING_PAYOUT].includes(phase) ? (
                 <div className="py-6 px-4">
                   <h3 className="text-headline-md text-on-surface mb-6 text-center">Processing Send</h3>
 
                   <div className="flex flex-col gap-4">
-                    {/* Step 1: Generating Quote/Invoice */}
                     <div className="flex items-center gap-4">
                       <div className="relative flex items-center justify-center w-8 h-8">
                         {phase === AppPhase.GENERATING_INVOICE ? (
@@ -482,7 +435,6 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Step 2: Paying Gateway */}
                     <div className="flex items-center gap-4">
                       <div className="relative flex items-center justify-center w-8 h-8">
                         {[AppPhase.AWAITING_INVOICE_PAYMENT, AppPhase.PAYING_INVOICE].includes(phase) ? (
@@ -501,7 +453,6 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Step 3: Initiating MoMo Payout */}
                     <div className="flex items-center gap-4">
                       <div className="relative flex items-center justify-center w-8 h-8">
                         {phase === AppPhase.INITIATING_PAYOUT ? (
@@ -520,7 +471,6 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Step 4: Verifying Transfer */}
                     <div className="flex items-center gap-4">
                       <div className="relative flex items-center justify-center w-8 h-8">
                         {phase === AppPhase.VERIFYING_PAYOUT ? (
