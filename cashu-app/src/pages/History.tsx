@@ -4,6 +4,8 @@ import { Transaction, TransactionCard } from '../components/history/TransactionC
 import { PageHeader } from '../components/shared/PageHeader';
 import { useHistory } from '../hooks/useHistory';
 import { TransactionDetailsModal } from '../components/history/TransactionDetailsModal';
+import { useTransactionStore } from '../store/transactionStore';
+import { AppPhase } from '../types/momo';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -20,6 +22,18 @@ export default function History() {
     handleDownloadNote,
     handleCheckTokenSpendStatus
   } = useHistory();
+
+  const momoHistory = useTransactionStore((state) => state.history);
+
+  const mergedTransactions = transactions.map(tx => {
+    if (tx.status === 'Pending') {
+      const momoTx = momoHistory.find(t => t.id === tx.id);
+      if (momoTx && (momoTx.currentPhase === AppPhase.PAYMENT_FAILED || momoTx.currentPhase === AppPhase.PAYOUT_FAILED)) {
+        return { ...tx, status: 'Failed' as const };
+      }
+    }
+    return tx;
+  });
 
   const handleCardClick = (tx: Transaction) => {
     if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
@@ -44,13 +58,13 @@ export default function History() {
 
       {loading ? (
         <div className="text-center py-10 text-on-surface-variant">Loading...</div>
-      ) : transactions.length === 0 ? (
+      ) : mergedTransactions.length === 0 ? (
         <div className="text-center py-10 text-on-surface-variant bg-surface-container-high rounded-xl border border-outline-variant/10">
           No transactions yet.
         </div>
       ) : (
         <div className="space-y-card-gap">
-          {transactions.map((tx) => (
+          {mergedTransactions.map((tx) => (
             <TransactionCard 
               key={tx.id} 
               tx={tx} 

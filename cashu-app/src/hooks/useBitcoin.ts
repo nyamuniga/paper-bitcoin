@@ -6,10 +6,8 @@ import { toast } from 'react-hot-toast';
 export const useBitcoin = (mintUrl?: string) => {
   const [paying, setPaying] = useState(false);
   const [requesting, setRequesting] = useState(false);
-  const [receiveSuccess, setReceiveSuccess] = useState(false);
   
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
-  const pollingRef = useRef(false);
   const isPayingRef = useRef(false);
   const isRequestingRef = useRef(false);
 
@@ -48,6 +46,7 @@ export const useBitcoin = (mintUrl?: string) => {
     setRequesting(true);
     try {
       const res: any = await invoke('receive_lightning', { mintUrl: targetMint, amount });
+      await refreshWallet();
       return { quoteId: res.quote_id as string, receiveInvoice: res.invoice as string };
     } catch (e: any) {
       toast.error(`Failed to create invoice: ${e}`);
@@ -58,54 +57,10 @@ export const useBitcoin = (mintUrl?: string) => {
     }
   };
 
-  const pollReceiveStatus = async (quoteId: string, amount: number) => {
-    let isMounted = true;
-    pollingRef.current = true;
-
-    const poll = async () => {
-      while (pollingRef.current && isMounted) {
-        try {
-          const status = await invoke<string>('check_transaction_status', { txId: quoteId });
-          if (!isMounted) return;
-          
-          if (status === 'Success') {
-            setReceiveSuccess(true);
-            await refreshWallet();
-            toast.success(`Received ₿${amount.toLocaleString()} sats!`);
-            return;
-          } else if (status === 'Failed') {
-            toast.error("Transaction failed.");
-            return;
-          }
-          // If Pending, continue polling
-          await new Promise(r => setTimeout(r, 2000));
-        } catch {
-          // Network error or other error, keep polling
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-    };
-
-    poll();
-
-    return () => {
-      isMounted = false;
-      pollingRef.current = false;
-    };
-  };
-
-  const stopPolling = () => {
-    pollingRef.current = false;
-  };
-
   return {
     paying,
     requesting,
-    receiveSuccess,
-    setReceiveSuccess,
     payInvoice,
     receiveLightning,
-    pollReceiveStatus,
-    stopPolling
   };
 };

@@ -119,6 +119,8 @@ export const useHistory = () => {
       } else {
         toast.error('Tokens are still unspent.', { id: txId });
       }
+      fetchHistory();
+      await refreshWallet();
     } catch (e: any) {
       toast.error(`Error checking status: ${e}`, { id: txId });
     }

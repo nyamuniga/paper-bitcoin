@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { toast } from 'react-hot-toast';
@@ -7,11 +7,38 @@ export const useEcash = (mintUrl?: string) => {
   const [sending, setSending] = useState(false);
   const [receiving, setReceiving] = useState(false);
   const [isClaimed, setIsClaimed] = useState(false);
+  const [currentTxId, setCurrentTxId] = useState<string | null>(null);
   
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
-  const pollingRef = useRef(false);
   const isSendingRef = useRef(false);
   const isReceivingRef = useRef(false);
+
+  React.useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+
+    const checkClaimedStatus = async () => {
+      if (currentTxId && !isClaimed) {
+        try {
+          const status = await invoke<string>('check_token_spend_status', { txId: currentTxId });
+          if (status === 'Spent' || status === 'Partially Spent') {
+            setIsClaimed(true);
+            await refreshWallet();
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    };
+
+    if (currentTxId && !isClaimed) {
+      checkClaimedStatus();
+      interval = setInterval(checkClaimedStatus, 5000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [currentTxId, isClaimed]);
 
   const sendEcash = async (amount: number, overrideMintUrl?: string) => {
     if (isSendingRef.current) return null;
@@ -29,6 +56,7 @@ export const useEcash = (mintUrl?: string) => {
         mintUrl: targetMint, 
         amount 
       });
+      setCurrentTxId(result.tx_id);
       await refreshWallet();
       return result;
     } catch (e: any) {
@@ -58,40 +86,6 @@ export const useEcash = (mintUrl?: string) => {
     }
   };
 
-  const pollTransactionStatus = async (txId: string) => {
-    let isMounted = true;
-    pollingRef.current = true;
-
-    const poll = async () => {
-      while (pollingRef.current && isMounted && !isClaimed) {
-        try {
-          const status = await invoke<string>('check_token_spend_status', { txId });
-          if (status === 'Spent') {
-            if (!isMounted) return;
-            setIsClaimed(true);
-            toast.success('Token has been claimed!');
-            await refreshWallet();
-            return;
-          }
-        } catch (e) {
-          console.error('Failed to poll status', e);
-        }
-        await new Promise(r => setTimeout(r, 5000));
-      }
-    };
-
-    poll();
-
-    return () => {
-      isMounted = false;
-      pollingRef.current = false;
-    };
-  };
-
-  const stopPolling = () => {
-    pollingRef.current = false;
-  };
-
   return {
     sending,
     receiving,
@@ -99,7 +93,5 @@ export const useEcash = (mintUrl?: string) => {
     setIsClaimed,
     sendEcash,
     receiveEcash,
-    pollTransactionStatus,
-    stopPolling
   };
 };

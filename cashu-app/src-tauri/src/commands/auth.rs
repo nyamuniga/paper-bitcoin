@@ -6,6 +6,7 @@ use tauri::State;
 pub struct AppState {
     pub passphrase: Mutex<Option<String>>,
     pub wallet_path: std::path::PathBuf,
+    pub wallet_lock: tokio::sync::Mutex<()>,
 }
 
 #[tauri::command]

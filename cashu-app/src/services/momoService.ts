@@ -107,14 +107,25 @@ export const checkMomoPaymentStatus = async (
     const responseData = await response.json();
 
     if (responseData.status === 'success' && responseData.data?.status) {
-      const mtnStatus = responseData.data.status.toUpperCase() as MomoStatus;
+      const mtnStatus = responseData.data.status.toUpperCase();
 
-      if (['SUCCESSFUL', 'PENDING', 'FAILED'].includes(mtnStatus)) {
+      if (['SUCCESSFUL', 'SUCCESS', 'COMPLETED', 'APPROVED'].includes(mtnStatus)) {
         return {
-          status: mtnStatus,
+          status: 'SUCCESSFUL',
+          message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
+        };
+      } else if (['FAILED', 'REJECTED'].includes(mtnStatus)) {
+        return {
+          status: 'FAILED',
+          message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
+        };
+      } else if (mtnStatus === 'PENDING') {
+        return {
+          status: 'PENDING',
           message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
         };
       } else {
+        console.warn(`[MomoService] Unknown payment status received: ${mtnStatus}`);
         return { status: 'PENDING', message: `Unknown payment status received: ${mtnStatus}.` };
       }
     } else {
@@ -216,14 +227,25 @@ export const checkMomoPayoutStatus = async (
     const responseData = await response.json();
 
     if (responseData.status === 'success' && responseData.data?.status) {
-      const mtnStatus = responseData.data.status.toUpperCase() as MomoStatus;
+      const mtnStatus = responseData.data.status.toUpperCase();
 
-      if (['SUCCESSFUL', 'PENDING', 'FAILED'].includes(mtnStatus)) {
+      if (['SUCCESSFUL', 'SUCCESS', 'COMPLETED', 'APPROVED'].includes(mtnStatus)) {
         return {
-          status: mtnStatus,
+          status: 'SUCCESSFUL',
+          message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
+        };
+      } else if (['FAILED', 'REJECTED'].includes(mtnStatus)) {
+        return {
+          status: 'FAILED',
+          message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
+        };
+      } else if (mtnStatus === 'PENDING') {
+        return {
+          status: 'PENDING',
           message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
         };
       } else {
+        console.warn(`[MomoService] Unknown payout status received: ${mtnStatus}`);
         return { status: 'PENDING', message: `Unknown payout status received: ${mtnStatus}.` };
       }
     } else {

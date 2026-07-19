@@ -28,6 +28,8 @@ import {
   TX_FEE_PERCENTAGE,
   MOMO_API_BASE_URL
 } from "../constants.local";
+import { useTransactionStore } from "../store/transactionStore";
+import { useWalletStore } from "../store/wallet";
 
 export const fetchCurrentRate = async (): Promise<number> => {
   const response = await fetch(EXCHANGE_RATE_API_URL);
@@ -46,15 +48,14 @@ export const fetchProxyBlinkBalance = async (): Promise<number> => {
     const response = await fetch(`${MOMO_API_BASE_URL}/payment/balance`);
     if (!response.ok) return 0;
     const data = await response.json();
-    
-    // Parse the GraphQL response to find the BTC wallet balance
+
     const wallets = data?.data?.me?.defaultAccount?.wallets || [];
     const btcWallet = wallets.find((w: any) => w.walletCurrency === 'BTC');
-    
+
     return btcWallet ? btcWallet.balance : 0;
   } catch (error) {
     console.error("Failed to fetch proxy blink balance", error);
-    return 0; // On error, maybe return a high number or 0? 0 is safer to prevent broken payments
+    return 0;
   }
 };
 
@@ -62,37 +63,55 @@ export const calculateQuote = async (
   rwfAmount: string,
   momoPhoneNumber: string,
   activeTab: AppTab,
-  mintUrl: string,
-  setPhase: (phase: AppPhase) => void,
-  setError: (error: string) => void,
-  setTransaction: (tx: TransactionDetails | null) => void,
-  setHistory: React.Dispatch<React.SetStateAction<TransactionDetails[]>>
+  mintUrl: string
 ) => {
+  const store = useTransactionStore.getState();
   const amount = parseFloat(rwfAmount);
   if (isNaN(amount) || amount < 100) {
-    throw new Error("Minimum amount is 100 RWF.");
+    store.setError("Minimum amount is 100 RWF.");
+    return;
   }
   if (amount > 200000) {
-    throw new Error("Maximum amount is 200,000 RWF.");
+    store.setError("Maximum amount is 200,000 RWF.");
+    return;
   }
   if (!/^07[89]\d{7}$/.test(momoPhoneNumber)) {
-    throw new Error("Phone number must start with 078 or 079 and be exactly 10 digits.");
+    store.setError("Phone number must start with 078 or 079 and be exactly 10 digits.");
+    return;
   }
 
-  setPhase(AppPhase.FETCHING_RATE);
+  const txId = crypto.randomUUID();
+  store.setActiveTransaction({
+    id: txId,
+    direction: "RWF_TO_SATS",
+    rwfAmount: amount,
+    satsAmount: 0,
+    fee: 0,
+    rate: 0,
+    invoice: "",
+    momoPhoneNumber,
+    momoReferenceId: "",
+    mintQuoteId: "",
+    ecashToken: null,
+    paymentHash: null,
+    payoutReferenceId: null,
+    status: "PENDING",
+    timestamp: Date.now(),
+    currentPhase: AppPhase.FETCHING_RATE,
+    currentTab: activeTab,
+    mintUrl: mintUrl
+  });
 
   try {
     const rwfToSatsRate = await fetchCurrentRate();
 
     const feeRwf = Math.ceil(amount * TX_FEE_PERCENTAGE);
     const totalRwfToPay = amount + feeRwf;
-    const txId = `tx_${Date.now()}`;
 
-    setPhase(AppPhase.INITIATING_PAYMENT);
+    store.updateTransactionPhase(AppPhase.INITIATING_PAYMENT);
 
     const netSats = Math.floor(amount * rwfToSatsRate);
 
-    // 1. Generate lightning invoice using Tauri backend
     let invoice = "";
     let quoteId = "";
     try {
@@ -103,7 +122,6 @@ export const calculateQuote = async (
       throw new Error(`Failed to create lightning invoice: ${e}`);
     }
 
-    // 2. Initiate MoMo payment
     const momoResponse = await initiateMomoPaymentRequest(
       txId,
       netSats,
@@ -115,64 +133,43 @@ export const calculateQuote = async (
       throw new Error(momoResponse.message || "Failed to initiate Momo payment.");
     }
 
-    const newTransaction: TransactionDetails = {
-      id: txId,
-      direction: "RWF_TO_SATS",
+    store.updateTransaction({
       rwfAmount: totalRwfToPay,
       satsAmount: netSats,
       fee: feeRwf,
       rate: rwfToSatsRate,
       invoice: invoice,
-      momoPhoneNumber,
       momoReferenceId: momoResponse.referenceId,
       mintQuoteId: quoteId,
-      ecashToken: null,
-      paymentHash: null,
-      payoutReferenceId: null,
-      status: "PENDING",
-      timestamp: Date.now(),
       currentPhase: AppPhase.PENDING_PAYMENT,
-      currentTab: activeTab,
-    };
-
-    setTransaction(newTransaction);
-    setHistory(prev => [newTransaction, ...prev]);
-    setPhase(AppPhase.PENDING_PAYMENT);
+    });
   } catch (err: any) {
     console.error("Quote error:", err);
     const errorMessage = typeof err === 'string' ? err : (err?.message || "Failed to fetch quote. Please try again.");
-    setError(errorMessage);
-    setPhase(AppPhase.IDLE);
+    store.setError(errorMessage);
+    store.updateTransactionPhase(AppPhase.IDLE);
   }
 };
 
-export const handleFulfillOrder = async (
-  tx: TransactionDetails,
-  activeTab: AppTab,
-  setPhase: (phase: AppPhase) => void,
-  setTransaction: (tx: TransactionDetails | null) => void,
-  setHistory: React.Dispatch<React.SetStateAction<TransactionDetails[]>>,
-  setError: (error: string) => void
-) => {
-  let currentTx = { ...tx };
-  try {
-    setPhase(AppPhase.PAYING_INVOICE);
+export const handleFulfillOrder = async () => {
+  const store = useTransactionStore.getState();
+  let currentTx = store.activeTransaction;
+  if (!currentTx) return;
 
-    // Ask Gateway to pay the generated Lightning invoice
+  try {
+    store.updateTransactionPhase(AppPhase.PAYING_INVOICE);
+
     const { success, message } = await payLightningInvoice(currentTx.invoice!);
     if (!success) throw new Error(message || "Gateway failed to pay the Lightning invoice.");
 
-    setPhase(AppPhase.FULFILLING);
+    store.updateTransactionPhase(AppPhase.FULFILLING);
 
-    // Now that the invoice is paid, we MUST tell the Tauri wallet to mint the ecash!
     let mintSuccess = false;
     let mintErrMessage = "";
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 15; i++) {
       try {
-        // Wait 2 seconds before asking the mint to give it time to sync with the Lightning node
         await new Promise(resolve => setTimeout(resolve, 2000));
-        // Use check_transaction_status because it handles ReceiveLightning transactions and actually mints the tokens!
         const status = await invoke<string>('check_transaction_status', { txId: currentTx.mintQuoteId });
         if (status === 'Success') {
           mintSuccess = true;
@@ -190,73 +187,54 @@ export const handleFulfillOrder = async (
       throw new Error(`Payment succeeded but failed to mint eCash. Please retry from History. Error: ${mintErrMessage}`);
     }
 
-    currentTx = {
-      ...currentTx,
+    store.updateTransaction({
       fulfillmentStep: FulfillmentStep.COMPLETED,
-      status: "COMPLETED" as const,
+      status: "COMPLETED",
       timestamp: Date.now(),
-      currentPhase: AppPhase.READY_TO_CLAIM,
-      currentTab: activeTab,
-    };
+      currentPhase: AppPhase.READY_TO_CLAIM
+    });
 
-    setHistory((prev) => [
-      { ...currentTx },
-      ...prev.filter((t) => t.id !== currentTx.id),
-    ]);
-    setTransaction(currentTx);
-    setPhase(AppPhase.READY_TO_CLAIM);
-
+    currentTx = useTransactionStore.getState().activeTransaction!;
+    store.moveToHistory(currentTx);
+    useWalletStore.getState().refreshWallet();
   } catch (err: any) {
     console.error("Fulfillment error:", err);
-    setError(err.message || "Failed to fulfill order. Please try again.");
-    setPhase(AppPhase.RETRYABLE_ERROR);
-    setTransaction(
-      tx ? { ...tx, currentPhase: AppPhase.RETRYABLE_ERROR, currentTab: activeTab } : null
-    );
+    store.setError(err.message || "Failed to fulfill order. Please try again.");
+    store.updateTransaction({ currentPhase: AppPhase.RETRYABLE_ERROR });
   }
 };
 
 export const startPaymentVerification = async (
-  transaction: TransactionDetails | null,
-  activeTab: AppTab,
-  setPhase: (phase: AppPhase) => void,
-  setTransaction: (tx: TransactionDetails | null) => void,
-  setHistory: React.Dispatch<React.SetStateAction<TransactionDetails[]>>,
-  setError: (error: string) => void,
   stopPolling: () => void,
   pollingIntervalRef: React.MutableRefObject<any>,
   pollingTimeoutRef: React.MutableRefObject<any>
 ) => {
+  const store = useTransactionStore.getState();
+  const transaction = store.activeTransaction;
   if (!transaction?.momoReferenceId) return;
 
   stopPolling();
-  setPhase(AppPhase.VERIFYING_PAYMENT);
+  store.updateTransactionPhase(AppPhase.VERIFYING_PAYMENT);
 
   const handlePollingResult = (status: MomoStatus, message?: string) => {
     stopPolling();
+    const currentTx = useTransactionStore.getState().activeTransaction;
+    if (!currentTx) return;
 
     if (status === "SUCCESSFUL") {
-      if (transaction) {
-        const txWithFulfillment = {
-          ...transaction,
-          fulfillmentStep: FulfillmentStep.AWAITING_FULFILLMENT,
-          currentPhase: AppPhase.VERIFYING_PAYMENT,
-          currentTab: activeTab,
-        };
-        setTransaction(txWithFulfillment);
-        handleFulfillOrder(txWithFulfillment, activeTab, setPhase, setTransaction, setHistory, setError);
-      }
+      store.updateTransaction({
+        fulfillmentStep: FulfillmentStep.AWAITING_FULFILLMENT,
+        currentPhase: AppPhase.VERIFYING_PAYMENT
+      });
+      handleFulfillOrder();
     } else if (status === "FAILED") {
-      setError(message || "Your payment failed or was rejected.");
-      const failedTx = transaction ? {
-        ...transaction,
-        status: "FAILED" as const,
+      store.setError(message || "Your payment failed or was rejected.");
+      store.updateTransaction({
+        status: "FAILED",
         timestamp: Date.now(),
-        currentPhase: AppPhase.PAYMENT_FAILED,
-        currentTab: activeTab,
-      } : null;
-      if (failedTx) setHistory((prev: any) => [failedTx, ...prev.filter((t: any) => t.id !== failedTx.id)]);
-      setPhase(AppPhase.PAYMENT_FAILED);
+        currentPhase: AppPhase.PAYMENT_FAILED
+      });
+      store.moveToHistory(useTransactionStore.getState().activeTransaction!);
     }
   };
 
@@ -268,25 +246,29 @@ export const startPaymentVerification = async (
     }
 
     if (!pollingIntervalRef.current) {
-      pollingIntervalRef.current = setInterval(async () => {
-        if (transaction?.momoReferenceId) {
-          const { status, message } = await checkMomoPaymentStatus(transaction.id);
+      const pollMomo = async () => {
+        const tx = useTransactionStore.getState().activeTransaction;
+        if (tx?.momoReferenceId) {
+          const { status, message } = await checkMomoPaymentStatus(tx.id);
           if (status === "SUCCESSFUL" || status === "FAILED") {
             handlePollingResult(status, message);
+            return; // stop polling
           }
         }
-      }, POLLING_INTERVAL_MS);
+        pollingIntervalRef.current = setTimeout(pollMomo, POLLING_INTERVAL_MS);
+      };
+      pollingIntervalRef.current = setTimeout(pollMomo, POLLING_INTERVAL_MS);
     }
   } catch (e) {
-    setError("Failed to check Momo payment status initially. Please retry.");
-    setPhase(AppPhase.RETRYABLE_ERROR);
+    store.setError("Failed to check Momo payment status initially. Please retry.");
+    store.updateTransactionPhase(AppPhase.RETRYABLE_ERROR);
   }
 
   pollingTimeoutRef.current = setTimeout(() => {
     stopPolling();
-    if (transaction?.currentPhase === AppPhase.VERIFYING_PAYMENT) {
-      setError("Payment verification timed out. Please try again.");
-      setPhase(AppPhase.PAYMENT_FAILED);
+    if (useTransactionStore.getState().activeTransaction?.currentPhase === AppPhase.VERIFYING_PAYMENT) {
+      store.setError("Payment verification timed out. Please try again.");
+      store.updateTransactionPhase(AppPhase.PAYMENT_FAILED);
     }
   }, POLLING_TIMEOUT_MS);
 };
@@ -295,85 +277,82 @@ export const calculateSendQuote = async (
   rwfAmount: string,
   momoPhoneNumber: string,
   activeTab: AppTab,
-  _mintUrl: string,
-  setPhase: (phase: AppPhase) => void,
-  setError: (error: string) => void,
-  setTransaction: (tx: TransactionDetails | null) => void,
-  setHistory: React.Dispatch<React.SetStateAction<TransactionDetails[]>>
+  mintUrl: string
 ) => {
+  const store = useTransactionStore.getState();
   const amount = parseFloat(rwfAmount);
   if (isNaN(amount) || amount < 100) {
-    throw new Error("Minimum amount is 100 RWF.");
+    store.setError("Minimum amount is 100 RWF.");
+    return;
   }
   if (amount > 200000) {
-    throw new Error("Maximum amount is 200,000 RWF.");
+    store.setError("Maximum amount is 200,000 RWF.");
+    return;
   }
   if (!/^07[89]\d{7}$/.test(momoPhoneNumber)) {
-    throw new Error("Phone number must start with 078 or 079 and be exactly 10 digits.");
+    store.setError("Phone number must start with 078 or 079 and be exactly 10 digits.");
+    return;
   }
 
-  setPhase(AppPhase.GENERATING_INVOICE);
+  const txId = crypto.randomUUID();
+  store.setActiveTransaction({
+    id: txId,
+    direction: "SATS_TO_RWF",
+    rwfAmount: amount,
+    satsAmount: 0,
+    fee: 0,
+    rate: 0,
+    invoice: "",
+    momoPhoneNumber,
+    momoReferenceId: null,
+    mintQuoteId: null,
+    ecashToken: null,
+    paymentHash: null,
+    payoutReferenceId: null,
+    status: "PENDING",
+    timestamp: Date.now(),
+    currentPhase: AppPhase.GENERATING_INVOICE,
+    currentTab: activeTab,
+    mintUrl: mintUrl
+  });
 
   try {
     const rwfToSatsRate = await fetchCurrentRate();
 
-    // Gateway fee calculation (assume 3%)
     const feeRwf = Math.ceil(amount * 0.03);
     const totalRwfNeeded = amount + feeRwf;
 
     const netSats = Math.floor(totalRwfNeeded * rwfToSatsRate);
-    const txId = `tx_${Date.now()}`;
 
-    // Generate an invoice from the proxy gateway for netSats
     const { paymentRequest, paymentHash } = await createLightningInvoice(netSats);
 
-    const newTransaction: TransactionDetails = {
-      id: txId,
-      direction: "SATS_TO_RWF",
-      rwfAmount: amount, // The user receives `amount`
-      satsAmount: netSats, // We pay `netSats`
+    store.updateTransaction({
+      satsAmount: netSats,
       fee: feeRwf,
       rate: rwfToSatsRate,
       invoice: paymentRequest,
-      momoPhoneNumber,
-      momoReferenceId: null,
-      mintQuoteId: null,
-      ecashToken: null,
       paymentHash: paymentHash,
-      payoutReferenceId: null,
-      status: "PENDING",
-      timestamp: Date.now(),
       currentPhase: AppPhase.AWAITING_INVOICE_PAYMENT,
-      currentTab: activeTab,
-    };
-
-    setTransaction(newTransaction);
-    setHistory(prev => [newTransaction, ...prev]);
-    setPhase(AppPhase.AWAITING_INVOICE_PAYMENT);
+    });
   } catch (err: any) {
     console.error("Quote error:", err);
     const errorMessage = typeof err === 'string' ? err : (err?.message || "Failed to fetch quote. Please try again.");
-    setError(errorMessage);
-    setPhase(AppPhase.IDLE);
+    store.setError(errorMessage);
+    store.updateTransactionPhase(AppPhase.IDLE);
   }
 };
 
-export const executeSendPayment = async (
-  transaction: TransactionDetails,
-  mintUrl: string,
-  activeTab: AppTab,
-  setPhase: (phase: AppPhase) => void,
-  setTransaction: (tx: TransactionDetails | null) => void,
-  setHistory: React.Dispatch<React.SetStateAction<TransactionDetails[]>>,
-  setError: (error: string) => void
-) => {
-  let currentTx = { ...transaction };
+export const executeSendPayment = async () => {
+  const store = useTransactionStore.getState();
+  let currentTx = store.activeTransaction;
+  if (!currentTx) return;
+
   try {
-    setPhase(AppPhase.PAYING_INVOICE);
+    store.updateTransactionPhase(AppPhase.PAYING_INVOICE);
 
     try {
-      if (mintUrl) {
-        await invoke('pay_invoice', { invoice: currentTx.invoice!, mintUrl });
+      if (currentTx.mintUrl) {
+        await invoke('pay_invoice', { invoice: currentTx.invoice!, mintUrl: currentTx.mintUrl });
       } else {
         await invoke('pay_invoice', { invoice: currentTx.invoice! });
       }
@@ -381,116 +360,106 @@ export const executeSendPayment = async (
       throw new Error(`Failed to pay invoice from wallet: ${e}`);
     }
 
-    // Wait briefly for gateway to detect payment
     await new Promise(resolve => setTimeout(resolve, 3000));
 
-    currentTx = {
-      ...currentTx,
-      currentPhase: AppPhase.INITIATING_PAYOUT,
-      currentTab: activeTab,
-    };
-
-    setTransaction(currentTx);
-    setHistory((prev) => [{ ...currentTx }, ...prev.filter((t) => t.id !== currentTx.id)]);
-    setPhase(AppPhase.INITIATING_PAYOUT);
+    store.updateTransaction({
+      currentPhase: AppPhase.INITIATING_PAYOUT
+    });
 
   } catch (err: any) {
     console.error("Payment error:", err);
-    setError(err.message || "Failed to pay invoice. Please try again.");
-    setPhase(AppPhase.RETRYABLE_ERROR);
-    setTransaction({ ...currentTx, currentPhase: AppPhase.RETRYABLE_ERROR, currentTab: activeTab });
+    store.setError(err.message || "Failed to pay invoice. Please try again.");
+    store.updateTransaction({ currentPhase: AppPhase.RETRYABLE_ERROR });
   }
 };
 
 export const initiateAndVerifyPayout = async (
-  transaction: TransactionDetails | null,
-  activeTab: AppTab,
-  setPhase: (phase: AppPhase) => void,
-  setTransaction: (tx: TransactionDetails | null) => void,
-  setHistory: React.Dispatch<React.SetStateAction<TransactionDetails[]>>,
-  setError: (error: string) => void,
   stopPolling: () => void,
   pollingIntervalRef: React.MutableRefObject<any>,
   pollingTimeoutRef: React.MutableRefObject<any>
 ) => {
+  const store = useTransactionStore.getState();
+  const transaction = store.activeTransaction;
   if (!transaction) return;
 
   stopPolling();
-  setPhase(AppPhase.INITIATING_PAYOUT);
+  store.updateTransactionPhase(AppPhase.INITIATING_PAYOUT);
 
   try {
-    const payoutRes = await initiateMomoPayout(
-      transaction.id,
-      transaction.rwfAmount,
-      transaction.satsAmount,
-      transaction.momoPhoneNumber
-    );
+    // Check if payout was already initiated
+    let referenceId = transaction.payoutReferenceId;
 
-    if (!payoutRes.success || !payoutRes.referenceId) {
-      throw new Error(payoutRes.message || "Failed to initiate MoMo payout.");
+    if (!referenceId) {
+      const payoutRes = await initiateMomoPayout(
+        transaction.id,
+        transaction.rwfAmount,
+        transaction.satsAmount,
+        transaction.momoPhoneNumber
+      );
+
+      if (!payoutRes.success || !payoutRes.referenceId) {
+        throw new Error(payoutRes.message || "Failed to initiate MoMo payout.");
+      }
+      referenceId = payoutRes.referenceId;
+
+      store.updateTransaction({
+        payoutReferenceId: referenceId,
+        currentPhase: AppPhase.VERIFYING_PAYOUT
+      });
+    } else {
+      store.updateTransactionPhase(AppPhase.VERIFYING_PAYOUT);
     }
-
-    let currentTx = {
-      ...transaction,
-      payoutReferenceId: payoutRes.referenceId,
-      currentPhase: AppPhase.VERIFYING_PAYOUT,
-      currentTab: activeTab,
-    };
-
-    setTransaction(currentTx);
-    setHistory(prev => [{ ...currentTx }, ...prev.filter(t => t.id !== currentTx.id)]);
-    setPhase(AppPhase.VERIFYING_PAYOUT);
 
     const handlePollingResult = (status: MomoStatus, message?: string) => {
       stopPolling();
+      const currentTx = useTransactionStore.getState().activeTransaction;
+      if (!currentTx) return;
 
       if (status === "SUCCESSFUL") {
-        currentTx = {
-          ...currentTx,
+        store.updateTransaction({
           status: "COMPLETED",
           fulfillmentStep: FulfillmentStep.COMPLETED,
           timestamp: Date.now(),
-          currentPhase: AppPhase.READY_TO_CLAIM, // Uses READY_TO_CLAIM for success screen
-          currentTab: activeTab,
-        };
-        setTransaction(currentTx);
-        setHistory((prev) => [{ ...currentTx }, ...prev.filter((t) => t.id !== currentTx.id)]);
-        setPhase(AppPhase.READY_TO_CLAIM);
+          currentPhase: AppPhase.READY_TO_CLAIM
+        });
+        store.moveToHistory(useTransactionStore.getState().activeTransaction!);
+        useWalletStore.getState().refreshWallet();
       } else if (status === "FAILED") {
-        setError(message || "MoMo payout failed or was rejected.");
-        currentTx = {
-          ...currentTx,
+        store.setError(message || "MoMo payout failed or was rejected.");
+        store.updateTransaction({
           status: "FAILED",
           timestamp: Date.now(),
-          currentPhase: AppPhase.PAYMENT_FAILED,
-          currentTab: activeTab,
-        };
-        setTransaction(currentTx);
-        setHistory((prev) => [{ ...currentTx }, ...prev.filter((t) => t.id !== currentTx.id)]);
-        setPhase(AppPhase.PAYMENT_FAILED);
+          currentPhase: AppPhase.PAYMENT_FAILED
+        });
+        store.moveToHistory(useTransactionStore.getState().activeTransaction!);
       }
     };
 
     if (!pollingIntervalRef.current) {
-      pollingIntervalRef.current = setInterval(async () => {
-        const { status, message } = await checkMomoPayoutStatus(currentTx.id);
-        if (status === "SUCCESSFUL" || status === "FAILED") {
-          handlePollingResult(status, message);
+      const pollPayout = async () => {
+        const tx = useTransactionStore.getState().activeTransaction;
+        if (tx) {
+          const { status, message } = await checkMomoPayoutStatus(tx.id);
+          if (status === "SUCCESSFUL" || status === "FAILED") {
+            handlePollingResult(status, message);
+            return; // stop polling
+          }
         }
-      }, POLLING_INTERVAL_MS);
+        pollingIntervalRef.current = setTimeout(pollPayout, POLLING_INTERVAL_MS);
+      };
+      pollingIntervalRef.current = setTimeout(pollPayout, POLLING_INTERVAL_MS);
     }
 
     pollingTimeoutRef.current = setTimeout(() => {
       stopPolling();
-      if (currentTx.currentPhase === AppPhase.VERIFYING_PAYOUT) {
-        setError("Payout verification timed out. It might still complete later.");
-        setPhase(AppPhase.PAYMENT_FAILED);
+      if (useTransactionStore.getState().activeTransaction?.currentPhase === AppPhase.VERIFYING_PAYOUT) {
+        store.setError("Payout verification timed out. It might still complete later.");
+        store.updateTransactionPhase(AppPhase.PAYMENT_FAILED);
       }
     }, POLLING_TIMEOUT_MS);
 
   } catch (err: any) {
-    setError(err.message || "Failed to initiate MoMo payout.");
-    setPhase(AppPhase.RETRYABLE_ERROR);
-    setTransaction({ ...transaction, currentPhase: AppPhase.RETRYABLE_ERROR, currentTab: activeTab });
+    store.setError(err.message || "Failed to initiate MoMo payout.");
+    store.updateTransactionPhase(AppPhase.RETRYABLE_ERROR);
   }
 };

@@ -74,19 +74,19 @@ export const RecoveryPhraseSection = () => {
       {showPrompt && !showMnemonic && (
         <form onSubmit={handleVerify} className="mt-4 p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/50 flex flex-col gap-3">
           <label className="text-sm text-on-surface-variant font-bold">Enter passphrase to reveal</label>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="password"
               value={passphrase}
               onChange={(e) => setPassphrase(e.target.value)}
-              className="flex-1 bg-surface-container-high border border-outline-variant/30 rounded-lg px-3 py-2 text-on-surface focus:outline-none focus:border-primary"
+              className="flex-1 bg-surface-container-high border border-outline-variant/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary"
               placeholder="Wallet passphrase"
               autoFocus
             />
             <button
               type="submit"
               disabled={isVerifying || !passphrase}
-              className="px-4 py-2 bg-primary text-on-primary font-bold rounded-lg disabled:opacity-50 transition-opacity"
+              className="px-6 py-3 bg-primary text-on-primary font-bold rounded-lg disabled:opacity-50 transition-opacity whitespace-nowrap"
             >
               {isVerifying ? 'Verifying...' : 'Reveal'}
             </button>
