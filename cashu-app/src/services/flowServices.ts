@@ -10,7 +10,6 @@ import {
 } from "./lightningService";
 import {
   AppPhase,
-  TransactionDetails,
   MomoStatus,
   FulfillmentStep,
   AppTab
