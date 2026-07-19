@@ -1,5 +1,5 @@
 import { Encryption } from '../utils/encryption';
-import { MomoStatus } from '../types/momo';
+
 import { fetch } from '@tauri-apps/plugin-http';
 
 import { MOMO_API_BASE_URL } from '../constants.local';
