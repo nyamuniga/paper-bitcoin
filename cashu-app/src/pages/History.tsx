@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, AlertCircle } from 'lucide-react';
 import { Transaction, TransactionCard } from '../components/history/TransactionCard';
 import { PageHeader } from '../components/shared/PageHeader';
 import { useHistory } from '../hooks/useHistory';
@@ -24,6 +24,14 @@ export default function History() {
   } = useHistory();
 
   const momoHistory = useTransactionStore((state) => state.history);
+  const activeTransaction = useTransactionStore((state) => state.activeTransaction);
+  const updateTransactionPhase = useTransactionStore((state) => state.updateTransactionPhase);
+
+  const handleRetryOnChain = () => {
+    if (activeTransaction?.direction === 'ONCHAIN_SEND') {
+      updateTransactionPhase(AppPhase.EXECUTING_ONCHAIN_PAYOUT);
+    }
+  };
 
   const mergedTransactions = transactions.map(tx => {
     if (tx.status === 'Pending') {
@@ -55,6 +63,26 @@ export default function History() {
           </button>
         }
       />
+
+      {activeTransaction?.direction === 'ONCHAIN_SEND' && activeTransaction.currentPhase === AppPhase.ONCHAIN_PAYOUT_FAILED && (
+        <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-rose-500" />
+            <div>
+              <h4 className="text-body-lg font-semibold text-rose-500">On-Chain Payout Failed</h4>
+              <p className="text-body-sm text-on-surface-variant">
+                Your Ecash was melted successfully, but the final on-chain payout failed. Click Retry to complete it.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleRetryOnChain}
+            className="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-500 rounded-lg font-label-lg transition-colors"
+          >
+            Retry Payout
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-10 text-on-surface-variant">Loading...</div>

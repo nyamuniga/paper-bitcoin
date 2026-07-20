@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { useNavigate } from 'react-router-dom';
+import { parseBitcoinInput } from '../utils/bitcoinValidation';
 
 export const useScan = () => {
   const [binB64, setBinB64] = useState<string>('');
@@ -31,13 +32,9 @@ export const useScan = () => {
       return;
     }
     
-    if (lower.startsWith('lnbc')) {
-      navigate('/', { state: { lnbcInvoice: trimmed } });
-      return;
-    }
-    
-    if (lower.startsWith('lightning:lnbc')) {
-      navigate('/', { state: { lnbcInvoice: trimmed.replace(/^lightning:/i, '') } });
+    const parsed = parseBitcoinInput(trimmed);
+    if (parsed.type === 'lightning' || parsed.type === 'onchain') {
+      navigate('/', { state: { lnbcInvoice: parsed.addressOrInvoice } });
       return;
     }
 

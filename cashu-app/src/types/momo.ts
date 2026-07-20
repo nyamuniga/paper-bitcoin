@@ -22,6 +22,12 @@ export enum AppPhase {
   PAYOUT_FAILED = "PAYOUT_FAILED",
   RETRYABLE_ERROR = "RETRYABLE_ERROR", 
   EXPIRED = "EXPIRED", 
+  // On-Chain Specific Phases
+  GENERATING_ONCHAIN_INVOICE = "GENERATING_ONCHAIN_INVOICE",
+  PAYING_ONCHAIN_INVOICE = "PAYING_ONCHAIN_INVOICE",
+  EXECUTING_ONCHAIN_PAYOUT = "EXECUTING_ONCHAIN_PAYOUT",
+  ONCHAIN_PAYOUT_FAILED = "ONCHAIN_PAYOUT_FAILED",
+  ONCHAIN_PAYOUT_COMPLETE = "ONCHAIN_PAYOUT_COMPLETE",
 }
 
 export enum MomoStatus {
@@ -40,7 +46,7 @@ export enum FulfillmentStep {
   COMPLETED = "COMPLETED",
 }
 
-export type TransactionDirection = "RWF_TO_SATS" | "SATS_TO_RWF";
+export type TransactionDirection = "RWF_TO_SATS" | "SATS_TO_RWF" | "ONCHAIN_SEND";
 export type TransactionStatus = "PENDING" | "COMPLETED" | "FAILED" | "EXPIRED";
 
 export interface TransactionDetails {
@@ -63,4 +69,6 @@ export interface TransactionDetails {
   currentPhase?: AppPhase; 
   currentTab?: "ecash" | "lightning" | "receive"; 
   mintUrl?: string;
+  onchainAddress?: string;
+  txSuccessId?: string;
 }

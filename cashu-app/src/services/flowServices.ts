@@ -6,7 +6,8 @@ import {
 } from "./momoService";
 import {
   payLightningInvoice,
-  createLightningInvoice
+  createLightningInvoice,
+  sendOnChainPayment
 } from "./lightningService";
 import {
   AppPhase,
@@ -460,5 +461,82 @@ export const initiateAndVerifyPayout = async (
   } catch (err: any) {
     store.setError(err.message || "Failed to initiate MoMo payout.");
     store.updateTransactionPhase(AppPhase.RETRYABLE_ERROR);
+  }
+};
+
+export const executeOnChainSend = async (
+  _stopPolling: () => void,
+  _pollingIntervalRef: React.MutableRefObject<any>,
+  _pollingTimeoutRef: React.MutableRefObject<any>
+) => {
+  const store = useTransactionStore.getState();
+  const tx = store.activeTransaction;
+  if (!tx || (tx.currentPhase !== AppPhase.GENERATING_ONCHAIN_INVOICE && tx.currentPhase !== AppPhase.PAYING_ONCHAIN_INVOICE)) return;
+
+  try {
+    store.setError(null);
+    let invoice = tx.invoice;
+
+    if (!invoice) {
+      store.updateTransactionPhase(AppPhase.GENERATING_ONCHAIN_INVOICE);
+      const totalAmount = tx.satsAmount + (tx.fee || 0);
+      const res = await createLightningInvoice(totalAmount);
+      invoice = res.paymentRequest;
+      store.updateTransaction({ invoice });
+    }
+
+    store.updateTransactionPhase(AppPhase.PAYING_ONCHAIN_INVOICE);
+
+    // Attempt payment (melt)
+    const targetMint = tx.mintUrl;
+    if (targetMint) {
+      await invoke('pay_invoice', { invoice, mintUrl: targetMint });
+    } else {
+      await invoke('pay_invoice', { invoice });
+    }
+    // Melt succeeded. Now move to on-chain payout phase.
+    useWalletStore.getState().refreshWallet();
+    store.updateTransactionPhase(AppPhase.EXECUTING_ONCHAIN_PAYOUT);
+
+  } catch (err: any) {
+    console.error("On-chain melt failed:", err);
+    store.setError(err.message || "Failed to pay lightning invoice for on-chain send.");
+    store.updateTransactionPhase(AppPhase.ONCHAIN_PAYOUT_FAILED);
+  }
+};
+
+export const initiateAndVerifyOnChainPayout = async (
+  _stopPolling: () => void,
+  _pollingIntervalRef: React.MutableRefObject<any>,
+  _pollingTimeoutRef: React.MutableRefObject<any>
+) => {
+  const store = useTransactionStore.getState();
+  const tx = store.activeTransaction;
+  if (!tx || (tx.currentPhase !== AppPhase.EXECUTING_ONCHAIN_PAYOUT && tx.currentPhase !== AppPhase.ONCHAIN_PAYOUT_FAILED)) return;
+
+  try {
+    store.setError(null);
+    
+    if (!tx.onchainAddress) throw new Error("Missing onchain address");
+
+    const res = await sendOnChainPayment(tx.onchainAddress, tx.satsAmount);
+
+    if (res.success) {
+      store.updateTransaction({
+        txSuccessId: res.status || 'SUCCESS',
+        status: "COMPLETED",
+        timestamp: Date.now(),
+        currentPhase: AppPhase.ONCHAIN_PAYOUT_COMPLETE
+      });
+      store.moveToHistory(useTransactionStore.getState().activeTransaction!);
+      useWalletStore.getState().refreshWallet();
+    } else {
+      throw new Error(res.message || "Proxy failed to send on-chain payment");
+    }
+
+  } catch (err: any) {
+    console.error("On-chain execution failed:", err);
+    store.setError(err.message || "Failed to execute on-chain payout.");
+    store.updateTransactionPhase(AppPhase.ONCHAIN_PAYOUT_FAILED);
   }
 };

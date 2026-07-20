@@ -204,3 +204,82 @@ export const checkInvoiceStatus = async (paymentRequest: string): Promise<{ isPa
         return { isPaid: false };
     }
 };
+
+export const getOnChainFee = async (address: string, amountSats: number): Promise<number> => {
+    const walletId = await getBtcWalletId();
+
+    const query = `
+        query onChainTxFee($walletId: WalletId!, $address: OnChainAddress!, $amount: SatAmount!) {
+            onChainTxFee(walletId: $walletId, address: $address, amount: $amount) {
+                amount
+            }
+        }
+    `;
+
+    const variables = {
+        walletId,
+        address,
+        amount: amountSats,
+    };
+
+    const data = await queryBlink(query, variables);
+    const fee = data?.onChainTxFee?.amount;
+
+    if (fee === undefined || fee === null) {
+        throw new Error('Failed to get on-chain fee from proxy');
+    }
+
+    return fee;
+};
+
+export interface OnChainPaymentResult {
+    success: boolean;
+    status?: string;
+    message?: string;
+}
+
+export const sendOnChainPayment = async (address: string, amountSats: number): Promise<OnChainPaymentResult> => {
+    try {
+        const walletId = await getBtcWalletId();
+
+        const mutation = `
+            mutation onChainPaymentSend($input: OnChainPaymentSendInput!) {
+                onChainPaymentSend(input: $input) {
+                    status
+                    errors {
+                        message
+                        path
+                        code
+                    }
+                }
+            }
+        `;
+
+        const variables = {
+            input: {
+                walletId,
+                address,
+                amount: amountSats,
+                memo: "Wallet On-Chain Payout",
+            },
+        };
+
+        const data = await queryBlink(mutation, variables);
+        const paymentStatus = data?.onChainPaymentSend?.status;
+        const paymentErrors = data?.onChainPaymentSend?.errors;
+
+        if (paymentErrors && paymentErrors.length > 0) {
+            const errorMessage = paymentErrors.map((e: any) => `[${e.code || 'ERROR'}] ${e.message}`).join(', ');
+            throw new Error(errorMessage);
+        }
+
+        if (paymentStatus === 'SUCCESS' || paymentStatus === 'PENDING') {
+            return { success: true, status: paymentStatus };
+        } else {
+            throw new Error(`On-chain payment status returned: ${paymentStatus}`);
+        }
+    } catch (error: any) {
+        return { success: false, message: error.message };
+    }
+};
+

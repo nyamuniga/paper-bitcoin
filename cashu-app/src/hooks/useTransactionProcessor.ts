@@ -3,7 +3,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { useTransactionStore } from '../store/transactionStore';
 import { useWalletStore } from '../store/wallet';
 import { AppPhase } from '../types/momo';
-import { startPaymentVerification, executeSendPayment, initiateAndVerifyPayout } from '../services/flowServices';
+import { 
+  startPaymentVerification, 
+  executeSendPayment, 
+  initiateAndVerifyPayout,
+  executeOnChainSend,
+  initiateAndVerifyOnChainPayout
+} from '../services/flowServices';
 
 const POLLING_INTERVAL = 2000;
 
@@ -16,7 +22,7 @@ export const TransactionProcessor = () => {
   const backendPollingRef = useRef<any>(null);
   const isPollingRef = useRef<boolean>(false);
 
-  // 1. MoMo Transaction Resumption
+  // 1. Transaction Resumption (MoMo & OnChain)
   useEffect(() => {
     if (!activeTransaction) {
       if (momoPollingRef.current) { clearInterval(momoPollingRef.current); momoPollingRef.current = null; }
@@ -24,24 +30,32 @@ export const TransactionProcessor = () => {
       return;
     }
 
-    const stopMomoPolling = () => {
+    const stopPolling = () => {
       if (momoPollingRef.current) { clearInterval(momoPollingRef.current); momoPollingRef.current = null; }
       if (momoTimeoutRef.current) { clearTimeout(momoTimeoutRef.current); momoTimeoutRef.current = null; }
     };
 
     const phase = activeTransaction.currentPhase;
 
+    // MoMo specific phases
     if (phase === AppPhase.PENDING_PAYMENT || phase === AppPhase.VERIFYING_PAYMENT) {
-      startPaymentVerification(stopMomoPolling, momoPollingRef, momoTimeoutRef);
+      startPaymentVerification(stopPolling, momoPollingRef, momoTimeoutRef);
     } else if (phase === AppPhase.AWAITING_INVOICE_PAYMENT) {
       executeSendPayment();
     } else if (phase === AppPhase.INITIATING_PAYOUT || phase === AppPhase.VERIFYING_PAYOUT) {
-      initiateAndVerifyPayout(stopMomoPolling, momoPollingRef, momoTimeoutRef);
+      initiateAndVerifyPayout(stopPolling, momoPollingRef, momoTimeoutRef);
     } else if (phase === AppPhase.READY_TO_CLAIM) {
       refreshWallet();
     }
+    
+    // On-Chain specific phases
+    if (phase === AppPhase.GENERATING_ONCHAIN_INVOICE || phase === AppPhase.PAYING_ONCHAIN_INVOICE) {
+      executeOnChainSend(stopPolling, momoPollingRef, momoTimeoutRef);
+    } else if (phase === AppPhase.EXECUTING_ONCHAIN_PAYOUT) {
+      initiateAndVerifyOnChainPayout(stopPolling, momoPollingRef, momoTimeoutRef);
+    }
 
-    return stopMomoPolling;
+    return stopPolling;
   }, [activeTransaction?.id, activeTransaction?.currentPhase, refreshWallet]);
 
   // 2. Backend Transactions Polling (Ecash, Lightning)

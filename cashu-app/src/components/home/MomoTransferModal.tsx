@@ -141,7 +141,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in" onClick={handleClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
       <div
         onClick={e => e.stopPropagation()}
         className="w-full max-w-lg bg-surface-container-high rounded-2xl border border-outline-variant/20 shadow-2xl flex flex-col overflow-hidden relative max-h-[90vh] animate-slide-up"
@@ -352,6 +352,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                     <label className="text-label-md text-on-surface-variant block mb-2">Phone Number</label>
                     <input
                       type="text"
+                      spellCheck={false}
                       placeholder="078..."
                       className={`w-full bg-surface-container-highest rounded-2xl p-4 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${phoneError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
                       value={phoneNumber}
@@ -363,6 +364,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                     <label className="text-label-md text-on-surface-variant block mb-2">Amount to Receive (RWF)</label>
                     <input
                       type="number"
+                      spellCheck={false}
                       placeholder="Amount in RWF"
                       className={`w-full bg-surface-container-highest rounded-2xl p-4 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${amountError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
                       value={amount}
@@ -492,6 +494,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                     <label className="text-label-md text-on-surface-variant block mb-2">Recipient Phone Number</label>
                     <input
                       type="text"
+                      spellCheck={false}
                       placeholder="078..."
                       className={`w-full bg-surface-container-highest rounded-2xl p-4 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${phoneError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
                       value={phoneNumber}
@@ -503,6 +506,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                     <label className="text-label-md text-on-surface-variant block mb-2">Amount to Send (RWF)</label>
                     <input
                       type="number"
+                      spellCheck={false}
                       placeholder="Amount in RWF"
                       className={`w-full bg-surface-container-highest rounded-2xl p-4 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${amountError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
                       value={amount}
