@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RefreshCw, AlertCircle } from 'lucide-react';
+import { RefreshCw, AlertCircle, ArrowDown } from 'lucide-react';
 import { Transaction, TransactionCard } from '../components/history/TransactionCard';
 import { PageHeader } from '../components/shared/PageHeader';
 import { useHistory } from '../hooks/useHistory';
@@ -87,6 +87,15 @@ export default function History() {
 
   const uniquePendingReceives = Array.from(new Map(pendingOnchainReceives.map(tx => [tx.id, tx])).values());
 
+  const allListItems = [
+    ...uniquePendingReceives.map(tx => ({ type: 'onchain_receive' as const, data: tx })),
+    ...mergedTransactions.map(tx => ({ type: 'standard' as const, data: tx }))
+  ].sort((a, b) => {
+    const timeA = a.type === 'onchain_receive' ? Math.floor((a.data.timestamp || Date.now()) / 1000) : a.data.timestamp;
+    const timeB = b.type === 'onchain_receive' ? Math.floor((b.data.timestamp || Date.now()) / 1000) : b.data.timestamp;
+    return timeB - timeA;
+  });
+
   const handleCardClick = (tx: Transaction) => {
     if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
       setSelectedTx(tx);
@@ -128,48 +137,81 @@ export default function History() {
         </div>
       )}
 
-      {uniquePendingReceives.map((tx) => (
-        <div key={tx.id} className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <RefreshCw className={`w-5 h-5 text-amber-500 ${checkingDepositIds[tx.id] ? 'animate-spin' : ''}`} />
-            <div>
-              <h4 className="text-body-lg font-semibold text-amber-500">Awaiting On-Chain Deposit</h4>
-              <p className="text-body-sm text-on-surface-variant">
-                Waiting for the Bitcoin network to confirm your deposit. 
-                <br />
-                <span className="font-mono text-[10px] break-all">{tx.onchainAddress}</span>
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => handleCheckDeposit(tx.id, tx.onchainAddress!)}
-            disabled={checkingDepositIds[tx.id]}
-            className={`px-4 py-2 rounded-lg font-label-lg transition-colors ${checkingDepositIds[tx.id] ? 'bg-amber-500/10 text-amber-500/50 cursor-not-allowed' : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-500'}`}
-          >
-            {checkingDepositIds[tx.id] ? 'Checking...' : 'Check Status'}
-          </button>
-        </div>
-      ))}
-
       {loading ? (
         <div className="text-center py-10 text-on-surface-variant">Loading...</div>
-      ) : mergedTransactions.length === 0 ? (
+      ) : allListItems.length === 0 ? (
         <div className="text-center py-10 text-on-surface-variant bg-surface-container-high rounded-xl border border-outline-variant/10">
           No transactions yet.
         </div>
       ) : (
         <div className="space-y-card-gap">
-          {mergedTransactions.map((tx) => (
-            <TransactionCard 
-              key={tx.id} 
-              tx={tx} 
-              onRetryMint={handleRetryMint}
-              onCheckMelt={handleRecoverPendingTransaction}
-              onCheckIssue={(txId) => handleCheckIssue(txId, navigate)}
-              onDownloadNote={handleDownloadNote}
-              onClick={'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type ? () => handleCardClick(tx) : undefined}
-            />
-          ))}
+          {allListItems.map((item) => {
+            if (item.type === 'standard') {
+              const tx = item.data;
+              return (
+                <TransactionCard 
+                  key={tx.id} 
+                  tx={tx} 
+                  onRetryMint={handleRetryMint}
+                  onCheckMelt={handleRecoverPendingTransaction}
+                  onCheckIssue={(txId) => handleCheckIssue(txId, navigate)}
+                  onDownloadNote={handleDownloadNote}
+                  onClick={'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type ? () => handleCardClick(tx) : undefined}
+                />
+              );
+            } else {
+              const tx = item.data;
+              return (
+                <div key={tx.id} className="obsidian-card rounded-xl p-5 border border-amber-500/30 group bg-amber-500/5 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                  <div className="noise-overlay opacity-30"></div>
+                  <div className="relative z-10">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center border bg-amber-500/20 border-amber-500/30">
+                          <ArrowDown className="text-amber-500 w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-body-md font-body-md font-semibold text-amber-500">
+                            Receiving On-Chain
+                          </h3>
+                          <p className="text-label-caps font-label-caps text-on-surface-variant mt-1 max-w-[200px] truncate" title={tx.onchainAddress}>
+                            {tx.onchainAddress}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-body-md font-body-md font-bold block text-amber-500">
+                          +₿{tx.satsAmount || '???'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="divider-dashed my-3 border-amber-500/20"></div>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-label-caps font-label-caps">
+                      <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start text-amber-500">
+                        <div className="flex items-center gap-2">
+                          <RefreshCw className={`w-4 h-4 ${checkingDepositIds[tx.id] ? 'animate-spin' : ''}`} />
+                          <span>Awaiting Deposit</span>
+                        </div>
+                        <span className="text-on-surface-variant md:hidden">
+                          {new Date((tx.timestamp || Date.now())).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 w-full md:w-auto">
+                        <button
+                          onClick={() => handleCheckDeposit(tx.id, tx.onchainAddress!)}
+                          disabled={checkingDepositIds[tx.id]}
+                          className={`w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors font-bold ${checkingDepositIds[tx.id] ? 'bg-amber-500/10 text-amber-500/50 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-400 text-on-primary'}`}
+                        >
+                          {checkingDepositIds[tx.id] ? 'Checking...' : 'Check Status'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+          })}
         </div>
       )}
 
