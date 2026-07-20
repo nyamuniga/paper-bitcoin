@@ -81,4 +81,6 @@ export interface TransactionDetails {
   boltzSwapId?: string;
   refundPublicKey?: string;
   refundPrivateKey?: string;
+  redeemScript?: string;
+  timeoutBlockHeight?: number;
 }

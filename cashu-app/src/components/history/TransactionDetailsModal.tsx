@@ -30,13 +30,17 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   const { currentFrame, isAnimated, currentFrameIndex, totalFrames } = useUrEncoder(tokenString, 150, 400);
 
   const getTxLabel = () => {
-    if (isMint) return 'Received / Mint';
-    if (isReceiveEcash) return 'Received Ecash';
-    if (isReceiveLightning) return 'Received Lightning';
-    if (isIssue) return 'Issued Note';
+    if (tx.momo_direction === 'ONCHAIN_SEND') return 'On-Chain Send';
+    if (tx.momo_direction === 'ONCHAIN_RECEIVE') return 'On-Chain Receive';
+    if (tx.momo_direction === 'RWF_TO_SATS') return 'Receive RWF';
+    if (tx.momo_direction === 'SATS_TO_RWF') return 'Send RWF';
+    if (isMint) return 'Lightning Deposit';
+    if (isReceiveEcash) return 'Received eCash';
+    if (isReceiveLightning) return 'Lightning Deposit';
+    if (isIssue) return 'Exported Note';
     if (isRedeem) return 'Redeemed Note';
-    if (isSend) return 'Sent Ecash';
-    return 'Sent / Melt';
+    if (isSend) return 'Sent eCash';
+    return isMelt ? 'Lightning Payment' : 'Transaction';
   };
 
   const formatFullDate = (timestamp: number) => {

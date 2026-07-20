@@ -66,13 +66,36 @@ export default function History() {
   };
 
   const mergedTransactions = transactions.map(tx => {
-    if (tx.status === 'Pending') {
-      const momoTx = momoHistory.find(t => t.id === tx.id);
-      if (momoTx && (momoTx.currentPhase === AppPhase.PAYMENT_FAILED || momoTx.currentPhase === AppPhase.PAYOUT_FAILED)) {
-        return { ...tx, status: 'Failed' as const };
+    let status = tx.status;
+    let momo_direction: string | undefined = undefined;
+
+    const isMint = 'Mint' in tx.tx_type;
+    const isMelt = 'Melt' in tx.tx_type;
+    const quoteId = isMint ? tx.tx_type.Mint.quote_id : (isMelt ? tx.tx_type.Melt.quote_id : undefined);
+
+    if (tx.status === 'Pending' || quoteId || isMelt) {
+      const momoTx = momoHistory.find(t => {
+        if (t.id === tx.id) return true;
+        if (quoteId && t.mintQuoteId === quoteId) return true;
+        
+        // Strict timestamp window (2 minutes) to prevent false matches with normal lightning payments
+        if (isMelt && (t.direction === 'SATS_TO_RWF' || t.direction === 'ONCHAIN_SEND')) {
+          const timeDiff = Math.abs((t.timestamp || Date.now()) - tx.timestamp * 1000);
+          if (timeDiff < 120000 && Math.abs(t.satsAmount - tx.amount) <= (tx.amount * 0.05 + 100)) {
+            return true;
+          }
+        }
+        return false;
+      });
+      
+      if (momoTx) {
+        momo_direction = momoTx.direction;
+        if (tx.status === 'Pending' && (momoTx.currentPhase === AppPhase.PAYMENT_FAILED || momoTx.currentPhase === AppPhase.PAYOUT_FAILED || momoTx.currentPhase === AppPhase.ONCHAIN_PAYOUT_FAILED)) {
+          status = 'Failed' as const;
+        }
       }
     }
-    return tx;
+    return { ...tx, status, momo_direction };
   });
 
   const pendingOnchainReceives = [
@@ -81,7 +104,7 @@ export default function History() {
   ].filter(
     (tx) =>
       tx.direction === 'ONCHAIN_RECEIVE' &&
-      tx.currentPhase === AppPhase.AWAITING_ONCHAIN_DEPOSIT &&
+      (tx.currentPhase === AppPhase.AWAITING_ONCHAIN_DEPOSIT || tx.currentPhase === AppPhase.PAYMENT_FAILED) &&
       tx.onchainAddress
   );
 
@@ -99,6 +122,42 @@ export default function History() {
   const handleCardClick = (tx: Transaction) => {
     if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
       setSelectedTx(tx);
+    }
+  };
+
+  const handleRefundClick = async (txId: string) => {
+    const tx = momoHistory.find(t => t.id === txId) || (activeTransaction?.id === txId ? activeTransaction : null);
+    if (!tx || !tx.boltzSwapId || !tx.refundPrivateKey || !tx.redeemScript || !tx.timeoutBlockHeight) {
+      toast.error("Missing refund details. This swap may be too old to refund programmatically.");
+      return;
+    }
+
+    const destinationAddress = window.prompt("Enter the external Bitcoin address where you want to receive your refund:");
+    if (!destinationAddress) return;
+
+    try {
+      toast.loading("Initiating refund...", { id: "refundToast" });
+      const { refundSwap } = await import('../services/boltzService');
+      const txid = await refundSwap(
+        tx.boltzSwapId,
+        tx.refundPrivateKey,
+        tx.redeemScript,
+        tx.timeoutBlockHeight,
+        tx.onchainAddress!,
+        destinationAddress
+      );
+      toast.success(`Refund broadcasted! TXID: ${txid}`, { id: "refundToast" });
+      
+      // Update transaction phase to EXPIRED or create a new phase REFUNDED
+      // Let's use EXPIRED for now so it doesn't show as pending anymore
+      if (activeTransaction?.id === txId) {
+        updateTransactionPhase(AppPhase.EXPIRED);
+      } else {
+        useTransactionStore.getState().updateHistoryTransaction(txId, { currentPhase: AppPhase.EXPIRED });
+      }
+
+    } catch (e: any) {
+      toast.error(`Refund failed: ${e.message}`, { id: "refundToast" });
     }
   };
 
@@ -161,19 +220,20 @@ export default function History() {
               );
             } else {
               const tx = item.data;
+              const isFailed = tx.currentPhase === AppPhase.PAYMENT_FAILED;
               return (
-                <div key={tx.id} className="obsidian-card rounded-xl p-5 border border-amber-500/30 group bg-amber-500/5 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                <div key={tx.id} className={`obsidian-card rounded-xl p-5 border group relative overflow-hidden ${isFailed ? 'border-error/30 bg-error/5' : 'border-amber-500/30 bg-amber-500/5'}`}>
+                  <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none ${isFailed ? 'bg-error/10' : 'bg-amber-500/10'}`}></div>
                   <div className="noise-overlay opacity-30"></div>
                   <div className="relative z-10">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center border bg-amber-500/20 border-amber-500/30">
-                          <ArrowDown className="text-amber-500 w-4 h-4" />
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${isFailed ? 'bg-error/20 border-error/30' : 'bg-amber-500/20 border-amber-500/30'}`}>
+                          <ArrowDown className={`w-4 h-4 ${isFailed ? 'text-error' : 'text-amber-500'}`} />
                         </div>
                         <div>
-                          <h3 className="text-body-md font-body-md font-semibold text-amber-500">
-                            Receiving On-Chain
+                          <h3 className={`text-body-md font-body-md font-semibold ${isFailed ? 'text-error' : 'text-amber-500'}`}>
+                            {isFailed ? 'Failed On-Chain Receive' : 'Receiving On-Chain'}
                           </h3>
                           <p className="text-label-caps font-label-caps text-on-surface-variant mt-1 max-w-[200px] truncate" title={tx.onchainAddress}>
                             {tx.onchainAddress}
@@ -181,30 +241,40 @@ export default function History() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className="text-body-md font-body-md font-bold block text-amber-500">
+                        <span className={`text-body-md font-body-md font-bold block ${isFailed ? 'text-error' : 'text-amber-500'}`}>
                           +₿{tx.satsAmount || '???'}
                         </span>
                       </div>
                     </div>
-                    <div className="divider-dashed my-3 border-amber-500/20"></div>
+                    <div className={`divider-dashed my-3 ${isFailed ? 'border-error/20' : 'border-amber-500/20'}`}></div>
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-label-caps font-label-caps">
-                      <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start text-amber-500">
+                      <div className={`flex items-center gap-2 w-full md:w-auto justify-between md:justify-start ${isFailed ? 'text-error' : 'text-amber-500'}`}>
                         <div className="flex items-center gap-2">
-                          <RefreshCw className={`w-4 h-4 ${checkingDepositIds[tx.id] ? 'animate-spin' : ''}`} />
-                          <span>Awaiting Deposit</span>
+                          {!isFailed && <RefreshCw className={`w-4 h-4 ${checkingDepositIds[tx.id] ? 'animate-spin' : ''}`} />}
+                          {isFailed && <AlertCircle className="w-4 h-4" />}
+                          <span>{isFailed ? 'Needs Refund' : 'Awaiting Deposit'}</span>
                         </div>
                         <span className="text-on-surface-variant md:hidden">
                           {new Date((tx.timestamp || Date.now())).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </span>
                       </div>
                       <div className="flex gap-2 w-full md:w-auto">
-                        <button
-                          onClick={() => handleCheckDeposit(tx.id, tx.onchainAddress!)}
-                          disabled={checkingDepositIds[tx.id]}
-                          className={`w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors font-bold ${checkingDepositIds[tx.id] ? 'bg-amber-500/10 text-amber-500/50 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-400 text-on-primary'}`}
-                        >
-                          {checkingDepositIds[tx.id] ? 'Checking...' : 'Check Status'}
-                        </button>
+                        {isFailed ? (
+                           <button
+                             onClick={() => handleRefundClick(tx.id)}
+                             className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors font-bold bg-error hover:bg-error/90 text-on-primary"
+                           >
+                             Refund Funds
+                           </button>
+                        ) : (
+                          <button
+                            onClick={() => handleCheckDeposit(tx.id, tx.onchainAddress!)}
+                            disabled={checkingDepositIds[tx.id]}
+                            className={`w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors font-bold ${checkingDepositIds[tx.id] ? 'bg-amber-500/10 text-amber-500/50 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-400 text-on-primary'}`}
+                          >
+                            {checkingDepositIds[tx.id] ? 'Checking...' : 'Check Status'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

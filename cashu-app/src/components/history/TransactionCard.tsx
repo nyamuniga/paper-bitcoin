@@ -8,6 +8,7 @@ export interface Transaction {
   status: 'Pending' | 'Success' | 'Failed' | 'FailedMintError';
   timestamp: number;
   mint_url: string;
+  momo_direction?: string;
 }
 
 interface TransactionCardProps {
@@ -53,7 +54,17 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
             </div>
             <div>
               <h3 className="text-body-md font-body-md font-semibold text-on-surface">
-                {isMint ? 'Received / Mint' : isReceiveEcash ? 'Received Ecash' : isReceiveLightning ? 'Received Lightning' : isIssue ? 'Issued Note' : isRedeem ? 'Redeemed Note' : isSend ? 'Sent Ecash' : 'Sent / Melt'}
+                {tx.momo_direction === 'ONCHAIN_SEND' ? 'On-Chain Send' :
+                 tx.momo_direction === 'ONCHAIN_RECEIVE' ? 'On-Chain Receive' :
+                 tx.momo_direction === 'RWF_TO_SATS' ? 'Receive RWF' :
+                 tx.momo_direction === 'SATS_TO_RWF' ? 'Send RWF' :
+                 isMint ? 'Lightning Deposit' : 
+                 isReceiveEcash ? 'Received eCash' : 
+                 isReceiveLightning ? 'Lightning Deposit' : 
+                 isIssue ? 'Exported Note' : 
+                 isRedeem ? 'Redeemed Note' : 
+                 isSend ? 'Sent eCash' : 
+                 isMelt ? 'Lightning Payment' : 'Transaction'}
               </h3>
               <p className="text-label-caps font-label-caps text-on-surface-variant mt-1 max-w-[200px] truncate" title={tx.mint_url}>
                 {tx.mint_url || 'Local Wallet'}
