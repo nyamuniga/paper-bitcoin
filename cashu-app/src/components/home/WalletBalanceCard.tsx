@@ -43,7 +43,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
   }, [location, navigate]);
 
   return (
-    <section className="flex flex-col gap-4 md:gap-5">
+    <section className="flex flex-col gap-4 md:gap-5 relative z-50">
       {/* Balance display */}
       <div className="relative p-6 md:p-10 flex flex-col items-center justify-center min-h-[140px] md:min-h-[200px] z-10">
         {/* Background layer */}
