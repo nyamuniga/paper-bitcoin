@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, Loader2, Zap, ArrowUp, ArrowDown, QrCode, ChevronDown, ExternalLink } from 'lucide-react';
+import { X, Copy, Check, Loader2, Zap, ArrowUp, ArrowDown, QrCode, ChevronDown, ExternalLink, AlertCircle } from 'lucide-react';
 
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
@@ -604,7 +604,15 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     >
                       {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Address</>}
                     </button>
-                    <p className="text-xs text-amber-500/80 mt-2 text-center">
+                    
+                    <div className="w-full bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl flex items-start gap-3 mt-1">
+                      <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div className="text-[12px] text-amber-500/90 leading-tight">
+                        <span className="font-bold">Minimum deposit: 3,046 sats.</span> Deposits below this amount will be consumed by network fees and cannot be recovered.
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-on-surface-variant mt-1 text-center">
                       Waiting for block confirmation... <br /> This can take ~10-30 minutes. You can safely close this modal.
                     </p>
                   </div>
