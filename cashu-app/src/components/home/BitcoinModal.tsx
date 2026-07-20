@@ -48,14 +48,26 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [receiveInvoice, setReceiveInvoice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [receiveMode, setReceiveMode] = useState<'lightning' | 'onchain'>('lightning');
 
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const mintUrls = Object.keys(mintBalances || {});
   const availableBalance = mintBalances[mintUrl] || 0;
 
   const { transactions } = useHistory();
-  const { paying, requesting, payInvoice, receiveLightning, getOnChainFee, sendOnChain } = useBitcoin(mintUrl);
+  const { paying, requesting, payInvoice, receiveLightning, getOnChainFee, sendOnChain, receiveOnChain } = useBitcoin(mintUrl);
   const activeTransaction = useTransactionStore((s) => s.activeTransaction);
+  const refreshWallet = useWalletStore((s) => s.refreshWallet);
+
+  const handleClose = () => {
+    refreshWallet();
+    if (activeTransaction?.direction === 'ONCHAIN_RECEIVE' && 
+        [AppPhase.GENERATING_ONCHAIN_ADDRESS, AppPhase.AWAITING_ONCHAIN_DEPOSIT].includes(activeTransaction.currentPhase!)) {
+      useTransactionStore.getState().moveToHistory(activeTransaction);
+      useTransactionStore.getState().setActiveTransaction(null);
+    }
+    onClose();
+  };
 
   const currentTx = quoteId ? transactions.find(t => t.id === quoteId) : null;
   const receiveSuccess = currentTx?.status === 'Success';
@@ -66,6 +78,15 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
     AppPhase.PAYING_ONCHAIN_INVOICE, 
     AppPhase.EXECUTING_ONCHAIN_PAYOUT,
     AppPhase.ONCHAIN_PAYOUT_FAILED
+  ].includes(activeTransaction.currentPhase!);
+
+  const isProcessingOnChainReceive = activeTransaction?.direction === 'ONCHAIN_RECEIVE' && [
+    AppPhase.GENERATING_ONCHAIN_ADDRESS,
+    AppPhase.AWAITING_ONCHAIN_DEPOSIT, 
+    AppPhase.DEPOSIT_CONFIRMED,
+    AppPhase.GENERATING_MINT_INVOICE,
+    AppPhase.PAYING_MINT_INVOICE,
+    AppPhase.ISSUING_ECASH
   ].includes(activeTransaction.currentPhase!);
 
   React.useEffect(() => {
@@ -167,6 +188,10 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
     }
   };
 
+  const handleRequestOnChain = async () => {
+    await receiveOnChain();
+  };
+
   const handleCopy = async (text: string) => {
     if (!text) return;
     try {
@@ -189,6 +214,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
       setReceiveAmount('');
       setQuoteId(null);
       setReceiveInvoice(null);
+      setReceiveMode('lightning');
     }
   };
 
@@ -542,7 +568,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   )}
 
                   <button
-                    onClick={onClose}
+                    onClick={handleClose}
                     className="w-full mt-6 py-4 rounded-full bg-surface-container-highest text-on-surface font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20"
                   >
                     Done
@@ -551,8 +577,99 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
               )}
             </div>
           ) : (
-            /* ─── RECEIVE TAB (Lightning) ─────────────────────────────── */
-            receiveSuccess ? (
+            /* ─── RECEIVE TAB ─────────────────────────────── */
+            isProcessingOnChainReceive ? (
+              <div className="flex flex-col items-center gap-6 py-4 animate-fade-in">
+                <div className="text-center mb-4">
+                  <p className="text-label-caps font-label-caps text-on-surface-variant mb-2">RECEIVING ON-CHAIN</p>
+                  <p className="text-sm text-on-surface/70 px-4">
+                    Please send Bitcoin to the generated address.
+                  </p>
+                </div>
+
+                {activeTransaction?.onchainAddress && activeTransaction.currentPhase === AppPhase.AWAITING_ONCHAIN_DEPOSIT && (
+                  <div className="flex flex-col items-center gap-4 w-full">
+                    <div className="bg-white p-4 rounded-xl shadow-lg">
+                      <QRCode value={activeTransaction.onchainAddress} size={200} />
+                    </div>
+                    <div
+                      onClick={() => handleCopy(activeTransaction.onchainAddress!)}
+                      className="w-full bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30 shadow-inner cursor-pointer hover:border-amber-400/30 transition-colors"
+                    >
+                      <p className="text-[11px] font-mono text-on-surface-variant break-all select-all text-center">{activeTransaction.onchainAddress}</p>
+                    </div>
+                    <button
+                      onClick={() => handleCopy(activeTransaction.onchainAddress!)}
+                      className="w-full py-3 rounded-full bg-amber-500/15 text-amber-400 font-bold text-[15px] hover:bg-amber-500/25 transition-colors border border-amber-500/20 flex items-center justify-center gap-2"
+                    >
+                      {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Address</>}
+                    </button>
+                    <p className="text-xs text-amber-500/80 mt-2 text-center">
+                      Waiting for block confirmation... <br /> This can take ~10-30 minutes. You can safely close this modal.
+                    </p>
+                  </div>
+                )}
+
+                <div className="w-full space-y-4 relative mt-2">
+                  <div className="absolute left-[15px] top-6 bottom-6 w-0.5 bg-surface-container-highest" />
+
+                  {[
+                    { phase: [AppPhase.GENERATING_ONCHAIN_ADDRESS], label: 'Generating Address' },
+                    { phase: [AppPhase.AWAITING_ONCHAIN_DEPOSIT], label: 'Awaiting Deposit' },
+                    { phase: [AppPhase.DEPOSIT_CONFIRMED, AppPhase.GENERATING_MINT_INVOICE, AppPhase.PAYING_MINT_INVOICE, AppPhase.ISSUING_ECASH], label: 'Issuing eCash' },
+                  ].map((step, idx) => {
+                    let state = 'pending';
+                    const activePhaseIdx = [
+                      [AppPhase.GENERATING_ONCHAIN_ADDRESS],
+                      [AppPhase.AWAITING_ONCHAIN_DEPOSIT],
+                      [AppPhase.DEPOSIT_CONFIRMED, AppPhase.GENERATING_MINT_INVOICE, AppPhase.PAYING_MINT_INVOICE, AppPhase.ISSUING_ECASH]
+                    ].findIndex(group => group.includes(activeTransaction?.currentPhase as AppPhase));
+
+                    if (idx < activePhaseIdx) state = 'completed';
+                    if (idx === activePhaseIdx) state = 'active';
+
+                    if (activeTransaction?.currentPhase === AppPhase.RETRYABLE_ERROR && idx === activePhaseIdx) state = 'error';
+                    if (activeTransaction?.status === 'COMPLETED' && idx === 2) state = 'completed';
+
+                    return (
+                      <div key={idx} className="relative flex items-center gap-4 bg-surface-container p-3 rounded-xl border border-outline-variant/10">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 transition-colors ${state === 'completed' ? 'bg-emerald-500 text-on-primary' :
+                          state === 'active' ? 'bg-amber-500 text-on-primary' :
+                            state === 'error' ? 'bg-red-500 text-on-primary' :
+                              'bg-surface-container-highest text-on-surface-variant'
+                          }`}>
+                          {state === 'completed' ? <Check size={16} /> :
+                            state === 'active' ? <Loader2 size={16} className="animate-spin" /> :
+                              <span className="text-xs font-bold">{idx + 1}</span>}
+                        </div>
+                        <span className={`font-bold text-[15px] ${state === 'active' ? 'text-amber-400' :
+                          state === 'completed' ? 'text-emerald-400' :
+                            state === 'error' ? 'text-red-400' :
+                              'text-on-surface-variant'
+                          }`}>{step.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {activeTransaction?.status === 'COMPLETED' && (
+                  <button
+                    onClick={handleClose}
+                    className="w-full mt-2 py-4 rounded-full bg-emerald-500/15 text-emerald-400 font-bold text-[15px] hover:bg-emerald-500/25 transition-colors border border-emerald-500/20"
+                  >
+                    Done
+                  </button>
+                )}
+                {activeTransaction?.status !== 'COMPLETED' && (
+                  <button
+                    onClick={handleClose}
+                    className="w-full mt-2 py-4 rounded-full bg-surface-container-highest text-on-surface font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20"
+                  >
+                    Close & Track in History
+                  </button>
+                )}
+              </div>
+            ) : receiveSuccess ? (
               <div className="flex flex-col items-center gap-5">
                 <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
                   <Check size={32} className="text-emerald-400" />
@@ -613,30 +730,77 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
               </div>
             ) : (
               <div className="flex flex-col gap-6">
-                {/* Amount input */}
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-4">
-                    <AmountDisplay amount={receiveAmount} compact />
-                    <NumberPad
-                      value={receiveAmount}
-                      onChange={(val) => {
-                        setReceiveAmount(val);
-                        setReceiveInvoice(null);
-                        setQuoteId(null);
-                      }}
-                      compact
-                    />
-                  </div>
-
+                
+                {/* Mode Toggle */}
+                <div className="flex p-1 bg-surface-container-highest rounded-full">
                   <button
-                    onClick={handleRequestInvoice}
-                    disabled={requesting || parsedReceiveAmount <= 0}
-                    className={`bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${requesting || parsedReceiveAmount <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
-                      }`}
+                    onClick={() => setReceiveMode('lightning')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-full transition-all ${
+                      receiveMode === 'lightning' 
+                        ? 'bg-amber-500 text-on-primary shadow-md' 
+                        : 'text-on-surface-variant hover:text-on-surface'
+                    }`}
                   >
-                    {requesting ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Invoice'}
+                    Lightning
+                  </button>
+                  <button
+                    onClick={() => setReceiveMode('onchain')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-full transition-all ${
+                      receiveMode === 'onchain' 
+                        ? 'bg-amber-500 text-on-primary shadow-md' 
+                        : 'text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    On-Chain
                   </button>
                 </div>
+
+                {receiveMode === 'lightning' ? (
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-4">
+                      <AmountDisplay amount={receiveAmount} compact />
+                      <NumberPad
+                        value={receiveAmount}
+                        onChange={(val) => {
+                          setReceiveAmount(val);
+                          setReceiveInvoice(null);
+                          setQuoteId(null);
+                        }}
+                        compact
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleRequestInvoice}
+                      disabled={requesting || parsedReceiveAmount <= 0}
+                      className={`bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${requesting || parsedReceiveAmount <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                        }`}
+                    >
+                      {requesting ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Invoice'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4 h-full pt-4">
+                    <div className="flex flex-col items-center text-center px-4 mb-4 gap-2">
+                      <div className="w-12 h-12 bg-amber-500/10 rounded-full flex items-center justify-center mb-2">
+                        <Zap size={24} className="text-amber-500" />
+                      </div>
+                      <h3 className="text-lg font-bold text-on-surface">Receive Bitcoin</h3>
+                      <p className="text-sm text-on-surface-variant">
+                        Generate a fresh On-Chain address. Any Bitcoin sent to this address will be automatically bridged and minted as eCash in your wallet.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleRequestOnChain}
+                      disabled={requesting}
+                      className={`mt-auto bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${requesting ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                        }`}
+                    >
+                      {requesting ? <Loader2 className="animate-spin w-6 h-6" /> : 'Generate Address'}
+                    </button>
+                  </div>
+                )}
               </div>
             )
           )}

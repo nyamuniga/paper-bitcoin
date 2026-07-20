@@ -7,7 +7,9 @@ import {
 import {
   payLightningInvoice,
   createLightningInvoice,
-  sendOnChainPayment
+  sendOnChainPayment,
+  generateOnChainAddress,
+  checkOnChainDepositStatus
 } from "./lightningService";
 import {
   AppPhase,
@@ -538,5 +540,117 @@ export const initiateAndVerifyOnChainPayout = async (
     console.error("On-chain execution failed:", err);
     store.setError(err.message || "Failed to execute on-chain payout.");
     store.updateTransactionPhase(AppPhase.ONCHAIN_PAYOUT_FAILED);
+  }
+};
+
+export const initiateOnChainReceive = async () => {
+  const store = useTransactionStore.getState();
+  const tx = store.activeTransaction;
+  if (!tx || tx.currentPhase !== AppPhase.GENERATING_ONCHAIN_ADDRESS) return;
+
+  try {
+    store.setError(null);
+    let address = tx.onchainAddress;
+
+    if (!address) {
+      address = await generateOnChainAddress();
+      store.updateTransaction({ onchainAddress: address });
+    }
+
+    store.updateTransactionPhase(AppPhase.AWAITING_ONCHAIN_DEPOSIT);
+  } catch (err: any) {
+    console.error("Failed to generate on-chain address:", err);
+    store.setError(err.message || "Failed to generate on-chain address");
+    store.updateTransactionPhase(AppPhase.RETRYABLE_ERROR);
+  }
+};
+
+export const pollOnChainDeposit = async (
+  stopPolling: () => void,
+  pollingIntervalRef: React.MutableRefObject<any>,
+  pollingTimeoutRef: React.MutableRefObject<any>
+) => {
+  const store = useTransactionStore.getState();
+  const tx = store.activeTransaction;
+  if (!tx || tx.currentPhase !== AppPhase.AWAITING_ONCHAIN_DEPOSIT || !tx.onchainAddress) return;
+
+  try {
+    store.setError(null);
+    const { settled, amountSats } = await checkOnChainDepositStatus(tx.onchainAddress);
+
+    if (settled && amountSats) {
+      stopPolling();
+      store.updateTransaction({ satsAmount: amountSats });
+      store.updateTransactionPhase(AppPhase.DEPOSIT_CONFIRMED);
+    } else {
+      // Continue polling every 10 seconds since block times are slow
+      pollingIntervalRef.current = setTimeout(() => pollOnChainDeposit(stopPolling, pollingIntervalRef, pollingTimeoutRef), 10000);
+    }
+  } catch (err: any) {
+    // Soft fail on poll
+    pollingIntervalRef.current = setTimeout(() => pollOnChainDeposit(stopPolling, pollingIntervalRef, pollingTimeoutRef), 10000);
+  }
+};
+
+export const executeOnChainReceiveFulfillment = async (txId?: string) => {
+  const store = useTransactionStore.getState();
+  const tx = txId ? (store.activeTransaction?.id === txId ? store.activeTransaction : store.history.find(t => t.id === txId)) : store.activeTransaction;
+  
+  if (!tx || tx.currentPhase !== AppPhase.DEPOSIT_CONFIRMED) return;
+
+  try {
+    store.setError(null);
+    
+    // 1. Get invoice from Mint
+    const updateTx = (updates: any) => {
+      if (!txId || store.activeTransaction?.id === tx.id) store.updateTransaction(updates);
+      else store.updateHistoryTransaction(tx.id, updates);
+    };
+    const updatePhase = (phase: AppPhase) => {
+      if (!txId || store.activeTransaction?.id === tx.id) store.updateTransactionPhase(phase);
+      else store.updateHistoryTransaction(tx.id, { currentPhase: phase });
+    };
+
+    updatePhase(AppPhase.GENERATING_MINT_INVOICE);
+    const targetMint = tx.mintUrl || Object.keys(useWalletStore.getState().mintBalances)[0];
+    const res: any = await invoke('receive_lightning', { mintUrl: targetMint, amount: tx.satsAmount });
+    const mintQuoteId = res.quote_id as string;
+    const receiveInvoice = res.invoice as string;
+    
+    updateTx({ mintQuoteId, invoice: receiveInvoice });
+
+    // 2. Pay it via Proxy
+    updatePhase(AppPhase.PAYING_MINT_INVOICE);
+    const paymentRes = await payLightningInvoice(receiveInvoice);
+
+    if (!paymentRes.success) {
+       throw new Error(paymentRes.message || "Proxy failed to pay lightning invoice to mint.");
+    }
+
+    // 3. Issue eCash
+    updatePhase(AppPhase.ISSUING_ECASH);
+    await invoke('check_transaction_status', { txId: mintQuoteId });
+    
+    // Success
+    updateTx({
+      status: "COMPLETED",
+      timestamp: Date.now(),
+      currentPhase: AppPhase.IDLE
+    });
+    
+    if (!txId || store.activeTransaction?.id === tx.id) {
+      store.moveToHistory(store.activeTransaction!);
+      store.setActiveTransaction(null);
+    }
+    useWalletStore.getState().refreshWallet();
+
+  } catch (err: any) {
+    console.error("On-chain receive fulfillment failed:", err);
+    store.setError(err.message || "Failed to complete on-chain receive to wallet.");
+    if (!txId || store.activeTransaction?.id === tx.id) {
+      store.updateTransactionPhase(AppPhase.RETRYABLE_ERROR);
+    } else {
+      store.updateHistoryTransaction(tx.id, { currentPhase: AppPhase.RETRYABLE_ERROR });
+    }
   }
 };

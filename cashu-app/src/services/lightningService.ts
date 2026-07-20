@@ -283,3 +283,97 @@ export const sendOnChainPayment = async (address: string, amountSats: number): P
     }
 };
 
+export const generateOnChainAddress = async (): Promise<string> => {
+    const walletId = await getBtcWalletId();
+
+    const mutation = `
+        mutation onChainAddressCreate($input: OnChainAddressCreateInput!) {
+            onChainAddressCreate(input: $input) {
+                address
+                errors {
+                    message
+                }
+            }
+        }
+    `;
+
+    const variables = {
+        input: {
+            walletId,
+        },
+    };
+
+    const data = await queryBlink(mutation, variables);
+    const addressData = data?.onChainAddressCreate?.address;
+    const errors = data?.onChainAddressCreate?.errors;
+
+    if (errors && errors.length > 0) {
+        throw new Error(`Address creation failed: ${errors.map((e: any) => e.message).join(', ')}`);
+    }
+
+    if (!addressData) {
+        throw new Error('Failed to create On-Chain address. API response was invalid.');
+    }
+
+    return addressData;
+};
+
+export const checkOnChainDepositStatus = async (targetAddress: string): Promise<{ settled: boolean, amountSats?: number }> => {
+    const query = `
+        query getTransactions($first: Int) {
+          me {
+            defaultAccount {
+              transactions(first: $first) {
+                edges {
+                  node {
+                    id
+                    status
+                    direction
+                    settlementAmount
+                    initiationVia {
+                      ... on InitiationViaOnChain {
+                        address
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+    `;
+
+    const variables = {
+        first: 20 // Check the last 20 transactions
+    };
+
+    try {
+        const data = await queryBlink(query, variables);
+        const edges = data?.me?.defaultAccount?.transactions?.edges;
+
+        if (!edges || !Array.isArray(edges)) {
+            return { settled: false };
+        }
+
+        // Look for a RECEIVE transaction matching our address with SUCCESS status
+        const deposit = edges.find(edge => {
+            const node = edge.node;
+            return node?.direction === 'RECEIVE' &&
+                   node?.status === 'SUCCESS' &&
+                   node?.initiationVia?.address === targetAddress;
+        });
+
+        if (deposit) {
+            return { 
+                settled: true, 
+                amountSats: deposit.node.settlementAmount 
+            };
+        }
+
+        return { settled: false };
+    } catch (error) {
+        console.error("Failed to check deposit status:", error);
+        return { settled: false };
+    }
+};
+

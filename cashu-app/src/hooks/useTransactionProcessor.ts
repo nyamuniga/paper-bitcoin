@@ -8,7 +8,10 @@ import {
   executeSendPayment, 
   initiateAndVerifyPayout,
   executeOnChainSend,
-  initiateAndVerifyOnChainPayout
+  initiateAndVerifyOnChainPayout,
+  initiateOnChainReceive,
+  pollOnChainDeposit,
+  executeOnChainReceiveFulfillment
 } from '../services/flowServices';
 
 const POLLING_INTERVAL = 2000;
@@ -53,6 +56,15 @@ export const TransactionProcessor = () => {
       executeOnChainSend(stopPolling, momoPollingRef, momoTimeoutRef);
     } else if (phase === AppPhase.EXECUTING_ONCHAIN_PAYOUT) {
       initiateAndVerifyOnChainPayout(stopPolling, momoPollingRef, momoTimeoutRef);
+    }
+
+    // On-Chain Receive specific phases
+    if (phase === AppPhase.GENERATING_ONCHAIN_ADDRESS) {
+      initiateOnChainReceive();
+    } else if (phase === AppPhase.AWAITING_ONCHAIN_DEPOSIT) {
+      pollOnChainDeposit(stopPolling, momoPollingRef, momoTimeoutRef);
+    } else if (phase === AppPhase.DEPOSIT_CONFIRMED) {
+      executeOnChainReceiveFulfillment();
     }
 
     return stopPolling;
