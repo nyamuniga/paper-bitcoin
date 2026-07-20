@@ -85,27 +85,31 @@ export const RecentTransactions: React.FC = () => {
 
   return (
     <section className="flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <h2 className="text-label-caps font-label-caps text-on-surface-variant tracking-widest">RECENT ACTIVITY</h2>
-        {(loading || recentTxs.length > 0) && (
-          <Link to="/history" className="text-label-caps font-label-caps text-primary hover:opacity-80 transition-opacity flex items-center gap-1">
-            VIEW ALL
-            <ChevronRight size={14} />
-          </Link>
-        )}
-      </div>
-      {loading ? (
-        <div className="text-center text-on-surface-variant py-6 bg-surface-container-high rounded-2xl border border-outline-variant/10 text-body-md font-body-md">
-          Loading transactions...
+      <div className="bg-surface-container-high rounded-2xl overflow-hidden border border-outline-variant/10 relative">
+        <div className="absolute inset-0 texture-overlay opacity-20"></div>
+        
+        {/* Header moved inside the box */}
+        <div className="flex justify-between items-center p-4 border-b border-outline-variant/10 relative z-10">
+          <h2 className="text-label-caps font-label-caps text-on-surface-variant tracking-widest">RECENT ACTIVITY</h2>
+          {(loading || recentTxs.length > 0) && (
+            <Link to="/history" className="text-label-caps font-label-caps text-primary hover:opacity-80 transition-opacity flex items-center gap-1">
+              VIEW ALL
+              <ChevronRight size={14} />
+            </Link>
+          )}
         </div>
-      ) : transactions.length === 0 ? (
-        <div className="text-center text-on-surface-variant py-6 bg-surface-container-high rounded-2xl border border-outline-variant/10 text-body-md font-body-md">
-          No recent activity
-        </div>
-      ) : (
-        <div className="bg-surface-container-high rounded-2xl overflow-hidden border border-outline-variant/10 relative">
-          <div className="absolute inset-0 texture-overlay opacity-20"></div>
-          {recentTxs.map((tx, index) => {
+
+        {loading ? (
+          <div className="text-center text-on-surface-variant py-6 text-body-md font-body-md relative z-10">
+            Loading transactions...
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="text-center text-on-surface-variant py-6 text-body-md font-body-md relative z-10">
+            No recent activity
+          </div>
+        ) : (
+          <div className="relative z-10">
+            {recentTxs.map((tx, index) => {
             const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type;
             return (
             <div
@@ -133,8 +137,9 @@ export const RecentTransactions: React.FC = () => {
               </div>
             </div>
           )})}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {selectedTx && (
         <TransactionDetailsModal
