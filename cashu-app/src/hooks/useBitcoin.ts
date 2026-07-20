@@ -95,12 +95,47 @@ export const useBitcoin = (mintUrl?: string) => {
     }
   };
 
+  const receiveOnChain = async (overrideMintUrl?: string) => {
+    if (isRequestingRef.current) return null;
+    const targetMint = overrideMintUrl || mintUrl;
+    if (!targetMint) {
+      toast.error('No mint specified for receiving');
+      return null;
+    }
+
+    setRequesting(true);
+    isRequestingRef.current = true;
+    try {
+      // Create new transaction record
+      const newTx: any = {
+        id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        direction: "ONCHAIN_RECEIVE",
+        mintUrl: targetMint,
+        status: "PENDING",
+        currentPhase: "GENERATING_ONCHAIN_ADDRESS",
+        timestamp: Date.now()
+      };
+
+      const { useTransactionStore } = await import('../store/transactionStore');
+      useTransactionStore.getState().setActiveTransaction(newTx);
+
+      return { success: true, status: 'PENDING' };
+    } catch (e: any) {
+      toast.error(`Receive failed: ${e.message}`);
+      return null;
+    } finally {
+      setRequesting(false);
+      isRequestingRef.current = false;
+    }
+  };
+
   return {
     paying,
     requesting,
     payInvoice,
     receiveLightning,
-    getOnChainFee, // expose for UI to calculate fees before confirming
+    getOnChainFee,
     sendOnChain,
+    receiveOnChain,
   };
 };

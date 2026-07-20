@@ -8,6 +8,8 @@ import { useTransactionStore } from '../store/transactionStore';
 import { AppPhase } from '../types/momo';
 
 import { useNavigate } from 'react-router-dom';
+import { checkOnChainDepositStatus } from '../services/lightningService';
+import { toast } from 'react-hot-toast';
 
 export default function History() {
   const navigate = useNavigate();
@@ -33,6 +35,36 @@ export default function History() {
     }
   };
 
+  const [checkingDepositIds, setCheckingDepositIds] = useState<Record<string, boolean>>({});
+
+  const handleCheckDeposit = async (txId: string, address: string) => {
+    if (checkingDepositIds[txId]) return;
+    setCheckingDepositIds(prev => ({ ...prev, [txId]: true }));
+    try {
+      const { settled, amountSats } = await checkOnChainDepositStatus(address);
+      if (settled && amountSats) {
+        const store = useTransactionStore.getState();
+        if (store.activeTransaction?.id === txId) {
+          store.updateTransaction({ satsAmount: amountSats });
+          store.updateTransactionPhase(AppPhase.DEPOSIT_CONFIRMED);
+        } else {
+          store.updateHistoryTransaction(txId, { satsAmount: amountSats, currentPhase: AppPhase.DEPOSIT_CONFIRMED });
+        }
+        toast.success("Deposit confirmed! Minting eCash...");
+        // Auto trigger fulfillment since it's confirmed
+        import('../services/flowServices').then(({ executeOnChainReceiveFulfillment }) => {
+          executeOnChainReceiveFulfillment(txId);
+        });
+      } else {
+        toast.error("Deposit not yet confirmed by network.");
+      }
+    } catch (e) {
+      toast.error("Error checking deposit status");
+    } finally {
+      setCheckingDepositIds(prev => ({ ...prev, [txId]: false }));
+    }
+  };
+
   const mergedTransactions = transactions.map(tx => {
     if (tx.status === 'Pending') {
       const momoTx = momoHistory.find(t => t.id === tx.id);
@@ -42,6 +74,18 @@ export default function History() {
     }
     return tx;
   });
+
+  const pendingOnchainReceives = [
+    ...(activeTransaction ? [activeTransaction] : []),
+    ...momoHistory
+  ].filter(
+    (tx) =>
+      tx.direction === 'ONCHAIN_RECEIVE' &&
+      tx.currentPhase === AppPhase.AWAITING_ONCHAIN_DEPOSIT &&
+      tx.onchainAddress
+  );
+
+  const uniquePendingReceives = Array.from(new Map(pendingOnchainReceives.map(tx => [tx.id, tx])).values());
 
   const handleCardClick = (tx: Transaction) => {
     if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
@@ -83,6 +127,29 @@ export default function History() {
           </button>
         </div>
       )}
+
+      {uniquePendingReceives.map((tx) => (
+        <div key={tx.id} className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <RefreshCw className={`w-5 h-5 text-amber-500 ${checkingDepositIds[tx.id] ? 'animate-spin' : ''}`} />
+            <div>
+              <h4 className="text-body-lg font-semibold text-amber-500">Awaiting On-Chain Deposit</h4>
+              <p className="text-body-sm text-on-surface-variant">
+                Waiting for the Bitcoin network to confirm your deposit. 
+                <br />
+                <span className="font-mono text-[10px] break-all">{tx.onchainAddress}</span>
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => handleCheckDeposit(tx.id, tx.onchainAddress!)}
+            disabled={checkingDepositIds[tx.id]}
+            className={`px-4 py-2 rounded-lg font-label-lg transition-colors ${checkingDepositIds[tx.id] ? 'bg-amber-500/10 text-amber-500/50 cursor-not-allowed' : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-500'}`}
+          >
+            {checkingDepositIds[tx.id] ? 'Checking...' : 'Check Status'}
+          </button>
+        </div>
+      ))}
 
       {loading ? (
         <div className="text-center py-10 text-on-surface-variant">Loading...</div>

@@ -9,6 +9,7 @@ interface TransactionState {
   setActiveTransaction: (tx: TransactionDetails | null) => void;
   updateTransactionPhase: (phase: AppPhase) => void;
   updateTransaction: (updates: Partial<TransactionDetails>) => void;
+  updateHistoryTransaction: (id: string, updates: Partial<TransactionDetails>) => void;
   moveToHistory: (tx: TransactionDetails) => void;
   clearHistory: () => void;
   setError: (err: string | null) => void;
@@ -33,6 +34,10 @@ export const useTransactionStore = create<TransactionState>()(
             ? { activeTransaction: { ...state.activeTransaction, ...updates } }
             : state
         ),
+      updateHistoryTransaction: (id, updates) =>
+        set((state) => ({
+          history: state.history.map(t => t.id === id ? { ...t, ...updates } : t)
+        })),
       moveToHistory: (tx) =>
         set((state) => ({
           history: [tx, ...state.history.filter((t) => t.id !== tx.id)],
