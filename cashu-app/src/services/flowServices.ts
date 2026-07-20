@@ -551,10 +551,23 @@ export const initiateOnChainReceive = async () => {
   try {
     store.setError(null);
     let address = tx.onchainAddress;
+    
+    // For Boltz, we MUST have a Lightning invoice first
+    if (!tx.invoice) {
+      throw new Error("Lightning invoice is required for Boltz swap");
+    }
 
     if (!address) {
-      address = await generateOnChainAddress();
-      store.updateTransaction({ onchainAddress: address });
+      const { createSubmarineSwap } = await import('./boltzService');
+      const boltzSwap = await createSubmarineSwap(tx.invoice);
+      
+      store.updateTransaction({ 
+        onchainAddress: boltzSwap.address,
+        boltzSwapId: boltzSwap.id,
+        satsAmount: boltzSwap.expectedAmount, // The amount user actually needs to send
+        refundPublicKey: boltzSwap.refundPublicKey,
+        refundPrivateKey: boltzSwap.refundPrivateKey
+      });
     }
 
     store.updateTransactionPhase(AppPhase.AWAITING_ONCHAIN_DEPOSIT);
@@ -572,18 +585,22 @@ export const pollOnChainDeposit = async (
 ) => {
   const store = useTransactionStore.getState();
   const tx = store.activeTransaction;
-  if (!tx || tx.currentPhase !== AppPhase.AWAITING_ONCHAIN_DEPOSIT || !tx.onchainAddress) return;
+  if (!tx || tx.currentPhase !== AppPhase.AWAITING_ONCHAIN_DEPOSIT || !tx.boltzSwapId) return;
 
   try {
     store.setError(null);
-    const { settled, amountSats } = await checkOnChainDepositStatus(tx.onchainAddress);
+    const { getSwapStatus } = await import('./boltzService');
+    const { status } = await getSwapStatus(tx.boltzSwapId);
 
-    if (settled && amountSats) {
+    if (status === 'invoice.paid' || status === 'transaction.claimed') {
       stopPolling();
-      store.updateTransaction({ satsAmount: amountSats });
       store.updateTransactionPhase(AppPhase.DEPOSIT_CONFIRMED);
+    } else if (status === 'transaction.failed' || status === 'invoice.failedToPay') {
+      stopPolling();
+      store.setError("Boltz swap failed. If you sent funds, a refund is required.");
+      store.updateTransactionPhase(AppPhase.RETRYABLE_ERROR);
     } else {
-      // Continue polling every 10 seconds since block times are slow
+      // Continue polling every 10 seconds
       pollingIntervalRef.current = setTimeout(() => pollOnChainDeposit(stopPolling, pollingIntervalRef, pollingTimeoutRef), 10000);
     }
   } catch (err: any) {
@@ -601,7 +618,6 @@ export const executeOnChainReceiveFulfillment = async (txId?: string) => {
   try {
     store.setError(null);
     
-    // 1. Get invoice from Mint
     const updateTx = (updates: any) => {
       if (!txId || store.activeTransaction?.id === tx.id) store.updateTransaction(updates);
       else store.updateHistoryTransaction(tx.id, updates);
@@ -611,25 +627,12 @@ export const executeOnChainReceiveFulfillment = async (txId?: string) => {
       else store.updateHistoryTransaction(tx.id, { currentPhase: phase });
     };
 
-    updatePhase(AppPhase.GENERATING_MINT_INVOICE);
-    const targetMint = tx.mintUrl || Object.keys(useWalletStore.getState().mintBalances)[0];
-    const res: any = await invoke('receive_lightning', { mintUrl: targetMint, amount: tx.satsAmount });
-    const mintQuoteId = res.quote_id as string;
-    const receiveInvoice = res.invoice as string;
-    
-    updateTx({ mintQuoteId, invoice: receiveInvoice });
-
-    // 2. Pay it via Proxy
-    updatePhase(AppPhase.PAYING_MINT_INVOICE);
-    const paymentRes = await payLightningInvoice(receiveInvoice);
-
-    if (!paymentRes.success) {
-       throw new Error(paymentRes.message || "Proxy failed to pay lightning invoice to mint.");
-    }
-
-    // 3. Issue eCash
+    // With Boltz, the lightning invoice has ALREADY been paid by Boltz.
+    // We just need to trigger the mint check to issue the eCash.
     updatePhase(AppPhase.ISSUING_ECASH);
-    await invoke('check_transaction_status', { txId: mintQuoteId });
+    if (tx.mintQuoteId) {
+      await invoke('check_transaction_status', { txId: tx.mintQuoteId });
+    }
     
     // Success
     updateTx({
@@ -637,6 +640,7 @@ export const executeOnChainReceiveFulfillment = async (txId?: string) => {
       timestamp: Date.now(),
       currentPhase: AppPhase.IDLE
     });
+    
     
     if (!txId || store.activeTransaction?.id === tx.id) {
       store.moveToHistory(store.activeTransaction!);

@@ -78,4 +78,7 @@ export interface TransactionDetails {
   mintUrl?: string;
   onchainAddress?: string;
   txSuccessId?: string;
+  boltzSwapId?: string;
+  refundPublicKey?: string;
+  refundPrivateKey?: string;
 }

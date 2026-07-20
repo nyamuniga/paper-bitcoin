@@ -95,7 +95,7 @@ export const useBitcoin = (mintUrl?: string) => {
     }
   };
 
-  const receiveOnChain = async (overrideMintUrl?: string) => {
+  const receiveOnChain = async (amount: number, overrideMintUrl?: string) => {
     if (isRequestingRef.current) return null;
     const targetMint = overrideMintUrl || mintUrl;
     if (!targetMint) {
@@ -106,12 +106,32 @@ export const useBitcoin = (mintUrl?: string) => {
     setRequesting(true);
     isRequestingRef.current = true;
     try {
+      // Validate amount with Boltz limits
+      const { getBoltzPair } = await import('../services/boltzService');
+      const pair = await getBoltzPair('BTC/BTC');
+      if (amount < pair.limits.minimal) {
+        toast.error(`Amount must be at least ${pair.limits.minimal} sats for on-chain receive.`);
+        return null;
+      }
+      if (amount > pair.limits.maximal) {
+        toast.error(`Amount must be at most ${pair.limits.maximal} sats for on-chain receive.`);
+        return null;
+      }
+
+      // First, request a lightning invoice from the Mint
+      const res: any = await invoke('receive_lightning', { mintUrl: targetMint, amount });
+      const quoteId = res.quote_id as string;
+      const receiveInvoice = res.invoice as string;
+
       // Create new transaction record
       const newTx: any = {
         id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         direction: "ONCHAIN_RECEIVE",
         mintUrl: targetMint,
         status: "PENDING",
+        satsAmount: amount,
+        invoice: receiveInvoice,
+        mintQuoteId: quoteId,
         currentPhase: "GENERATING_ONCHAIN_ADDRESS",
         timestamp: Date.now()
       };

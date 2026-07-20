@@ -61,11 +61,22 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
 
   const handleClose = () => {
     refreshWallet();
-    if (activeTransaction?.direction === 'ONCHAIN_RECEIVE' && 
-        [AppPhase.GENERATING_ONCHAIN_ADDRESS, AppPhase.AWAITING_ONCHAIN_DEPOSIT].includes(activeTransaction.currentPhase!)) {
-      useTransactionStore.getState().moveToHistory(activeTransaction);
-      useTransactionStore.getState().setActiveTransaction(null);
+    if (activeTransaction) {
+      if (activeTransaction.direction === 'ONCHAIN_RECEIVE' && 
+          [AppPhase.GENERATING_ONCHAIN_ADDRESS, AppPhase.AWAITING_ONCHAIN_DEPOSIT].includes(activeTransaction.currentPhase!)) {
+        useTransactionStore.getState().moveToHistory(activeTransaction);
+        useTransactionStore.getState().setActiveTransaction(null);
+      } else if (activeTransaction.direction === 'ONCHAIN_SEND' &&
+          [AppPhase.ONCHAIN_PAYOUT_COMPLETE, AppPhase.ONCHAIN_PAYOUT_FAILED].includes(activeTransaction.currentPhase!)) {
+        useTransactionStore.getState().setActiveTransaction(null);
+      }
     }
+    
+    // Reset local component states
+    setSendStep('input');
+    setOnchainSendAmount('');
+    setDestinationInput('');
+
     onClose();
   };
 
@@ -189,7 +200,8 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   };
 
   const handleRequestOnChain = async () => {
-    await receiveOnChain();
+    if (parsedReceiveAmount <= 0) return;
+    await receiveOnChain(parsedReceiveAmount);
   };
 
   const handleCopy = async (text: string) => {
@@ -608,7 +620,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <div className="w-full bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl flex items-start gap-3 mt-1">
                       <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                       <div className="text-[12px] text-amber-500/90 leading-tight">
-                        <span className="font-bold">Minimum deposit: 3,046 sats.</span> Deposits below this amount will be consumed by network fees and cannot be recovered.
+                        <span className="font-bold">Exact amount required: ₿{activeTransaction.satsAmount?.toLocaleString()}</span> Please send the exact amount to avoid deposit failures.
                       </div>
                     </div>
 
@@ -763,21 +775,21 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   </button>
                 </div>
 
-                {receiveMode === 'lightning' ? (
+                <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-4">
-                      <AmountDisplay amount={receiveAmount} compact />
-                      <NumberPad
-                        value={receiveAmount}
-                        onChange={(val) => {
-                          setReceiveAmount(val);
-                          setReceiveInvoice(null);
-                          setQuoteId(null);
-                        }}
-                        compact
-                      />
-                    </div>
+                    <AmountDisplay amount={receiveAmount} compact />
+                    <NumberPad
+                      value={receiveAmount}
+                      onChange={(val) => {
+                        setReceiveAmount(val);
+                        setReceiveInvoice(null);
+                        setQuoteId(null);
+                      }}
+                      compact
+                    />
+                  </div>
 
+                  {receiveMode === 'lightning' ? (
                     <button
                       onClick={handleRequestInvoice}
                       disabled={requesting || parsedReceiveAmount <= 0}
@@ -786,29 +798,17 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     >
                       {requesting ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Invoice'}
                     </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-4 h-full pt-4">
-                    <div className="flex flex-col items-center text-center px-4 mb-4 gap-2">
-                      <div className="w-12 h-12 bg-amber-500/10 rounded-full flex items-center justify-center mb-2">
-                        <Zap size={24} className="text-amber-500" />
-                      </div>
-                      <h3 className="text-lg font-bold text-on-surface">Receive Bitcoin</h3>
-                      <p className="text-sm text-on-surface-variant">
-                        Generate a fresh On-Chain address. Any Bitcoin sent to this address will be automatically bridged and minted as eCash in your wallet.
-                      </p>
-                    </div>
-
+                  ) : (
                     <button
                       onClick={handleRequestOnChain}
-                      disabled={requesting}
-                      className={`mt-auto bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${requesting ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      disabled={requesting || parsedReceiveAmount <= 0}
+                      className={`bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${requesting || parsedReceiveAmount <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                         }`}
                     >
                       {requesting ? <Loader2 className="animate-spin w-6 h-6" /> : 'Generate Address'}
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )
           )}
