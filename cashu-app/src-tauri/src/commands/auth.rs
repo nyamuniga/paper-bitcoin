@@ -70,6 +70,16 @@ pub async fn create_wallet(
 
     let (phrase, seed_hex) = ecash_wallet::generate_mnemonic()?;
     let mut w_state = WalletState::new(seed_hex, Some(phrase.clone()));
+    
+    // Add default mint for new wallets
+    let default_mint = ecash_wallet::DEFAULT_MINT_URL.to_string();
+    w_state.mints.push(default_mint.clone());
+    
+    // Attempt to fetch and cache keys for the default mint (non-fatal if it fails)
+    if let Ok(keyset) = ecash_wallet::client::MintClient::new(&default_mint).fetch_keyset().await {
+        w_state.cache_mint_keys(&default_mint, keyset.keys);
+    }
+    
     w_state.save_encrypted(&path, &passphrase)?;
 
     let mut pass_lock = state.passphrase.lock().unwrap();

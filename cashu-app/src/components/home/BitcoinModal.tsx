@@ -7,6 +7,7 @@ import { useBitcoin } from '../../hooks/useBitcoin';
 import { useHistory } from '../../hooks/useHistory';
 import { useTransactionStore } from '../../store/transactionStore';
 import { AppPhase } from '../../types/momo';
+import { MEMPOOL_EXPLORER_URL } from '../../constants.local';
 
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { MintIcon } from '../shared/MintIcon';
@@ -97,7 +98,9 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
     AppPhase.DEPOSIT_CONFIRMED,
     AppPhase.GENERATING_MINT_INVOICE,
     AppPhase.PAYING_MINT_INVOICE,
-    AppPhase.ISSUING_ECASH
+    AppPhase.ISSUING_ECASH,
+    AppPhase.PAYMENT_FAILED,
+    AppPhase.RETRYABLE_ERROR
   ].includes(activeTransaction.currentPhase!);
 
   React.useEffect(() => {
@@ -326,7 +329,9 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
             <div className="flex flex-col gap-4">
               {isProcessingOnChain && (
                 <div className="py-6 px-4 animate-fade-in">
-                  <h3 className="text-headline-md text-on-surface mb-6 text-center">Processing Send</h3>
+                  <h3 className={`text-headline-md mb-6 text-center ${activeTransaction?.currentPhase === AppPhase.ONCHAIN_PAYOUT_FAILED ? 'text-error' : 'text-on-surface'}`}>
+                    {activeTransaction?.currentPhase === AppPhase.ONCHAIN_PAYOUT_FAILED ? 'Send Failed' : 'Processing Send'}
+                  </h3>
 
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center gap-4">
@@ -558,7 +563,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <Check size={32} className="text-emerald-400" />
                   </div>
                   <div className="text-center">
-                    <p className="text-label-caps font-label-caps text-on-surface-variant mb-1">ON-CHAIN SEND INITIATED</p>
+                    <p className="text-label-caps font-label-caps text-on-surface-variant mb-1">ON-CHAIN SEND COMPLETE</p>
                     <p className="text-[28px] font-display-lg text-emerald-400">₿{parseInt(onchainSendAmount) || parsedInput.amountSats}</p>
                   </div>
 
@@ -569,7 +574,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         <p className="text-[11px] font-mono text-on-surface-variant break-all select-all">{txSuccessId}</p>
                       </div>
                       <a
-                        href={`https://mempool.space/tx/${txSuccessId}`}
+                        href={`${MEMPOOL_EXPLORER_URL}/tx/${txSuccessId}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="mt-3 flex items-center justify-center gap-2 text-amber-400 hover:text-amber-300 transition-colors text-sm font-bold"
@@ -598,6 +603,26 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     Please send Bitcoin to the generated address.
                   </p>
                 </div>
+
+                {activeTransaction?.status === 'COMPLETED' && (
+                  <div className="flex flex-col items-center gap-2 mb-2">
+                    <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mb-2">
+                      <Check size={32} className="text-emerald-400" />
+                    </div>
+                    <p className="text-label-caps font-label-caps text-emerald-400">RECEIVE COMPLETE</p>
+                    <p className="text-[28px] font-display-lg text-emerald-400">₿{activeTransaction.satsAmount?.toLocaleString()}</p>
+                  </div>
+                )}
+
+                {(activeTransaction?.currentPhase === AppPhase.PAYMENT_FAILED || activeTransaction?.currentPhase === AppPhase.RETRYABLE_ERROR) && (
+                  <div className="flex flex-col items-center gap-2 mb-2 w-full">
+                     <div className="bg-error/10 border border-error/20 p-4 rounded-xl text-center w-full">
+                       <AlertCircle className="w-8 h-8 text-error mx-auto mb-2" />
+                       <p className="text-body-md text-error font-bold mb-2">Receive Failed</p>
+                       <p className="text-body-sm text-on-surface-variant">The swap failed. If you have sent funds, please close this and request a refund from the History tab.</p>
+                     </div>
+                  </div>
+                )}
 
                 {activeTransaction?.onchainAddress && activeTransaction.currentPhase === AppPhase.AWAITING_ONCHAIN_DEPOSIT && (
                   <div className="flex flex-col items-center gap-4 w-full">

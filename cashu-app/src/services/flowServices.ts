@@ -7,9 +7,7 @@ import {
 import {
   payLightningInvoice,
   createLightningInvoice,
-  sendOnChainPayment,
-  generateOnChainAddress,
-  checkOnChainDepositStatus
+  sendOnChainPayment
 } from "./lightningService";
 import {
   AppPhase,
@@ -566,7 +564,9 @@ export const initiateOnChainReceive = async () => {
         boltzSwapId: boltzSwap.id,
         satsAmount: boltzSwap.expectedAmount, // The amount user actually needs to send
         refundPublicKey: boltzSwap.refundPublicKey,
-        refundPrivateKey: boltzSwap.refundPrivateKey
+        refundPrivateKey: boltzSwap.refundPrivateKey,
+        redeemScript: boltzSwap.redeemScript,
+        timeoutBlockHeight: boltzSwap.timeoutBlockHeight
       });
     }
 
@@ -598,7 +598,7 @@ export const pollOnChainDeposit = async (
     } else if (status === 'transaction.failed' || status === 'invoice.failedToPay') {
       stopPolling();
       store.setError("Boltz swap failed. If you sent funds, a refund is required.");
-      store.updateTransactionPhase(AppPhase.RETRYABLE_ERROR);
+      store.updateTransactionPhase(AppPhase.PAYMENT_FAILED);
     } else {
       // Continue polling every 10 seconds
       pollingIntervalRef.current = setTimeout(() => pollOnChainDeposit(stopPolling, pollingIntervalRef, pollingTimeoutRef), 10000);
