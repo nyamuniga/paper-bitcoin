@@ -304,11 +304,11 @@ export const useNostr = () => {
           toast.success(`⚡ Claimed ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''}!`);
           setLastClaimTimestamp(Date.now());
         } else {
-          toast.error(`Claim failed: ${e.message}`);
+          toast('No pending payments found', { icon: '📭' });
         }
       } catch (v1Error) {
-         console.error('[DEBUG claimNow] v1 fallback also failed:', v1Error);
-         toast.error(`Claim failed: ${e.message}`);
+         console.error('[DEBUG claimNow] v1 fallback error:', v1Error);
+         toast('No pending payments found', { icon: '📭' });
       }
     } finally {
       setClaiming(false);
