@@ -87,7 +87,7 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
               value={binB64}
               onChange={(e) => setBinB64(e.target.value)}
               className="w-full bg-surface-container-lowest text-on-background rounded-lg border-none px-4 py-4 min-h-[100px] resize-none focus:ring-1 focus:ring-primary/50 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] text-body-md font-body-md placeholder:text-on-surface-variant/40 transition-all glow-effect focus:bg-surface-container-lowest/80"
-              placeholder="Paste ecash token, btc address, ln invoice, or note data..."
+              placeholder="Ecash token, address, invoice, or note data..."
               spellCheck="false"
             ></textarea>
           </div>

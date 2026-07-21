@@ -39,7 +39,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const [destinationInput, setDestinationInput] = useState(initialInvoice);
   const [showScanner, setShowScanner] = useState(false);
   const parsedInput = parseBitcoinInput(destinationInput);
-  
+
   const [lnurlParams, setLnurlParams] = useState<any | null>(null);
 
   const [onchainSendAmount, setOnchainSendAmount] = useState('');
@@ -67,16 +67,16 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const handleClose = () => {
     refreshWallet();
     if (activeTransaction) {
-      if (activeTransaction.direction === 'ONCHAIN_RECEIVE' && 
-          [AppPhase.GENERATING_ONCHAIN_ADDRESS, AppPhase.AWAITING_ONCHAIN_DEPOSIT].includes(activeTransaction.currentPhase!)) {
+      if (activeTransaction.direction === 'ONCHAIN_RECEIVE' &&
+        [AppPhase.GENERATING_ONCHAIN_ADDRESS, AppPhase.AWAITING_ONCHAIN_DEPOSIT].includes(activeTransaction.currentPhase!)) {
         useTransactionStore.getState().moveToHistory(activeTransaction);
         useTransactionStore.getState().setActiveTransaction(null);
       } else if (activeTransaction.direction === 'ONCHAIN_SEND' &&
-          [AppPhase.ONCHAIN_PAYOUT_COMPLETE, AppPhase.ONCHAIN_PAYOUT_FAILED].includes(activeTransaction.currentPhase!)) {
+        [AppPhase.ONCHAIN_PAYOUT_COMPLETE, AppPhase.ONCHAIN_PAYOUT_FAILED].includes(activeTransaction.currentPhase!)) {
         useTransactionStore.getState().setActiveTransaction(null);
       }
     }
-    
+
     // Reset local component states
     setSendStep('input');
     setOnchainSendAmount('');
@@ -91,14 +91,14 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   // Observe background on-chain transaction
   const isProcessingOnChain = activeTransaction?.direction === 'ONCHAIN_SEND' && [
     AppPhase.GENERATING_ONCHAIN_INVOICE,
-    AppPhase.PAYING_ONCHAIN_INVOICE, 
+    AppPhase.PAYING_ONCHAIN_INVOICE,
     AppPhase.EXECUTING_ONCHAIN_PAYOUT,
     AppPhase.ONCHAIN_PAYOUT_FAILED
   ].includes(activeTransaction.currentPhase!);
 
   const isProcessingOnChainReceive = activeTransaction?.direction === 'ONCHAIN_RECEIVE' && [
     AppPhase.GENERATING_ONCHAIN_ADDRESS,
-    AppPhase.AWAITING_ONCHAIN_DEPOSIT, 
+    AppPhase.AWAITING_ONCHAIN_DEPOSIT,
     AppPhase.DEPOSIT_CONFIRMED,
     AppPhase.GENERATING_MINT_INVOICE,
     AppPhase.PAYING_MINT_INVOICE,
@@ -425,11 +425,11 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   </div>
 
                   {activeTransaction?.currentPhase === AppPhase.ONCHAIN_PAYOUT_FAILED && (
-                     <div className="mt-8 text-center bg-error/10 border border-error/20 p-4 rounded-xl">
-                       <p className="text-body-md text-error font-bold mb-2">On-Chain Payout Failed</p>
-                       <p className="text-body-sm text-on-surface-variant mb-4">Your eCash was melted successfully, but the final on-chain payout failed.</p>
-                       <button onClick={onClose} className="w-full py-3 bg-surface-container-highest rounded-full text-on-surface hover:bg-surface-bright transition-colors font-label-lg">Close (Retry from History)</button>
-                     </div>
+                    <div className="mt-8 text-center bg-error/10 border border-error/20 p-4 rounded-xl">
+                      <p className="text-body-md text-error font-bold mb-2">On-Chain Payout Failed</p>
+                      <p className="text-body-sm text-on-surface-variant mb-4">Your eCash was melted successfully, but the final on-chain payout failed.</p>
+                      <button onClick={onClose} className="w-full py-3 bg-surface-container-highest rounded-full text-on-surface hover:bg-surface-bright transition-colors font-label-lg">Close (Retry from History)</button>
+                    </div>
                   )}
                 </div>
               )}
@@ -455,7 +455,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         value={destinationInput}
                         onChange={(e) => setDestinationInput(e.target.value)}
                         className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInsufficient ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-amber-400'}`}
-                        placeholder="Lightning invoice or Bitcoin address..."
+                        placeholder="Invoice or Address..."
                         rows={4}
                         spellCheck={false}
                       />
@@ -651,11 +651,11 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
 
                 {(activeTransaction?.currentPhase === AppPhase.PAYMENT_FAILED || activeTransaction?.currentPhase === AppPhase.RETRYABLE_ERROR) && (
                   <div className="flex flex-col items-center gap-2 mb-2 w-full">
-                     <div className="bg-error/10 border border-error/20 p-4 rounded-xl text-center w-full">
-                       <AlertCircle className="w-8 h-8 text-error mx-auto mb-2" />
-                       <p className="text-body-md text-error font-bold mb-2">Receive Failed</p>
-                       <p className="text-body-sm text-on-surface-variant">The swap failed. If you have sent funds, please close this and request a refund from the History tab.</p>
-                     </div>
+                    <div className="bg-error/10 border border-error/20 p-4 rounded-xl text-center w-full">
+                      <AlertCircle className="w-8 h-8 text-error mx-auto mb-2" />
+                      <p className="text-body-md text-error font-bold mb-2">Receive Failed</p>
+                      <p className="text-body-sm text-on-surface-variant">The swap failed. If you have sent funds, please close this and request a refund from the History tab.</p>
+                    </div>
                   </div>
                 )}
 
@@ -676,7 +676,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     >
                       {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Address</>}
                     </button>
-                    
+
                     <div className="w-full bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl flex items-start gap-3 mt-1">
                       <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                       <div className="text-[12px] text-amber-500/90 leading-tight">
@@ -810,26 +810,24 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
               </div>
             ) : (
               <div className="flex flex-col gap-6">
-                
+
                 {/* Mode Toggle */}
                 <div className="flex p-1 bg-surface-container-highest rounded-full">
                   <button
                     onClick={() => setReceiveMode('lightning')}
-                    className={`flex-1 py-2 text-sm font-bold rounded-full transition-all ${
-                      receiveMode === 'lightning' 
-                        ? 'bg-amber-500 text-on-primary shadow-md' 
+                    className={`flex-1 py-2 text-sm font-bold rounded-full transition-all ${receiveMode === 'lightning'
+                        ? 'bg-amber-500 text-on-primary shadow-md'
                         : 'text-on-surface-variant hover:text-on-surface'
-                    }`}
+                      }`}
                   >
                     Lightning
                   </button>
                   <button
                     onClick={() => setReceiveMode('onchain')}
-                    className={`flex-1 py-2 text-sm font-bold rounded-full transition-all ${
-                      receiveMode === 'onchain' 
-                        ? 'bg-amber-500 text-on-primary shadow-md' 
+                    className={`flex-1 py-2 text-sm font-bold rounded-full transition-all ${receiveMode === 'onchain'
+                        ? 'bg-amber-500 text-on-primary shadow-md'
                         : 'text-on-surface-variant hover:text-on-surface'
-                    }`}
+                      }`}
                   >
                     On-Chain
                   </button>
