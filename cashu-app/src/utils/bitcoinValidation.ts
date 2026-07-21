@@ -1,5 +1,5 @@
 export interface ParsedBitcoinInput {
-  type: 'lightning' | 'onchain' | 'invalid';
+  type: 'lightning' | 'onchain' | 'lnurl-pay' | 'lnurl' | 'invalid';
   addressOrInvoice: string;
   amountSats: number | null; // Extracted amount if present (from BIP21 or lightning)
 }
@@ -7,14 +7,35 @@ export interface ParsedBitcoinInput {
 /**
  * Validates and parses a Bitcoin input string.
  * Supports:
- * 1. Lightning invoices (lnbc...)
- * 2. On-chain addresses (Legacy 1..., P2SH 3..., Segwit/Taproot bc1...)
- * 3. BIP21 URIs (bitcoin:...?amount=...)
+ * 1. Lightning Addresses (user@domain.tld)
+ * 2. LNURL strings (LNURL1... or lightning:LNURL1...)
+ * 3. Lightning invoices (lnbc...)
+ * 4. On-chain addresses (Legacy 1..., P2SH 3..., Segwit/Taproot bc1...)
+ * 5. BIP21 URIs (bitcoin:...?amount=...)
  */
 export const parseBitcoinInput = (input: string): ParsedBitcoinInput => {
   const cleanInput = input.trim();
 
-  // 1. Check for Lightning Invoice
+  // 1. Check for Lightning Address (user@domain.tld)
+  if (/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(cleanInput)) {
+    return {
+      type: 'lnurl-pay',
+      addressOrInvoice: cleanInput.toLowerCase(),
+      amountSats: null
+    };
+  }
+
+  // 2. Check for LNURL (bech32 encoded, optionally with lightning: prefix)
+  const lnurlInput = cleanInput.replace(/^lightning:/i, '');
+  if (/^lnurl1[a-z0-9]+$/i.test(lnurlInput)) {
+    return {
+      type: 'lnurl',
+      addressOrInvoice: lnurlInput.toLowerCase(),
+      amountSats: null
+    };
+  }
+
+  // 3. Check for Lightning Invoice
   const lnMatch = cleanInput.match(/^(?:lightning:)?(lnbc[a-z0-9]+)$/i);
   if (lnMatch) {
     const invoice = lnMatch[1].toLowerCase();
@@ -25,7 +46,7 @@ export const parseBitcoinInput = (input: string): ParsedBitcoinInput => {
     };
   }
 
-  // 2. Check for BIP21 URI
+  // 4. Check for BIP21 URI
   const bip21Match = cleanInput.match(/^bitcoin:([13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{8,87})/i);
   if (bip21Match) {
     const address = bip21Match[1];
@@ -33,8 +54,6 @@ export const parseBitcoinInput = (input: string): ParsedBitcoinInput => {
     
     // Parse query params for amount (amount in BTC -> Sats)
     try {
-      // Need to use URL parsing properly, but bitcoin: protocol might fail in JS URL parser in some environments,
-      // so let's do a simple extraction just in case.
       const url = new URL(cleanInput);
       const btcAmount = url.searchParams.get('amount');
       if (btcAmount) {
@@ -55,10 +74,7 @@ export const parseBitcoinInput = (input: string): ParsedBitcoinInput => {
     };
   }
 
-  // 3. Check for raw on-chain address
-  // Legacy (P2PKH): Starts with 1, 26-35 characters
-  // P2SH: Starts with 3, 26-35 characters
-  // SegWit/Taproot (Bech32/Bech32m): Starts with bc1, up to 90 characters
+  // 5. Check for raw on-chain address
   const rawOnchainMatch = cleanInput.match(/^([13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{8,87})$/i);
   if (rawOnchainMatch) {
     return {

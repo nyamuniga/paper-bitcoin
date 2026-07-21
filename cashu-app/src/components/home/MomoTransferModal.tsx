@@ -6,6 +6,7 @@ import { useWalletStore } from '../../store/wallet';
 import { useTransactionStore } from '../../store/transactionStore';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
+import { createPortal } from 'react-dom';
 
 interface MomoTransferModalProps {
   initialTab?: 'send' | 'receive';
@@ -140,8 +141,8 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
       <div
         onClick={e => e.stopPropagation()}
         className="w-full max-w-lg bg-surface-container-high rounded-2xl border border-outline-variant/20 shadow-2xl flex flex-col overflow-hidden relative max-h-[90vh] animate-slide-up"
@@ -527,6 +528,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

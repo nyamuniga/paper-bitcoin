@@ -5,6 +5,7 @@ import { useBitcoin } from '../../hooks/useBitcoin';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
+import { createPortal } from 'react-dom';
 
 interface PayInvoiceModalProps {
   mintUrl: string;
@@ -50,9 +51,9 @@ export const PayInvoiceModal: React.FC<PayInvoiceModalProps> = ({ mintUrl, onClo
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <div className="bg-surface-container-high rounded-2xl w-full max-w-md border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+      <div className="bg-surface-container-high rounded-2xl w-full max-w-lg border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative max-h-[90vh]">
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
         
         {/* Header */}
@@ -118,6 +119,7 @@ export const PayInvoiceModal: React.FC<PayInvoiceModalProps> = ({ mintUrl, onClo
       {paying && (
         <FullScreenLoader title="Sending Bitcoin..." message="Paying the lightning invoice." />
       )}
-    </div>
+    </div>,
+    document.body
   );
 };
