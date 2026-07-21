@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { QrCode, ArrowDownLeft, ArrowUpRight, Coins, Zap, FileText, ChevronDown, Phone } from 'lucide-react';
+import { QrCode, ArrowDownLeft, ArrowUpRight, Coins, Zap, FileText, ChevronDown, Phone, Check } from 'lucide-react';
 import { ActionMenuModal } from './ActionMenuModal';
 import { EcashModal } from './EcashModal';
 import { BitcoinModal } from './BitcoinModal';
@@ -25,9 +25,9 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
   const [momoModalConfig, setMomoModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive' } | null>(null);
 
   const mintUrls = Object.keys(mintBalances || {});
-  const [selectedMint, setSelectedMint] = useState<string | null>(null);
+  const [selectedMint, setSelectedMint] = useState<string | null>(() => localStorage.getItem('preferred_mint_url'));
 
-  const activeMint = selectedMint || (mintUrls.length > 0 ? mintUrls[0] : null);
+  const activeMint = (selectedMint && mintUrls.includes(selectedMint)) ? selectedMint : (mintUrls.length > 0 ? mintUrls[0] : null);
 
   React.useEffect(() => {
     if (location.state) {
@@ -76,12 +76,13 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               {mintUrls.map((mint, index) => (
                 <button
                   key={mint}
-                  onClick={() => { setSelectedMint(mint); setShowMintDropdown(false); }}
+                  onClick={() => { setSelectedMint(mint); localStorage.setItem('preferred_mint_url', mint); setShowMintDropdown(false); }}
                   className={`flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left ${index > 0 ? 'border-t border-outline-variant/10' : ''}`}
                 >
                   <div className="flex items-center gap-2 min-w-0 pr-2">
                     <MintIcon mintUrl={mint} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
                     <MintName mintUrl={mint} className="text-body-sm font-body-sm text-on-surface truncate" />
+                    {activeMint === mint && <Check size={14} className="text-primary flex-shrink-0" />}
                   </div>
                   <span className="text-body-sm font-body-sm font-bold text-on-surface flex-shrink-0">₿{(mintBalances![mint] || 0).toLocaleString()}</span>
                 </button>

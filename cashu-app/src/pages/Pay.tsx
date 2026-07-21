@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Zap, QrCode } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
@@ -8,6 +8,17 @@ import { FullScreenLoader } from '../components/shared/FullScreenLoader';
 import { PageHeader } from '../components/shared/PageHeader';
 import { formatMintUrl } from '../utils/format';
 import { MintIcon } from '../components/shared/MintIcon';
+import { bech32 } from 'bech32';
+import { Buffer } from 'buffer';
+import toast from 'react-hot-toast';
+
+interface LnurlParams {
+  callback: string;
+  maxSendable: number;
+  minSendable: number;
+  metadata: string;
+  domain?: string;
+}
 
 export const Pay = () => {
   const location = useLocation();
@@ -20,6 +31,74 @@ export const Pay = () => {
   const { paying, payInvoice } = useBitcoin(mintUrl);
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const availableBalance = mintUrl ? (mintBalances[mintUrl] || 0) : 0;
+
+  const [lnurlParams, setLnurlParams] = useState<LnurlParams | null>(null);
+  const [lnurlAmount, setLnurlAmount] = useState<string>('');
+  const [fetchingInvoice, setFetchingInvoice] = useState(false);
+
+  // Process input to detect LNURL / Lightning Address
+  useEffect(() => {
+    const processInput = async () => {
+      const val = invoice.trim();
+      if (!val) {
+        setLnurlParams(null);
+        return;
+      }
+      
+      let url = '';
+      
+      // Lightning Address
+      if (val.match(/^[^@]+@[^@]+\.[^@]+$/)) {
+        const [user, domain] = val.split('@');
+        url = `https://${domain}/.well-known/lnurlp/${user}`;
+      } 
+      // LNURL (Bech32)
+      else if (val.toLowerCase().startsWith('lnurl1')) {
+        try {
+          const decoded = bech32.decode(val.toLowerCase(), 2000);
+          const bytes = bech32.fromWords(decoded.words);
+          url = Buffer.from(bytes).toString('utf8');
+        } catch (e) {
+          console.warn('Failed to decode LNURL', e);
+        }
+      }
+
+      if (url) {
+        try {
+          setFetchingInvoice(true);
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.status === 'ERROR') {
+            toast.error(data.reason || 'Failed to resolve LNURL');
+            setLnurlParams(null);
+          } else if (data.callback) {
+            setLnurlParams({
+              callback: data.callback,
+              maxSendable: data.maxSendable,
+              minSendable: data.minSendable,
+              metadata: data.metadata,
+              domain: new URL(url).hostname
+            });
+            setLnurlAmount(Math.floor((data.minSendable || 1000) / 1000).toString());
+          }
+        } catch (e) {
+          toast.error('Failed to fetch LNURL details');
+          setLnurlParams(null);
+        } finally {
+          setFetchingInvoice(false);
+        }
+      } else {
+        setLnurlParams(null);
+      }
+    };
+    
+    // Only process if it doesn't look like a standard invoice
+    if (!invoice.toLowerCase().startsWith('lnbc')) {
+      processInput();
+    } else {
+      setLnurlParams(null);
+    }
+  }, [invoice]);
 
   if (!mintUrl) {
     return (
@@ -53,12 +132,56 @@ export const Pay = () => {
     return null;
   };
 
-  const invoiceAmount = getInvoiceAmountSats(invoice);
-  const isZeroAmount = invoiceAmount === 0;
+  let invoiceAmount = getInvoiceAmountSats(invoice);
+  if (lnurlParams) {
+    invoiceAmount = parseInt(lnurlAmount) || 0;
+  }
+
+  const isZeroAmount = invoiceAmount === 0 || isNaN(invoiceAmount as number);
   const isInsufficient = invoiceAmount !== null && invoiceAmount > availableBalance;
-  const isInvalidAmount = isInsufficient || isZeroAmount;
+  
+  let isOutOflnurlBounds = false;
+  if (lnurlParams && invoiceAmount !== null) {
+    const amtMsat = invoiceAmount * 1000;
+    if (amtMsat < lnurlParams.minSendable || amtMsat > lnurlParams.maxSendable) {
+      isOutOflnurlBounds = true;
+    }
+  }
+
+  const isInvalidAmount = isInsufficient || isZeroAmount || isOutOflnurlBounds;
 
   const handlePay = async () => {
+    if (lnurlParams) {
+      const amtSats = parseInt(lnurlAmount);
+      if (!amtSats || amtSats <= 0 || isInvalidAmount) return;
+      
+      try {
+        setFetchingInvoice(true);
+        const res = await fetch(`${lnurlParams.callback}${lnurlParams.callback.includes('?') ? '&' : '?'}amount=${amtSats * 1000}`);
+        const data = await res.json();
+        
+        if (data.status === 'ERROR') {
+          toast.error(data.reason || 'Failed to fetch invoice from LNURL provider');
+          setFetchingInvoice(false);
+          return;
+        }
+        
+        if (data.pr) {
+          const success = await payInvoice(data.pr);
+          if (success) {
+            navigate('/');
+          }
+        } else {
+          toast.error('Invalid response from LNURL provider');
+        }
+      } catch (e) {
+        toast.error('Failed to fetch invoice');
+      } finally {
+        setFetchingInvoice(false);
+      }
+      return;
+    }
+    
     if (!invoice || isInvalidAmount) return;
     const success = await payInvoice(invoice);
     if (success) {
@@ -99,9 +222,7 @@ export const Pay = () => {
                   formats={['qr_code']}
                   onScan={(result) => {
                     if (!result || result.length === 0) return;
-                    // Try to find lightning: or lnbc
-                    const validQr = result.find(r => r.rawValue.toLowerCase().includes('lnbc') || r.rawValue.toLowerCase().startsWith('lightning:'));
-                    let val = validQr ? validQr.rawValue : result[0].rawValue;
+                    let val = result[0].rawValue;
                     if (val.toLowerCase().startsWith('lightning:')) {
                       val = val.substring(10);
                     }
@@ -137,39 +258,85 @@ export const Pay = () => {
             </div>
 
             <div className="relative flex flex-col gap-2">
-              <div className={`relative glow-effect transition-shadow duration-300 rounded-lg ${isInvalidAmount ? 'shadow-[0_0_15px_rgba(239,68,68,0.3)]' : ''}`}>
-                <textarea 
-                  value={invoice}
-                  onChange={(e) => setInvoice(e.target.value)}
-                  className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInvalidAmount ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-amber-400'}`} 
-                  placeholder="lnbc..." 
-                  rows={4}
-                  spellCheck="false"
-                />
-              </div>
-              {invoiceAmount !== null && (
+              {!lnurlParams ? (
+                <div className={`relative glow-effect transition-shadow duration-300 rounded-lg ${isInvalidAmount && invoice ? 'shadow-[0_0_15px_rgba(239,68,68,0.3)]' : ''}`}>
+                  <textarea 
+                    value={invoice}
+                    onChange={(e) => setInvoice(e.target.value)}
+                    className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInvalidAmount && invoice ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-amber-400'}`} 
+                    placeholder="lnbc... or user@domain.com" 
+                    rows={4}
+                    spellCheck="false"
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4 bg-surface-container-lowest p-4 rounded-lg shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]">
+                  <div className="flex justify-between items-center">
+                    <span className="text-on-surface-variant font-label-caps text-xs">Paying</span>
+                    <span className="text-amber-400 font-bold truncate">{lnurlParams.domain || 'LNURL'}</span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-on-surface-variant font-label-caps text-xs">Amount (sats)</label>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="number"
+                        value={lnurlAmount}
+                        onChange={(e) => setLnurlAmount(e.target.value)}
+                        className="flex-1 bg-surface-container text-on-surface font-bold text-xl p-3 rounded-lg border-none focus:ring-1 focus:ring-amber-400 outline-none"
+                        placeholder="0"
+                      />
+                      <span className="text-amber-400 font-bold">sats</span>
+                    </div>
+                    <div className="text-[10px] text-on-surface-variant/70 flex justify-between mt-1">
+                      <span>Min: {Math.ceil(lnurlParams.minSendable / 1000)} sats</span>
+                      <span>Max: {Math.floor(lnurlParams.maxSendable / 1000)} sats</span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setInvoice('');
+                      setLnurlParams(null);
+                    }}
+                    className="text-error hover:text-error/80 text-xs font-bold text-right mt-2"
+                  >
+                    Cancel LNURL
+                  </button>
+                </div>
+              )}
+              
+              {invoiceAmount !== null && !lnurlParams && (
                 <div className={`text-[12px] font-label-caps px-1 ${isInvalidAmount ? 'text-error' : 'text-on-surface-variant'}`}>
                   Invoice Amount: ₿{invoiceAmount.toLocaleString()}
                   {isInsufficient && ' (Insufficient balance)'}
                   {isZeroAmount && ' (Amount must be greater than 0)'}
                 </div>
               )}
+              {isOutOflnurlBounds && lnurlParams && (
+                <div className="text-[12px] font-label-caps px-1 text-error">
+                  Amount must be between {Math.ceil(lnurlParams.minSendable / 1000)} and {Math.floor(lnurlParams.maxSendable / 1000)} sats
+                </div>
+              )}
+              {isInsufficient && lnurlParams && (
+                <div className="text-[12px] font-label-caps px-1 text-error">
+                  Insufficient balance
+                </div>
+              )}
             </div>
 
             <button 
               onClick={handlePay}
-              disabled={paying || !invoice || isInvalidAmount}
+              disabled={paying || fetchingInvoice || (!invoice && !lnurlParams) || isInvalidAmount}
               className={`mt-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${
-                paying || !invoice || isInvalidAmount ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                paying || fetchingInvoice || (!invoice && !lnurlParams) || isInvalidAmount ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
               }`}
             >
-              {paying ? <Loader2 className="animate-spin w-6 h-6" /> : <><Zap className="w-5 h-5 mr-2" /> Pay Invoice</>}
+              {paying || fetchingInvoice ? <Loader2 className="animate-spin w-6 h-6" /> : <><Zap className="w-5 h-5 mr-2" /> Pay {lnurlParams ? 'LNURL' : 'Invoice'}</>}
             </button>
           </div>
         </div>
       </div>
-      {paying && (
-        <FullScreenLoader title="Sending Bitcoin..." message="Paying the lightning invoice." />
+      {(paying || fetchingInvoice) && (
+        <FullScreenLoader title={fetchingInvoice ? "Resolving LNURL..." : "Sending Bitcoin..."} message={fetchingInvoice ? "Getting lightning invoice from provider." : "Paying the lightning invoice."} />
       )}
     </main>
   );

@@ -12,11 +12,14 @@ import Mints from './pages/Mints';
 import { Pay } from './pages/Pay';
 import { TopNav } from './components/navigation/TopNav';
 import { TransactionProcessor } from './hooks/useTransactionProcessor';
+import { useNostr } from './hooks/useNostr';
 import './App.css';
 
 export default function App() {
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const isInitialized = useWalletStore((s) => s.isInitialized);
+
+  useNostr();
 
   useEffect(() => {
     invoke('is_wallet_unlocked').then(async (unlocked) => {

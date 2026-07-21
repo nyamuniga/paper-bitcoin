@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Loader2, Copy, Check, Coins, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 import { useEcash } from '../../hooks/useEcash';
@@ -121,8 +122,8 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
     else resetReceive();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
       <div className="bg-surface-container-high rounded-2xl w-full max-w-lg border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative max-h-[90vh]">
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
 
@@ -380,6 +381,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
       {receiving && (
         <FullScreenLoader title="Receiving eCash..." message="Claiming tokens to your wallet." />
       )}
-    </div>
+    </div>,
+    document.body
   );
 };

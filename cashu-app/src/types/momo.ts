@@ -53,7 +53,7 @@ export enum FulfillmentStep {
   COMPLETED = "COMPLETED",
 }
 
-export type TransactionDirection = "RWF_TO_SATS" | "SATS_TO_RWF" | "ONCHAIN_SEND" | "ONCHAIN_RECEIVE";
+export type TransactionDirection = "RWF_TO_SATS" | "SATS_TO_RWF" | "ONCHAIN_SEND" | "ONCHAIN_RECEIVE" | "LNURL_SEND" | "NOSTR_RECEIVE";
 export type TransactionStatus = "PENDING" | "COMPLETED" | "FAILED" | "EXPIRED";
 
 export interface TransactionDetails {

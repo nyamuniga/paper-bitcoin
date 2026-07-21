@@ -23,13 +23,25 @@ export const RecentTransactions: React.FC = () => {
   };
 
   const getTxLabel = (tx: Transaction) => {
-    if ('Mint' in tx.tx_type) return 'Received';
-    if ('ReceiveEcash' in tx.tx_type) return 'Received Ecash';
-    if ('ReceiveLightning' in tx.tx_type) return 'Received Lightning';
-    if ('Issue' in tx.tx_type) return 'Issued Note';
-    if ('Redeem' in tx.tx_type) return 'Redeemed';
-    if ('Send' in tx.tx_type) return 'Sent Ecash';
-    if ('Melt' in tx.tx_type) return 'Sent';
+    const isMint = 'Mint' in tx.tx_type;
+    const isIssue = 'Issue' in tx.tx_type;
+    const isMelt = 'Melt' in tx.tx_type;
+    const isRedeem = 'Redeem' in tx.tx_type;
+    const isSend = 'Send' in tx.tx_type;
+    const isReceiveEcash = 'ReceiveEcash' in tx.tx_type;
+    const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
+
+    if (tx.momo_direction === 'ONCHAIN_SEND') return 'Sent On-chain';
+    if (tx.momo_direction === 'ONCHAIN_RECEIVE') return 'Received On-chain';
+    if (tx.momo_direction === 'RWF_TO_SATS') return 'Received RWF';
+    if (tx.momo_direction === 'SATS_TO_RWF') return 'Sent RWF';
+    if (isMint) return 'Received Lightning';
+    if (isReceiveEcash) return 'Received eCash';
+    if (isReceiveLightning) return 'Received Lightning';
+    if (isIssue) return 'Issued Note';
+    if (isRedeem) return 'Redeemed Note';
+    if (isSend) return 'Sent eCash';
+    if (isMelt) return 'Sent Lightning';
     return 'Transaction';
   };
 

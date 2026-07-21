@@ -48,6 +48,55 @@ pub async fn wallet_info(state: State<'_, AppState>) -> CommandResult<WalletInfo
 }
 
 #[tauri::command]
+pub async fn get_seed_hex(state: State<'_, AppState>) -> CommandResult<String> {
+    let path = state.wallet_path.clone();
+
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+    };
+
+    let w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    Ok(w_state.seed_hex.clone())
+}
+
+#[tauri::command]
+pub async fn get_custom_nostr_key(state: State<'_, AppState>) -> CommandResult<Option<String>> {
+    let path = state.wallet_path.clone();
+
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+    };
+
+    let w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    Ok(w_state.custom_nostr_key.clone())
+}
+
+#[tauri::command]
+pub async fn set_custom_nostr_key(key: Option<String>, state: State<'_, AppState>) -> CommandResult<bool> {
+    let _lock = state.wallet_lock.lock().await;
+    let path = state.wallet_path.clone();
+
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+    };
+
+    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    w_state.custom_nostr_key = key;
+    w_state.save_encrypted(&path, &passphrase)?;
+
+    Ok(true)
+}
+
+#[tauri::command]
 pub async fn get_balance(state: State<'_, AppState>) -> CommandResult<u64> {
     let path = state.wallet_path.clone();
     if !path.exists() {
