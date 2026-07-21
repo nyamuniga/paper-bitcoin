@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
+import { useNostrStore } from '../store/nostrStore';
 
 export const useAuth = () => {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
@@ -95,6 +96,9 @@ export const useAuth = () => {
     handleClearError();
     try {
       await invoke('reset_wallet');
+      useNostrStore.getState().reset();
+      localStorage.removeItem('npubx_claimed_quotes');
+      localStorage.removeItem('cashu-nostr-storage');
       await refreshWallet();
       return true;
     } catch (e: any) {
