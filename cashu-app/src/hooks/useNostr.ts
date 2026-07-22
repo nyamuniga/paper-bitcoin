@@ -17,6 +17,126 @@ import { toast } from 'react-hot-toast';
 
 const CLAIM_INTERVAL_MS = 60_000; // Poll every 60 seconds
 
+// ─── Module-level singletons ──────────────────────────────────────────────────
+// These ensure the claim loop, Nostr subscription, and visibility listener
+// are only created once, even though useNostr() is called from multiple components.
+
+let globalIsClaiming = false;
+let globalClaimLoopInitialized = false;
+let globalNostrInitStarted = false;
+let globalPrivateKey: string | null = null;
+let globalClaimInterval: ReturnType<typeof setInterval> | null = null;
+let globalPool: any = null;
+let globalSub: any = null;
+let globalVisibilityHandler: (() => void) | null = null;
+let globalMountCount = 0;
+
+// Track the last successfully claimed token to skip duplicates
+let lastClaimedToken: string | null = null;
+
+function setupClaimLoop(npub: string, relays: string[]) {
+  if (globalClaimLoopInitialized) return;
+  globalClaimLoopInitialized = true;
+
+  const refreshWallet = useWalletStore.getState().refreshWallet;
+  const setLastClaimTimestamp = useNostrStore.getState().setLastClaimTimestamp;
+
+  const claimOnce = async () => {
+    if (!globalPrivateKey || globalIsClaiming) return;
+    globalIsClaiming = true;
+    try {
+      const claimResult = await fetchV1ClaimToken(globalPrivateKey);
+      if (claimResult && claimResult.token) {
+        // Skip if we just processed this exact token
+        if (claimResult.token === lastClaimedToken) {
+          console.log('[useNostr] Skipping duplicate token (already claimed)');
+          return;
+        }
+
+        console.log('[useNostr] Claim succeeded, receiving token...', claimResult.count);
+        const toastId = toast.loading(`Claiming ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''}...`);
+        try {
+          await invoke('receive_ecash', { tokenString: claimResult.token });
+          lastClaimedToken = claimResult.token;
+          await refreshWallet();
+          toast.success(`⚡ Received ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''} via Lightning Address!`, { id: toastId });
+          setLastClaimTimestamp(Date.now());
+        } catch (err) {
+          toast.error("Failed to claim payment. Check history to retry.", { id: toastId });
+          throw err;
+        }
+      }
+    } catch (e) {
+      // ignore v1 failure
+    } finally {
+      globalIsClaiming = false;
+    }
+  };
+
+  // Claim immediately
+  claimOnce();
+
+  // Poll periodically as a fallback
+  globalClaimInterval = setInterval(claimOnce, CLAIM_INTERVAL_MS);
+
+  // Fetch immediately when app is foregrounded / unlocked
+  globalVisibilityHandler = () => {
+    if (document.visibilityState === 'visible') {
+      console.log('[useNostr] App foregrounded, checking for payments...');
+      claimOnce();
+    }
+  };
+  document.addEventListener('visibilitychange', globalVisibilityHandler);
+
+  // Set up Nostr WebSocket subscription for instant push
+  try {
+    const { data: pubkey } = nip19.decode(npub);
+    globalPool = new SimplePool();
+    globalSub = globalPool.subscribeMany(
+      relays,
+      [
+        {
+          kinds: [4, 1059],
+          '#p': [pubkey as string],
+          since: Math.floor(Date.now() / 1000)
+        }
+      ],
+      {
+        onevent(event: any) {
+          console.log('Received Nostr event, checking for pending payments...', event);
+          // Wait a brief moment to allow the npubx.cash server to finish saving the tokens
+          setTimeout(() => claimOnce(), 2000);
+        }
+      }
+    );
+  } catch (e) {
+    console.warn('Failed to subscribe to Nostr relays:', e);
+  }
+}
+
+function teardownClaimLoop(relays: string[]) {
+  globalClaimLoopInitialized = false;
+
+  if (globalClaimInterval) {
+    clearInterval(globalClaimInterval);
+    globalClaimInterval = null;
+  }
+  if (globalSub) {
+    globalSub.close();
+    globalSub = null;
+  }
+  if (globalPool) {
+    globalPool.close(relays);
+    globalPool = null;
+  }
+  if (globalVisibilityHandler) {
+    document.removeEventListener('visibilitychange', globalVisibilityHandler);
+    globalVisibilityHandler = null;
+  }
+}
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+
 export const useNostr = () => {
   const isInitialized = useWalletStore((s) => s.isInitialized);
   const mintBalances = useWalletStore((s) => s.mintBalances);
@@ -42,11 +162,17 @@ export const useNostr = () => {
 
   // Keep a ref to the private key in memory (never persisted)
   const privateKeyRef = useRef<string | null>(null);
-  const claimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Derive Nostr keys from the wallet seed on startup
+  // Derive Nostr keys from the wallet seed on startup (singleton — only runs once)
   useEffect(() => {
     if (!isInitialized) return;
+    if (globalNostrInitStarted) {
+      // Another hook instance already started init — just sync our local state
+      privateKeyRef.current = globalPrivateKey;
+      if (globalPrivateKey) setIsNostrReady(true);
+      return;
+    }
+    globalNostrInitStarted = true;
 
     const initNostr = async () => {
       try {
@@ -61,6 +187,7 @@ export const useNostr = () => {
         }
 
         privateKeyRef.current = keypair.privateKey;
+        globalPrivateKey = keypair.privateKey;
         setNpub(keypair.npub);
 
         const fallbackAddress = npubToLightningAddress(keypair.npub);
@@ -111,80 +238,24 @@ export const useNostr = () => {
     initNostr();
   }, [isInitialized]);
 
-  // Background claim loop and Nostr subscription
+  // Background claim loop and Nostr subscription (singleton)
   useEffect(() => {
     if (!isInitialized || !privateKeyRef.current || !npub || !isNostrReady) return;
 
-    let isClaiming = false;
-    const claimOnce = async () => {
-      if (!privateKeyRef.current || claiming || isClaiming) return;
-      isClaiming = true;
-      try {
-        const claimResult = await fetchV1ClaimToken(privateKeyRef.current);
-        if (claimResult && claimResult.token) {
-          console.log('[DEBUG claimOnce] v1 claim succeeded! Receiving token...', claimResult.count);
-          await invoke('receive_ecash', { tokenString: claimResult.token });
-          await refreshWallet();
-          toast.success(`⚡ Received ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''} via Lightning Address!`);
-          setLastClaimTimestamp(Date.now());
-        }
-      } catch (e) {
-        // ignore v1 failure
-      } finally {
-        isClaiming = false;
-      }
-    };
-
-    // Claim immediately on mount
-    claimOnce();
-
-    // Poll periodically as a fallback
-    claimIntervalRef.current = setInterval(claimOnce, CLAIM_INTERVAL_MS);
-
-    // Fetch immediately when app is foregrounded / unlocked
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[DEBUG useNostr] App foregrounded, checking for payments...');
-        claimOnce();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Set up Nostr WebSocket subscription for instant push
-    let sub: any = null;
-    let pool: any = null;
-    
-    try {
-      const { data: pubkey } = nip19.decode(npub);
-      pool = new SimplePool();
-      sub = pool.subscribeMany(
-        relays,
-        [
-          {
-            kinds: [4, 1059],
-            '#p': [pubkey as string],
-            since: Math.floor(Date.now() / 1000)
-          }
-        ],
-        {
-          onevent(event: any) {
-            console.log('Received Nostr event, checking for pending payments...', event);
-            // Wait a brief moment to allow the npubx.cash server to finish saving the tokens
-            setTimeout(() => claimOnce(), 2000);
-          }
-        }
-      );
-    } catch (e) {
-      console.warn('Failed to subscribe to Nostr relays:', e);
+    globalMountCount++;
+    if (!globalClaimLoopInitialized) {
+      setupClaimLoop(npub, relays);
     }
 
     return () => {
-      if (claimIntervalRef.current) {
-        clearInterval(claimIntervalRef.current);
+      globalMountCount--;
+      // Only tear down when the last hook instance unmounts
+      if (globalMountCount <= 0) {
+        globalMountCount = 0;
+        teardownClaimLoop(relays);
+        globalNostrInitStarted = false;
+        globalPrivateKey = null;
       }
-      if (sub) sub.close();
-      if (pool) pool.close(relays);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [isInitialized, npub, relays, isNostrReady]);
 
@@ -195,8 +266,16 @@ export const useNostr = () => {
     try {
       const claimResult = await fetchV1ClaimToken(privateKeyRef.current!);
       if (claimResult && claimResult.token) {
-        console.log('[DEBUG claimNow] v1 claim succeeded! Receiving token...', claimResult.count);
+        // Skip if this exact token was already claimed
+        if (claimResult.token === lastClaimedToken) {
+          console.log('[useNostr claimNow] Skipping duplicate token');
+          await refreshWallet();
+          return;
+        }
+
+        console.log('[useNostr claimNow] Claim succeeded, receiving token...', claimResult.count);
         await invoke('receive_ecash', { tokenString: claimResult.token });
+        lastClaimedToken = claimResult.token;
         await refreshWallet();
         toast.success(`⚡ Claimed ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''}!`);
         setLastClaimTimestamp(Date.now());

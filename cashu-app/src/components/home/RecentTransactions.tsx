@@ -7,7 +7,7 @@ import { TransactionDetailsModal } from '../history/TransactionDetailsModal';
 
 export const RecentTransactions: React.FC = () => {
   const navigate = useNavigate();
-  const { transactions, loading, handleCheckIssue, handleRecoverPendingTransaction, handleCheckTokenSpendStatus } = useHistory();
+  const { transactions, loading, handleCheckIssue, handleRecoverPendingTransaction, handleCheckTokenSpendStatus, handleRetryReceiveEcash } = useHistory();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
   const recentTxs = transactions.slice(0, 5);
@@ -159,6 +159,11 @@ export const RecentTransactions: React.FC = () => {
           onClose={() => setSelectedTx(null)}
           onRecover={() => handleRecoverPendingTransaction(selectedTx.id)}
           onCheckClaimed={() => handleCheckTokenSpendStatus(selectedTx.id)}
+          onRetryReceiveEcash={
+            'ReceiveEcash' in selectedTx.tx_type
+              ? () => handleRetryReceiveEcash(selectedTx.id, selectedTx.tx_type.ReceiveEcash.token_string)
+              : undefined
+          }
         />
       )}
     </section>

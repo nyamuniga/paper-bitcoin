@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { WalletBalanceCard } from '../components/home/WalletBalanceCard';
 import { LightningAddressCard } from '../components/home/LightningAddressCard';
@@ -13,61 +13,151 @@ export const Home = () => {
   const { claimNow } = useNostr();
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
-  const [startY, setStartY] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const startYRef = useRef(0);
   const [pulling, setPulling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
 
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (window.scrollY === 0) {
-      setStartY(e.clientY);
-    }
-  };
+  // Keep mutable refs for state values needed inside native event listeners
+  const pullingRef = useRef(false);
+  const refreshingRef = useRef(false);
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (window.scrollY === 0 && startY > 0) {
-      const currentY = e.clientY;
-      const dist = currentY - startY;
-      
-      if (dist > 0) {
-        setPullDistance(Math.min(dist * 0.5, 80)); // Dampen the pull
-        if (dist > 60) {
-          setPulling(true);
-        } else {
-          setPulling(false);
-        }
-      }
-    }
-  };
+  useEffect(() => { pullingRef.current = pulling; }, [pulling]);
+  useEffect(() => { refreshingRef.current = refreshing; }, [refreshing]);
 
-  const handlePointerUp = useCallback(async () => {
-    if (pulling && !refreshing) {
+  const doRefresh = useCallback(async () => {
+    if (pullingRef.current && !refreshingRef.current) {
       setRefreshing(true);
       setPullDistance(50); // Hold the spinner at 50px
-      
+
       try {
         await Promise.all([claimNow(), refreshWallet()]);
       } finally {
         setRefreshing(false);
         setPullDistance(0);
         setPulling(false);
-        setStartY(0);
+        startYRef.current = 0;
       }
     } else {
       setPullDistance(0);
       setPulling(false);
-      setStartY(0);
+      startYRef.current = 0;
     }
-  }, [pulling, refreshing, claimNow, refreshWallet]);
+  }, [claimNow, refreshWallet]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    // --- Touch events (Android / mobile) ---
+    const onTouchStart = (e: TouchEvent) => {
+      if (window.scrollY <= 5) {
+        startYRef.current = e.touches[0].clientY;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (window.scrollY <= 5 && startYRef.current > 0) {
+        const clientY = e.touches[0].clientY;
+        const dist = clientY - startYRef.current;
+
+        if (dist > 0) {
+          // Prevent the browser/WebView from handling this as a scroll/overscroll
+          e.preventDefault();
+
+          const dampened = Math.min(dist * 0.5, 80);
+          setPullDistance(dampened);
+          if (dist > 60) {
+            setPulling(true);
+          } else {
+            setPulling(false);
+          }
+        } else if (dist < -10) {
+          // If they swipe up, they want to scroll normally. Abort pull-to-refresh.
+          startYRef.current = 0;
+          setPullDistance(0);
+          setPulling(false);
+        }
+      }
+    };
+
+    const onTouchEnd = () => {
+      doRefresh();
+    };
+
+    // --- Pointer events (macOS / desktop / web with mouse) ---
+    let pointerActive = false;
+
+    const onPointerDown = (e: PointerEvent) => {
+      // Only handle mouse/pen – touch pointers are handled by touch events above
+      if (e.pointerType === 'touch') return;
+      if (window.scrollY <= 5) {
+        startYRef.current = e.clientY;
+        pointerActive = true;
+      }
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return;
+      if (!pointerActive || startYRef.current <= 0) return;
+
+      const dist = e.clientY - startYRef.current;
+
+      if (dist > 0) {
+        const dampened = Math.min(dist * 0.5, 80);
+        setPullDistance(dampened);
+        if (dist > 60) {
+          setPulling(true);
+        } else {
+          setPulling(false);
+        }
+      } else if (dist < -10) {
+        startYRef.current = 0;
+        setPullDistance(0);
+        setPulling(false);
+        pointerActive = false;
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return;
+      if (pointerActive) {
+        pointerActive = false;
+        doRefresh();
+      }
+    };
+
+    // Touch: use { passive: false } on touchmove so we can call preventDefault()
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    // Pointer: for desktop mouse/trackpad (macOS Tauri, web browser)
+    el.addEventListener('pointerdown', onPointerDown);
+    el.addEventListener('pointermove', onPointerMove);
+    el.addEventListener('pointerup', onPointerUp);
+    el.addEventListener('pointerleave', onPointerUp);
+    el.addEventListener('pointercancel', onPointerUp);
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+      el.removeEventListener('pointerdown', onPointerDown);
+      el.removeEventListener('pointermove', onPointerMove);
+      el.removeEventListener('pointerup', onPointerUp);
+      el.removeEventListener('pointerleave', onPointerUp);
+      el.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [doRefresh]);
 
   return (
     <div 
-      className={`w-full relative min-h-screen ${startY > 0 ? 'select-none' : ''}`}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      ref={containerRef}
+      className={`w-full relative min-h-screen ${startYRef.current > 0 ? 'select-none' : ''}`}
     >
       {/* Pull to refresh indicator */}
       <div 
@@ -99,3 +189,4 @@ export const Home = () => {
 };
 
 export default Home;
+

@@ -22,7 +22,8 @@ export default function History() {
     handleRecoverPendingTransaction,
     handleCheckIssue,
     handleDownloadNote,
-    handleCheckTokenSpendStatus
+    handleCheckTokenSpendStatus,
+    handleRetryReceiveEcash
   } = useHistory();
 
   const momoHistory = useTransactionStore((state) => state.history);
@@ -291,6 +292,11 @@ export default function History() {
           onClose={() => setSelectedTx(null)}
           onRecover={() => handleRecoverPendingTransaction(selectedTx.id)}
           onCheckClaimed={() => handleCheckTokenSpendStatus(selectedTx.id)}
+          onRetryReceiveEcash={
+            'ReceiveEcash' in selectedTx.tx_type
+              ? () => handleRetryReceiveEcash(selectedTx.id, selectedTx.tx_type.ReceiveEcash.token_string)
+              : undefined
+          }
         />
       )}
     </main>
