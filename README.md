@@ -6,7 +6,7 @@ A Rust implementation of the [Cashu](https://github.com/cashubtc/nuts) blind-sig
 
 Paper notes with tamper-evident seals represent redeemable Bitcoin value. Tokens are issued by Cashu-compatible mints using DHKE blind signatures, encoded into printable SVG notes, and can be verified offline before redemption via Lightning. 
 
-The application goes beyond simple eCash management by providing **seamless fiat integration (Mobile Money via Blink)** and **native On-Chain Bitcoin swaps (via Boltz)**, creating a unified bridge between traditional finance, the Lightning Network, and the Bitcoin base layer.
+The application goes beyond simple eCash management by providing **Lightning Addresses (via npub.cash)**, **seamless fiat integration (Mobile Money via Blink)**, and **native On-Chain Bitcoin swaps (via Boltz)**, creating a unified bridge between traditional finance, the Lightning Network, and the Bitcoin base layer.
 
 ```
 ┌──────────┐   blind sign   ┌──────────┐   SVG note   ┌──────────┐
