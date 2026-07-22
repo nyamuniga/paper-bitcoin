@@ -106,6 +106,46 @@ export const npubToLightningAddress = (npub: string): string => {
 };
 
 /**
+ * Fetch registered user account info (including username if claimed) from npub.cash.
+ */
+export const fetchNpubCashUser = async (
+  privateKey: string
+): Promise<{ username?: string | null } | null> => {
+  const url = `${NPUB_CASH_API_URL}/api/v1/info`;
+  try {
+    let authHeader = await generateNip98AuthHeader(url, 'GET', privateKey);
+    let response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': authHeader.replace(/[\r\n]/g, '').trim(),
+      },
+    });
+
+    if (!response.ok) return null;
+
+    const text = await response.text();
+    console.log('[fetchNpubCashUser] Raw response text:', text);
+
+    try {
+      const data = JSON.parse(text);
+      const handle = data.username || data.name;
+      if (handle) {
+        return { username: handle };
+      }
+      return null;
+    } catch (parseErr) {
+      console.error('[fetchNpubCashUser] Failed to parse JSON:', parseErr);
+      return null;
+    }
+    return null;
+  } catch (e) {
+    console.debug('[fetchNpubCashUser] Failed to fetch user info:', e);
+    return null;
+  }
+};
+
+
+/**
  * Register or update the user's preferred mint on npubx.cash.
  * Uses NIP-98 auth to prove ownership of the npub.
  */
@@ -113,12 +153,12 @@ export const registerWithNpubCash = async (
   mintUrl: string,
   privateKey: string
 ): Promise<void> => {
-  const url = `${NPUB_CASH_API_URL}/api/v2/user/mint`;
+  const url = `${NPUB_CASH_API_URL}/api/v1/info/mint`;
   const bodyJson = JSON.stringify({ mint_url: mintUrl });
-  const authHeader = await generateNip98AuthHeader(url, 'PATCH', privateKey, bodyJson);
+  const authHeader = await generateNip98AuthHeader(url, 'PUT', privateKey, bodyJson);
 
   const response = await fetch(url, {
-    method: 'PATCH',
+    method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': authHeader,
@@ -132,98 +172,7 @@ export const registerWithNpubCash = async (
   }
 };
 
-export const fetchNpubxJwt = async (privateKey: string): Promise<string> => {
-  const url = `${NPUB_CASH_API_URL}/api/v2/auth/nip98`;
-  const authHeader = await generateNip98AuthHeader(url, 'GET', privateKey);
 
-  const sanitizedAuth = authHeader.replace(/[\r\n]/g, '').trim();
-  console.log(`[DEBUG fetchNpubxJwt] Sending request to ${url} with auth header length:`, sanitizedAuth.length);
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': sanitizedAuth,
-      },
-    });
-    console.log('[DEBUG fetchNpubxJwt] Response status:', response.status);
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error('[DEBUG fetchNpubxJwt] Response error text:', text);
-      throw new Error(`Auth failed: ${response.status} - ${text}`);
-    }
-
-    const data = await response.json();
-    console.log('[DEBUG fetchNpubxJwt] Parsed JSON:', data);
-    
-    if (data.error || !data.data || !data.data.token) {
-      throw new Error('Failed to get JWT token');
-    }
-
-    return data.data.token;
-  } catch (e: any) {
-    console.error('[DEBUG fetchNpubxJwt] Caught error during fetch:', e);
-    throw e;
-  }
-};
-
-export interface NpubCashQuote {
-  quoteId: string;
-  amount: number;
-  unit: string;
-  createdAt?: number;
-  paidAt?: number;
-  expiresAt?: number;
-  mintUrl?: string;
-  request?: string;
-  state?: string;
-  locked?: boolean;
-}
-
-/**
- * Fetch pending mint quotes from npubx.cash using the v2 protocol.
- */
-export const fetchPendingQuotes = async (
-  jwtToken: string
-): Promise<NpubCashQuote[]> => {
-  const url = `${NPUB_CASH_API_URL}/api/v2/wallet/quotes`;
-
-  const sanitizedJwt = `Bearer ${jwtToken}`.replace(/[\r\n]/g, '').trim();
-  console.log(`[DEBUG fetchPendingQuotes] Fetching quotes with JWT header length:`, sanitizedJwt.length);
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': sanitizedJwt,
-      },
-    });
-    console.log('[DEBUG fetchPendingQuotes] Response status:', response.status);
-
-    if (!response.ok) {
-      if (response.status === 404) return [];
-      const text = await response.text();
-      console.error('[DEBUG fetchPendingQuotes] Response error text:', text);
-      throw new Error(`Fetch quotes failed: ${response.status} - ${text}`);
-    }
-
-    const data = await response.json();
-    console.log('[DEBUG fetchPendingQuotes] Parsed JSON data:', data);
-
-    if (data.error) {
-      return [];
-    }
-
-    if (data.data && Array.isArray(data.data.quotes)) {
-      return data.data.quotes;
-    }
-    return [];
-  } catch (e: any) {
-    console.error('[DEBUG fetchPendingQuotes] Caught error during fetch:', e);
-    throw e;
-  }
-};
 
 /**
  * Fetch spendable token from npub.cash (v1 protocol)
