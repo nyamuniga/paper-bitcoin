@@ -175,19 +175,19 @@ export const NostrSection: React.FC = () => {
       <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none transition-transform group-hover:scale-110 duration-700"></div>
 
       <div
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 md:p-6 relative z-10 cursor-pointer hover:bg-surface-container-highest transition-colors"
+        className="flex items-center justify-between p-4 md:p-6 relative z-10 cursor-pointer hover:bg-surface-container-highest transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-full bg-primary/10 flex shrink-0 items-center justify-center text-primary border border-primary/20">
             <Network size={20} />
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="text-body-md font-body-md font-bold text-on-surface mb-1">Nostr Identity</h2>
-            <p className="text-body-md text-on-surface-variant">Manage your Lightning Address keys & relays</p>
+            <p className="text-sm text-on-surface-variant truncate">Manage your Lightning Address keys & relays</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           {hasCustomKey && isExpanded && (
             <button
               onClick={(e) => {
