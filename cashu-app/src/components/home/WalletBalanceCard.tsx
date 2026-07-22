@@ -7,6 +7,7 @@ import { BitcoinModal } from './BitcoinModal';
 import { MomoTransferModal } from './MomoTransferModal';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
+import { fetchCurrentRate } from '../../services/flowServices';
 
 
 interface WalletBalanceCardProps {
@@ -26,8 +27,29 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
 
   const mintUrls = Object.keys(mintBalances || {});
   const [selectedMint, setSelectedMint] = useState<string | null>(() => localStorage.getItem('preferred_mint_url'));
+  const [currentRate, setCurrentRate] = useState<number | null>(null);
 
   const activeMint = (selectedMint && mintUrls.includes(selectedMint)) ? selectedMint : (mintUrls.length > 0 ? mintUrls[0] : null);
+
+  React.useEffect(() => {
+    const fetchRate = async () => {
+      try {
+        const rate = await fetchCurrentRate();
+        setCurrentRate(rate);
+      } catch (e) {
+        console.error("Failed to fetch exchange rate", e);
+      }
+    };
+
+    // Fetch immediately on mount
+    fetchRate();
+
+    // Set up polling every 5 seconds
+    const interval = setInterval(fetchRate, 5000);
+
+    // Clean up interval on unmount
+    return () => clearInterval(interval);
+  }, []);
 
   React.useEffect(() => {
     if (location.state) {
@@ -91,8 +113,15 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
           )}
         </div>
 
-        <div className="relative z-10 flex items-baseline gap-2">
-          <span className="text-[48px] md:text-[64px] leading-none font-display-lg text-on-surface tracking-tight">₿{balance.toLocaleString()}</span>
+        <div className="relative z-10 flex flex-col items-center gap-1 mt-2">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[48px] md:text-[64px] leading-none font-display-lg text-on-surface tracking-tight">₿{balance.toLocaleString()}</span>
+          </div>
+          {currentRate && (
+            <span className="text-body-xs font-body-xs text-on-surface-variant font-normal">
+              ≈ {(balance / currentRate).toLocaleString(undefined, { maximumFractionDigits: 0 })} RWF
+            </span>
+          )}
         </div>
       </div>
 

@@ -111,7 +111,7 @@ export const npubToLightningAddress = (npub: string): string => {
 export const fetchNpubCashUser = async (
   privateKey: string
 ): Promise<{ username?: string | null } | null> => {
-  const url = `${NPUB_CASH_API_URL}/api/v1/info`;
+  const url = `${NPUB_CASH_BACKEND_URL}/api/v1/info`;
   try {
     let authHeader = await generateNip98AuthHeader(url, 'GET', privateKey);
     let response = await fetch(url, {
@@ -153,7 +153,7 @@ export const registerWithNpubCash = async (
   mintUrl: string,
   privateKey: string
 ): Promise<void> => {
-  const url = `${NPUB_CASH_API_URL}/api/v1/info/mint`;
+  const url = `${NPUB_CASH_BACKEND_URL}/api/v1/info/mint`;
   const bodyJson = JSON.stringify({ mint_url: mintUrl });
   const authHeader = await generateNip98AuthHeader(url, 'PUT', privateKey, bodyJson);
 
@@ -175,13 +175,19 @@ export const registerWithNpubCash = async (
 
 
 /**
- * Fetch spendable token from npub.cash (v1 protocol)
+ * Fetch spendable token from npub.cash (v1 protocol).
+ * Sends directly to the backend (Tauri fetch bypasses CORS) so the
+ * NIP-98 audience URL always matches what the server sees.
  */
 export const fetchV1ClaimToken = async (
   privateKey: string
 ): Promise<{ token: string; count: number; totalPending: number } | null> => {
-  const url = `${NPUB_CASH_API_URL}/api/v1/claim`;
+  // Send directly to backend – Tauri's fetch has no CORS restriction,
+  // so we avoid the Cloudflare proxy host-header mismatch entirely.
+  const url = `${NPUB_CASH_BACKEND_URL}/api/v1/claim`;
   const authHeader = await generateNip98AuthHeader(url, 'GET', privateKey);
+
+  console.log('[DEBUG fetchV1ClaimToken] Requesting:', url);
 
   try {
     const response = await fetch(url, {
@@ -191,12 +197,19 @@ export const fetchV1ClaimToken = async (
       },
     });
 
+    console.log('[DEBUG fetchV1ClaimToken] Response status:', response.status);
+
     if (!response.ok) {
+      const text = await response.text();
+      console.error('[DEBUG fetchV1ClaimToken] Error response text:', text);
       return null;
     }
 
     const data = await response.json();
+    console.log('[DEBUG fetchV1ClaimToken] Data:', data);
+    
     if (data.error || !data.data || !data.data.token) {
+      console.log('[DEBUG fetchV1ClaimToken] Error in data:', data.message || data.error);
       return null;
     }
 
@@ -219,7 +232,7 @@ export const claimUsername = async (
   username: string,
   privateKey: string
 ): Promise<{ success: boolean; address?: string; error?: string }> => {
-  const url = `${NPUB_CASH_API_URL}/api/v1/info/username`;
+  const url = `${NPUB_CASH_BACKEND_URL}/api/v1/info/username`;
   const bodyJson = JSON.stringify({ username });
   const authHeader = await generateNip98AuthHeader(url, 'PUT', privateKey, bodyJson);
 

@@ -183,7 +183,7 @@ export const NostrSection: React.FC = () => {
             <Network size={20} />
           </div>
           <div>
-            <h2 className="text-title-lg font-title-lg text-on-surface">Nostr Identity</h2>
+            <h2 className="text-body-md font-body-md font-bold text-on-surface mb-1">Nostr Identity</h2>
             <p className="text-body-md text-on-surface-variant">Manage your Lightning Address keys & relays</p>
           </div>
         </div>

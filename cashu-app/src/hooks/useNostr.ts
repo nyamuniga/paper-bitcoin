@@ -188,7 +188,7 @@ export const useNostr = () => {
     };
   }, [isInitialized, npub, relays, isNostrReady]);
 
-  // Manual claim trigger
+  // Manual claim trigger (pull-to-refresh)
   const claimNow = useCallback(async () => {
     if (!privateKeyRef.current) return;
     setClaiming(true);
@@ -201,7 +201,9 @@ export const useNostr = () => {
         toast.success(`⚡ Claimed ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''}!`);
         setLastClaimTimestamp(Date.now());
       } else {
-        toast('No pending payments found', { icon: '📭' });
+        // No pending payments — the background loop likely already claimed them.
+        // Just silently refresh the wallet balance.
+        await refreshWallet();
       }
     } catch (e: any) {
       toast.error(`Claim failed: ${e.message || e}`);
