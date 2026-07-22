@@ -15,6 +15,7 @@ import { TransactionProcessor } from './hooks/useTransactionProcessor';
 import { useNostr } from './hooks/useNostr';
 import './App.css';
 
+
 export default function App() {
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const isInitialized = useWalletStore((s) => s.isInitialized);
