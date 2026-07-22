@@ -1,30 +1,21 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, Check, Zap, QrCode, X, ChevronDown, User, Loader2, Edit2 } from 'lucide-react';
+import { Copy, Check, Zap, QrCode, X, User, Loader2, Edit2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import QRCode from 'react-qr-code';
 import { useNostr } from '../../hooks/useNostr';
 import { NPUB_DOMAIN } from '../../constants.local';
-import { useWalletStore } from '../../store/wallet';
-import { MintIcon } from '../shared/MintIcon';
-import { MintName } from '../shared/MintName';
 
 export const LightningAddressCard: React.FC = () => {
   const {
     lightningAddress,
     customUsername,
-    preferredMintUrl,
     claimingUsername,
-    updatePreferredMint,
     claimUsername,
   } = useNostr();
 
-  const mintBalances = useWalletStore((s) => s.mintBalances);
-  const mintUrls = Object.keys(mintBalances || {});
-
   const [showQR, setShowQR] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [showMintDropdown, setShowMintDropdown] = useState(false);
   const [showUsernameInput, setShowUsernameInput] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
 
@@ -113,44 +104,6 @@ export const LightningAddressCard: React.FC = () => {
           {copied ? 'Copied!' : 'Copy Address'}
         </button>
 
-        {/* Preferred Mint Selector */}
-        <div className="relative mb-4">
-          <label className="text-on-surface-variant text-xs font-medium mb-1 block">Preferred Mint</label>
-          <button
-            onClick={() => setShowMintDropdown(!showMintDropdown)}
-            className="w-full bg-surface rounded-lg px-3 py-2 text-left text-sm text-on-surface flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2 min-w-0 pr-2">
-              {preferredMintUrl ? (
-                <>
-                  <MintIcon mintUrl={preferredMintUrl} className="w-5 h-5 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-[8px] font-bold text-primary" />
-                  <MintName mintUrl={preferredMintUrl} className="truncate" />
-                </>
-              ) : (
-                <span className="truncate text-on-surface-variant">Select a mint</span>
-              )}
-            </div>
-            <ChevronDown size={14} />
-          </button>
-          {showMintDropdown && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-outline-variant rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto">
-              {mintUrls.map((url) => (
-                <button
-                  key={url}
-                  onClick={() => {
-                    updatePreferredMint(url);
-                    setShowMintDropdown(false);
-                  }}
-                  className={`w-full flex items-center gap-2 text-left px-3 py-2 text-sm hover:bg-surface-variant/50 transition-colors truncate ${url === preferredMintUrl ? 'text-amber-400 font-bold' : 'text-on-surface'
-                    }`}
-                >
-                  <MintIcon mintUrl={url} className="w-5 h-5 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName={`text-[8px] font-bold ${url === preferredMintUrl ? 'text-amber-400' : 'text-primary'}`} />
-                  <MintName mintUrl={url} className="truncate" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* Username Section */}
         <div className="border-t border-outline-variant/30 pt-4">
@@ -179,8 +132,8 @@ export const LightningAddressCard: React.FC = () => {
             )
           ) : (
             <div className="flex flex-col gap-1">
-              <div className="flex gap-2">
-                <div className="flex-1 flex items-center bg-surface-variant/30 rounded-lg overflow-hidden">
+              <div className="flex gap-2 ">
+                <div className="flex-1 flex items-center bg-surface-container-low rounded-lg overflow-hidden">
                   <input
                     type="text"
                     value={usernameInput}
