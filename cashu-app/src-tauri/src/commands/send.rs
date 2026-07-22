@@ -47,6 +47,7 @@ pub async fn send_ecash(
             .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
     };
 
+    let _lock = state.wallet_lock.lock().await;
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
 
     // Get proofs for this mint
@@ -241,7 +242,19 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
             .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
     };
 
+    let _lock = state.wallet_lock.lock().await;
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+
+    // Idempotency check: if we already successfully received this exact token, return early
+    for tx in &w_state.transactions {
+        if tx.status == TransactionStatus::Success {
+            if let TransactionType::ReceiveEcash(ref data) = tx.tx_type {
+                if data.token_string == token_string {
+                    return Ok(tx.amount);
+                }
+            }
+        }
+    }
 
     let mut input_proofs: Vec<Proof> = Vec::new();
     let mut total_amount: u64 = 0;
@@ -457,6 +470,40 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
     let new_proofs = match swap_result {
         Ok(proofs) => proofs,
         Err(e) => {
+            let err_str = e.to_string().to_lowercase();
+            let is_spent = err_str.contains("already spent")
+                || err_str.contains("token already spent")
+                || err_str.contains("already signed")
+                || err_str.contains("already issued");
+
+            if is_spent {
+                // The input proofs were already swapped (likely by a previous attempt whose
+                // response was lost). Try to recover the output proofs via restore.
+                println!("[receive_ecash] Input proofs already spent — attempting restore for {}", mint_url);
+                let restore_result = ecash_wallet::restore::restore_from_mints(
+                    &mut w_state, &path, &passphrase, vec![mint_url.clone()], None
+                ).await;
+
+                if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                    match restore_result {
+                        Ok(_) => {
+                            tx.status = TransactionStatus::Success;
+                            w_state.save_encrypted(&path, &passphrase).ok();
+                            return Ok(total_amount);
+                        }
+                        Err(restore_err) => {
+                            println!("[receive_ecash] Restore also failed: {}", restore_err);
+                            tx.status = TransactionStatus::Pending;
+                        }
+                    }
+                }
+                w_state.save_encrypted(&path, &passphrase).ok();
+                return Err(crate::error::CommandError(format!(
+                    "Failed to receive ecash: {}",
+                    e
+                )));
+            }
+
             if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
                 tx.status = TransactionStatus::Pending;
             }

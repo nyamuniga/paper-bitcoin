@@ -126,6 +126,18 @@ export const useHistory = () => {
     }
   };
 
+  const handleRetryReceiveEcash = async (txId: string, tokenString: string) => {
+    try {
+      toast.loading('Retrying claim...', { id: txId });
+      await invoke('receive_ecash', { tokenString });
+      toast.success('Successfully claimed eCash!', { id: txId });
+      fetchHistory();
+      await refreshWallet();
+    } catch (e: any) {
+      toast.error(`Failed to claim: ${e}`, { id: txId });
+    }
+  };
+
   return {
     transactions,
     loading,
@@ -134,6 +146,7 @@ export const useHistory = () => {
     handleRecoverPendingTransaction,
     handleCheckIssue,
     handleDownloadNote,
-    handleCheckTokenSpendStatus
+    handleCheckTokenSpendStatus,
+    handleRetryReceiveEcash
   };
 };

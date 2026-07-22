@@ -10,9 +10,10 @@ interface TransactionDetailsModalProps {
   onClose: () => void;
   onRecover?: () => void;
   onCheckClaimed?: () => void;
+  onRetryReceiveEcash?: () => void;
 }
 
-export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ tx, onClose, onRecover, onCheckClaimed }) => {
+export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ tx, onClose, onRecover, onCheckClaimed, onRetryReceiveEcash }) => {
   const isMint = 'Mint' in tx.tx_type;
   const isIssue = 'Issue' in tx.tx_type;
   const isMelt = 'Melt' in tx.tx_type;
@@ -165,6 +166,16 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               >
                 <CheckCircle className="w-4 h-4 text-emerald-400" />
                 Check if Claimed
+              </button>
+            )}
+
+            {tx.status === 'Failed' && isReceiveEcash && onRetryReceiveEcash && (
+              <button
+                onClick={onRetryReceiveEcash}
+                className="mt-2 w-full py-2.5 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-label-lg transition-colors border border-primary/30 flex items-center justify-center gap-2"
+              >
+                <ArrowDown className="w-4 h-4" />
+                Retry Claim
               </button>
             )}
           </div>
