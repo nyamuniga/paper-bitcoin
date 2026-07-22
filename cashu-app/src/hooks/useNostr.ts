@@ -7,11 +7,10 @@ import {
   deriveNostrKeypair,
   npubToLightningAddress,
   registerWithNpubCash,
-  fetchPendingQuotes,
-  fetchNpubxJwt,
   fetchV1ClaimToken,
   claimUsername as claimUsernameApi,
   deriveKeypairFromPrivateKey,
+  fetchNpubCashUser,
 } from '../services/nostrService';
 import { NPUB_DOMAIN } from '../constants.local';
 import { toast } from 'react-hot-toast';
@@ -44,7 +43,6 @@ export const useNostr = () => {
   // Keep a ref to the private key in memory (never persisted)
   const privateKeyRef = useRef<string | null>(null);
   const claimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const jwtRef = useRef<{ token: string; expiresAt: number } | null>(null);
 
   // Derive Nostr keys from the wallet seed on startup
   useEffect(() => {
@@ -65,34 +63,30 @@ export const useNostr = () => {
         privateKeyRef.current = keypair.privateKey;
         setNpub(keypair.npub);
 
-        // Set the Lightning Address (use custom username if available)
-        const address = customUsername
-          ? (customUsername.includes('@') ? customUsername : `${customUsername}@${NPUB_DOMAIN}`)
-          : npubToLightningAddress(keypair.npub);
-        setLightningAddress(address);
+        const fallbackAddress = npubToLightningAddress(keypair.npub);
+
+        // Query npub.cash for any registered custom username for this key
+        try {
+          const userInfo = await fetchNpubCashUser(keypair.privateKey);
+          if (userInfo && userInfo.username) {
+            setCustomUsername(userInfo.username);
+            const customAddress = userInfo.username.includes('@')
+              ? userInfo.username
+              : `${userInfo.username}@${NPUB_DOMAIN}`;
+            setLightningAddress(customAddress);
+          } else {
+            setCustomUsername(null);
+            setLightningAddress(fallbackAddress);
+          }
+        } catch (e) {
+          setCustomUsername(null);
+          setLightningAddress(fallbackAddress);
+        }
 
         // Auto-select preferred mint if not set
         const mintUrls = Object.keys(mintBalances || {});
         if (!preferredMintUrl && mintUrls.length > 0) {
           setPreferredMint(mintUrls[0]);
-        }
-
-        if (customUsername) {
-          setLightningAddress(
-            customUsername.includes('@')
-              ? customUsername
-              : `${customUsername}@${NPUB_DOMAIN}`
-          );
-        }
-
-        // Initialize JWT and start polling
-        try {
-          if (!jwtRef.current) {
-            const token = await fetchNpubxJwt(privateKeyRef.current);
-            jwtRef.current = { token, expiresAt: Date.now() + 1000 * 60 * 60 * 24 };
-          }
-        } catch (e: any) {
-          // If auth fails, we just won't poll for quotes
         }
 
         // Register with npubx.cash if not already done
@@ -126,66 +120,16 @@ export const useNostr = () => {
       if (!privateKeyRef.current || claiming || isClaiming) return;
       isClaiming = true;
       try {
-        // Ensure valid JWT
-        console.log(`[DEBUG claimOnce] Checking JWT. Current JWT valid:`, !!jwtRef.current && Date.now() <= jwtRef.current.expiresAt);
-        if (!jwtRef.current || Date.now() > jwtRef.current.expiresAt) {
-          console.log('[DEBUG claimOnce] Fetching new JWT...');
-          const token = await fetchNpubxJwt(privateKeyRef.current);
-          console.log('[DEBUG claimOnce] Successfully fetched new JWT');
-          jwtRef.current = { token, expiresAt: Date.now() + 4 * 60 * 1000 };
-        }
-
-        console.log('[DEBUG claimOnce] Fetching pending quotes...');
-        const quotes = await fetchPendingQuotes(jwtRef.current.token);
-        console.log('[DEBUG claimOnce] Successfully fetched quotes:', quotes);
-        const claimedSet = new Set(JSON.parse(localStorage.getItem('npubx_claimed_quotes') || '[]'));
-        
-        const paidQuotes = quotes.filter(q => q.state === 'PAID' && !claimedSet.has(q.quoteId));
-
-        if (paidQuotes.length > 0) {
-          try {
-            // Map to ExternalQuote struct expected by Rust
-            const rustQuotes = paidQuotes.map(q => ({
-              quoteId: q.quoteId,
-              amount: q.amount,
-              mintUrl: q.mintUrl || (q as any).mint_url
-            }));
-
-            const claimedCount: number = await invoke('batch_mint_external_quotes', {
-              quotes: rustQuotes
-            });
-
-            if (claimedCount > 0) {
-              // Add successful ones to local claimed set
-              for (const q of paidQuotes) {
-                claimedSet.add(q.quoteId);
-              }
-              localStorage.setItem('npubx_claimed_quotes', JSON.stringify(Array.from(claimedSet)));
-
-              await refreshWallet();
-              toast.success(`⚡ Received ${claimedCount} payment${claimedCount > 1 ? 's' : ''} via Lightning Address!`);
-            }
-          } catch (e) {
-            console.warn('Batch claim failed:', e);
-          }
-          
+        const claimResult = await fetchV1ClaimToken(privateKeyRef.current);
+        if (claimResult && claimResult.token) {
+          console.log('[DEBUG claimOnce] v1 claim succeeded! Receiving token...', claimResult.count);
+          await invoke('receive_ecash', { tokenString: claimResult.token });
+          await refreshWallet();
+          toast.success(`⚡ Received ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''} via Lightning Address!`);
           setLastClaimTimestamp(Date.now());
         }
-      } catch (e: any) {
-        console.error('[DEBUG claimOnce] Caught outer error during claim check (v2 failed). Trying v1 fallback...', e.message);
-        
-        try {
-          const claimResult = await fetchV1ClaimToken(privateKeyRef.current);
-          if (claimResult && claimResult.token) {
-            console.log('[DEBUG claimOnce] v1 claim succeeded! Receiving token...', claimResult.count);
-            await invoke('receive_ecash', { tokenString: claimResult.token });
-            await refreshWallet();
-            toast.success(`⚡ Received ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''} via Lightning Address!`);
-            setLastClaimTimestamp(Date.now());
-          }
-        } catch (v1Error) {
-           console.error('[DEBUG claimOnce] v1 fallback also failed:', v1Error);
-        }
+      } catch (e) {
+        // ignore v1 failure
       } finally {
         isClaiming = false;
       }
@@ -249,71 +193,23 @@ export const useNostr = () => {
     if (!privateKeyRef.current) return;
     setClaiming(true);
     try {
-      if (!jwtRef.current || Date.now() > jwtRef.current.expiresAt) {
-        const token = await fetchNpubxJwt(privateKeyRef.current);
-        jwtRef.current = { token, expiresAt: Date.now() + 4 * 60 * 1000 };
-      }
-
-      const quotes = await fetchPendingQuotes(jwtRef.current.token);
-      const claimedSet = new Set(JSON.parse(localStorage.getItem('npubx_claimed_quotes') || '[]'));
-      
-      const paidQuotes = quotes.filter(q => q.state === 'PAID' && !claimedSet.has(q.quoteId));
-
-      if (paidQuotes.length === 0) {
+      const claimResult = await fetchV1ClaimToken(privateKeyRef.current!);
+      if (claimResult && claimResult.token) {
+        console.log('[DEBUG claimNow] v1 claim succeeded! Receiving token...', claimResult.count);
+        await invoke('receive_ecash', { tokenString: claimResult.token });
+        await refreshWallet();
+        toast.success(`⚡ Claimed ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''}!`);
+        setLastClaimTimestamp(Date.now());
+      } else {
         toast('No pending payments found', { icon: '📭' });
-        return;
       }
-
-      try {
-        const rustQuotes = paidQuotes.map(q => ({
-          quoteId: q.quoteId,
-          amount: q.amount,
-          mintUrl: q.mintUrl || (q as any).mint_url
-        }));
-
-        const claimedCount: number = await invoke('batch_mint_external_quotes', {
-          quotes: rustQuotes
-        });
-
-        if (claimedCount > 0) {
-          for (const q of paidQuotes) {
-            claimedSet.add(q.quoteId);
-          }
-          localStorage.setItem('npubx_claimed_quotes', JSON.stringify(Array.from(claimedSet)));
-
-          await refreshWallet();
-          toast.success(`⚡ Claimed ${claimedCount} payment${claimedCount > 1 ? 's' : ''}!`);
-        } else {
-          toast('No payments could be claimed', { icon: '⚠️' });
-        }
-      } catch (e: any) {
-        toast.error(`Batch claim failed: ${e.message}`);
-      }
-
-      setLastClaimTimestamp(Date.now());
     } catch (e: any) {
-      console.error('[DEBUG claimNow] Caught error during manual claim:', e);
-      console.error('[DEBUG claimNow] Error name:', e.name, 'Message:', e.message);
-      
-      try {
-        const claimResult = await fetchV1ClaimToken(privateKeyRef.current!);
-        if (claimResult && claimResult.token) {
-          console.log('[DEBUG claimNow] v1 claim succeeded! Receiving token...', claimResult.count);
-          await invoke('receive_ecash', { tokenString: claimResult.token });
-          await refreshWallet();
-          toast.success(`⚡ Claimed ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''}!`);
-          setLastClaimTimestamp(Date.now());
-        } else {
-          toast('No pending payments found', { icon: '📭' });
-        }
-      } catch (v1Error) {
-         console.error('[DEBUG claimNow] v1 fallback error:', v1Error);
-         toast('No pending payments found', { icon: '📭' });
-      }
+      toast.error(`Claim failed: ${e.message || e}`);
     } finally {
       setClaiming(false);
     }
-  }, []);
+  }, [refreshWallet]);
+
 
   // Update preferred mint on npubx.cash
   const updatePreferredMint = useCallback(async (mintUrl: string) => {
