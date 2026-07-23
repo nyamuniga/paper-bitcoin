@@ -29,6 +29,11 @@
 
         body {
             background-color: var(--color-bg);
+            /* Dark green overlay fading to slightly darker, combined with the new image */
+            background-image: linear-gradient(rgba(30, 42, 29, 0.82), rgba(30, 42, 29, 0.90)), url('wallet-background.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
             color: var(--color-text-main);
             min-height: 100vh;
             display: flex;
@@ -42,7 +47,7 @@
             position: fixed;
             inset: 0;
             z-index: -2;
-            opacity: 0.05;
+            opacity: 0.015; /* Reduced opacity to prevent clashing with the new background */
             pointer-events: none;
             /* Interlocking diamonds and triangles often seen in mudcloth and woven textiles */
             background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d49d42' fill-opacity='1'%3E%3Cpath d='M30 30L15 45 0 30 15 15zM15 15L0 0h30zM45 45L30 60h30zM45 15L30 0h30z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
