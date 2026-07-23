@@ -1,9 +1,9 @@
 use crate::error::{CommandError, CommandResult};
-use serde::{Deserialize, Serialize};
 use ecash_wallet::WalletState;
+use serde::{Deserialize, Serialize};
 
-use tauri::State;
 use crate::commands::auth::AppState;
+use tauri::State;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletInfo {
@@ -27,16 +27,18 @@ pub async fn wallet_info(state: State<'_, AppState>) -> CommandResult<WalletInfo
 
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
     };
 
     let w_state = WalletState::load_encrypted(&path, &passphrase)?;
-    
+
     let mut balances = w_state.balance_by_mint();
     for mint in &w_state.mints {
         balances.entry(mint.clone()).or_insert(0);
     }
-    
+
     Ok(WalletInfo {
         is_initialized: true,
         balance_sats: w_state.total_balance(),
@@ -46,17 +48,68 @@ pub async fn wallet_info(state: State<'_, AppState>) -> CommandResult<WalletInfo
 }
 
 #[tauri::command]
+pub async fn get_seed_hex(state: State<'_, AppState>) -> CommandResult<String> {
+    let path = state.wallet_path.clone();
+
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+    };
+
+    let w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    Ok(w_state.seed_hex.clone())
+}
+
+#[tauri::command]
+pub async fn get_custom_nostr_key(state: State<'_, AppState>) -> CommandResult<Option<String>> {
+    let path = state.wallet_path.clone();
+
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+    };
+
+    let w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    Ok(w_state.custom_nostr_key.clone())
+}
+
+#[tauri::command]
+pub async fn set_custom_nostr_key(key: Option<String>, state: State<'_, AppState>) -> CommandResult<bool> {
+    let _lock = state.wallet_lock.lock().await;
+    let path = state.wallet_path.clone();
+
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+    };
+
+    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    w_state.custom_nostr_key = key;
+    w_state.save_encrypted(&path, &passphrase)?;
+
+    Ok(true)
+}
+
+#[tauri::command]
 pub async fn get_balance(state: State<'_, AppState>) -> CommandResult<u64> {
     let path = state.wallet_path.clone();
     if !path.exists() {
         return Ok(0);
     }
-    
+
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
     };
-    
+
     let w_state = WalletState::load_encrypted(&path, &passphrase)?;
     Ok(w_state.total_balance())
 }
@@ -64,12 +117,14 @@ pub async fn get_balance(state: State<'_, AppState>) -> CommandResult<u64> {
 #[tauri::command]
 pub async fn get_recovery_words(state: State<'_, AppState>) -> CommandResult<Vec<String>> {
     let path = state.wallet_path.clone();
-    
+
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
     };
-    
+
     let w_state = WalletState::load_encrypted(&path, &passphrase)?;
     if let Some(m) = w_state.mnemonic {
         Ok(m.split_whitespace().map(|s| s.to_string()).collect())
@@ -81,23 +136,25 @@ pub async fn get_recovery_words(state: State<'_, AppState>) -> CommandResult<Vec
 #[tauri::command]
 pub async fn remove_mint(mint_url: String, state: State<'_, AppState>) -> CommandResult<()> {
     let path = state.wallet_path.clone();
-    
+
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
     };
-    
+
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
     w_state.remove_mint(&mint_url)?;
     w_state.save_encrypted(&path, &passphrase)?;
-    
+
     Ok(())
 }
 
 #[tauri::command]
 pub async fn add_mint(mint_url: String, state: State<'_, AppState>) -> CommandResult<()> {
     let mint_url = ecash_wallet::state::normalize_mint_url(&mint_url);
-    
+
     // Check if the wallet is initialized
     let path = state.wallet_path.clone();
     if !path.exists() {
@@ -106,7 +163,9 @@ pub async fn add_mint(mint_url: String, state: State<'_, AppState>) -> CommandRe
 
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
     };
 
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
@@ -117,13 +176,15 @@ pub async fn add_mint(mint_url: String, state: State<'_, AppState>) -> CommandRe
 
     // Try to fetch the keys to verify the mint is valid and responsive
     let client = ecash_wallet::client::MintClient::new(&mint_url);
-    let keys = client.fetch_keyset().await
+    let keys = client
+        .fetch_keyset()
+        .await
         .map_err(|e| CommandError(format!("Failed to connect to mint or fetch keys: {}", e)))?
         .keys;
 
     w_state.cache_mint_keys(&mint_url, keys);
     w_state.save_encrypted(&path, &passphrase)?;
-    
+
     Ok(())
 }
 
@@ -136,12 +197,15 @@ pub async fn clean_wallet(state: State<'_, AppState>) -> CommandResult<u64> {
 
     let passphrase = {
         let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock.clone().ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
     };
 
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
 
-    let removed = ecash_wallet::restore::clean_wallet_proofs(&mut w_state, &path, &passphrase).await?;
-    
+    let removed =
+        ecash_wallet::restore::clean_wallet_proofs(&mut w_state, &path, &passphrase).await?;
+
     Ok(removed)
 }

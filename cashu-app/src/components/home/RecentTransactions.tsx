@@ -7,7 +7,7 @@ import { TransactionDetailsModal } from '../history/TransactionDetailsModal';
 
 export const RecentTransactions: React.FC = () => {
   const navigate = useNavigate();
-  const { transactions, loading, handleCheckIssue, handleRecoverPendingTransaction, handleCheckTokenSpendStatus } = useHistory();
+  const { transactions, loading, handleCheckIssue, handleRecoverPendingTransaction, handleCheckTokenSpendStatus, handleRetryReceiveEcash } = useHistory();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
   const recentTxs = transactions.slice(0, 5);
@@ -23,13 +23,25 @@ export const RecentTransactions: React.FC = () => {
   };
 
   const getTxLabel = (tx: Transaction) => {
-    if ('Mint' in tx.tx_type) return 'Received';
-    if ('ReceiveEcash' in tx.tx_type) return 'Received Ecash';
-    if ('ReceiveLightning' in tx.tx_type) return 'Received Lightning';
-    if ('Issue' in tx.tx_type) return 'Issued Note';
-    if ('Redeem' in tx.tx_type) return 'Redeemed';
-    if ('Send' in tx.tx_type) return 'Sent Ecash';
-    if ('Melt' in tx.tx_type) return 'Sent';
+    const isMint = 'Mint' in tx.tx_type;
+    const isIssue = 'Issue' in tx.tx_type;
+    const isMelt = 'Melt' in tx.tx_type;
+    const isRedeem = 'Redeem' in tx.tx_type;
+    const isSend = 'Send' in tx.tx_type;
+    const isReceiveEcash = 'ReceiveEcash' in tx.tx_type;
+    const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
+
+    if (tx.momo_direction === 'ONCHAIN_SEND') return 'Sent On-chain';
+    if (tx.momo_direction === 'ONCHAIN_RECEIVE') return 'Received On-chain';
+    if (tx.momo_direction === 'RWF_TO_SATS') return 'Received RWF';
+    if (tx.momo_direction === 'SATS_TO_RWF') return 'Sent RWF';
+    if (isMint) return 'Received Lightning';
+    if (isReceiveEcash) return 'Received eCash';
+    if (isReceiveLightning) return 'Received Lightning';
+    if (isIssue) return 'Issued Note';
+    if (isRedeem) return 'Redeemed Note';
+    if (isSend) return 'Sent eCash';
+    if (isMelt) return 'Sent Lightning';
     return 'Transaction';
   };
 
@@ -46,11 +58,11 @@ export const RecentTransactions: React.FC = () => {
     return <ArrowUp className="text-primary w-4 h-4" />;
   };
 
-  const getTxIconBg = (tx: Transaction) => {
+  const getTxIconBg = (_tx: Transaction) => {
     return 'bg-primary/20 border-primary/20';
   };
 
-  const getTxAmountColor = (tx: Transaction) => {
+  const getTxAmountColor = (_tx: Transaction) => {
     return 'text-primary';
   };
 
@@ -85,27 +97,31 @@ export const RecentTransactions: React.FC = () => {
 
   return (
     <section className="flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <h2 className="text-label-caps font-label-caps text-on-surface-variant tracking-widest">RECENT ACTIVITY</h2>
-        {(loading || recentTxs.length > 0) && (
-          <Link to="/history" className="text-label-caps font-label-caps text-primary hover:opacity-80 transition-opacity flex items-center gap-1">
-            VIEW ALL
-            <ChevronRight size={14} />
-          </Link>
-        )}
-      </div>
-      {loading ? (
-        <div className="text-center text-on-surface-variant py-6 bg-surface-container-high rounded-2xl border border-outline-variant/10 text-body-md font-body-md">
-          Loading transactions...
+      <div className="bg-surface-container-high rounded-2xl overflow-hidden border border-outline-variant/10 relative">
+        <div className="absolute inset-0 texture-overlay opacity-20"></div>
+        
+        {/* Header moved inside the box */}
+        <div className="flex justify-between items-center p-4 border-b border-outline-variant/10 relative z-10">
+          <h2 className="text-label-caps font-label-caps text-on-surface-variant tracking-widest">RECENT ACTIVITY</h2>
+          {(loading || recentTxs.length > 0) && (
+            <Link to="/history" className="text-label-caps font-label-caps text-primary hover:opacity-80 transition-opacity flex items-center gap-1">
+              VIEW ALL
+              <ChevronRight size={14} />
+            </Link>
+          )}
         </div>
-      ) : transactions.length === 0 ? (
-        <div className="text-center text-on-surface-variant py-6 bg-surface-container-high rounded-2xl border border-outline-variant/10 text-body-md font-body-md">
-          No recent activity
-        </div>
-      ) : (
-        <div className="bg-surface-container-high rounded-2xl overflow-hidden border border-outline-variant/10 relative">
-          <div className="absolute inset-0 texture-overlay opacity-20"></div>
-          {recentTxs.map((tx, index) => {
+
+        {loading ? (
+          <div className="text-center text-on-surface-variant py-6 text-body-md font-body-md relative z-10">
+            Loading transactions...
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="text-center text-on-surface-variant py-6 text-body-md font-body-md relative z-10">
+            No recent activity
+          </div>
+        ) : (
+          <div className="relative z-10">
+            {recentTxs.map((tx, index) => {
             const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type;
             return (
             <div
@@ -133,8 +149,9 @@ export const RecentTransactions: React.FC = () => {
               </div>
             </div>
           )})}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {selectedTx && (
         <TransactionDetailsModal
@@ -142,6 +159,11 @@ export const RecentTransactions: React.FC = () => {
           onClose={() => setSelectedTx(null)}
           onRecover={() => handleRecoverPendingTransaction(selectedTx.id)}
           onCheckClaimed={() => handleCheckTokenSpendStatus(selectedTx.id)}
+          onRetryReceiveEcash={
+            'ReceiveEcash' in selectedTx.tx_type
+              ? () => handleRetryReceiveEcash(selectedTx.id, selectedTx.tx_type.ReceiveEcash.token_string)
+              : undefined
+          }
         />
       )}
     </section>

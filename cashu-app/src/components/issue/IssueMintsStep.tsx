@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, ChevronRight, ChevronLeft, Plus } from 'lucide-react';
 import { PageHeader } from '../shared/PageHeader';
 import { useWalletStore } from '../../store/wallet';
-import { formatMintUrl } from '../../utils/format';
+
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
 

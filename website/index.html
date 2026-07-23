@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BitNotes | Physical Ecash Wallet</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <meta name="description"
+        content="Pioneering multi-mint physical ecash. A seamless bridge between traditional finance, the Lightning Network, and the Bitcoin base layer.">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --color-ink: #1a1a18;
+            --color-ink-soft: #3d3b35;
+            --color-ink-muted: #6b675c;
+            --color-gold: #9e7c38;
+            --color-gold-light: #c9a54a;
+            --color-gold-dark: #7a5f2a;
+            --color-cream: #f8f5ef;
+            --color-cream-dark: #eee9df;
+            --color-border: rgba(158, 124, 56, 0.25);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background-color: var(--color-cream);
+            background-image: url('wallet-background.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            color: var(--color-ink);
+            min-height: 100vh;
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ── Header ── */
+        header {
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .header-inner {
+            max-width: 960px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .brand-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: var(--color-ink);
+        }
+
+        .brand-logo img {
+            width: 36px;
+            height: 36px;
+            object-fit: contain;
+        }
+
+        .brand-logo span {
+            font-family: 'Poppins', sans-serif;
+            font-weight: 600;
+            font-size: 1.25rem;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-version {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--color-gold-dark);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: rgba(158, 124, 56, 0.1);
+            padding: 0.35rem 0.85rem;
+            border-radius: 100px;
+            border: 1px solid var(--color-border);
+        }
+
+        /* ── Divider ── */
+        .divider {
+            max-width: 960px;
+            margin: 0 auto;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--color-border), transparent);
+        }
+
+        /* ── Main Content ── */
+        main {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 4rem 2rem 3rem;
+        }
+
+        /* ── Hero Section ── */
+        .hero {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .hero-eyebrow {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--color-gold);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+
+        .hero-eyebrow::before,
+        .hero-eyebrow::after {
+            content: '';
+            width: 40px;
+            height: 1px;
+            background: var(--color-gold);
+            opacity: 0.5;
+        }
+
+        .hero h1 {
+            font-family: 'Poppins', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 700;
+            line-height: 1.15;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.01em;
+        }
+
+        .hero h1 em {
+            font-style: normal;
+            color: var(--color-gold);
+        }
+
+        .hero-description {
+            font-size: 1.1rem;
+            line-height: 1.7;
+            color: var(--color-ink-soft);
+            max-width: 620px;
+            margin: 0 auto 3rem;
+            font-weight: 300;
+        }
+
+        /* ── Features Grid ── */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: var(--color-border);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 4rem;
+        }
+
+        .feature-item {
+            background: rgba(248, 245, 239, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 2rem 1.25rem;
+            text-align: center;
+            transition: background 0.3s ease;
+        }
+
+        .feature-item:hover {
+            background: rgba(248, 245, 239, 0.95);
+        }
+
+        .feature-icon {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-gold);
+        }
+
+        .feature-item h3 {
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--color-ink);
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
+        }
+
+        .feature-item p {
+            font-size: 0.8rem;
+            color: var(--color-ink-muted);
+            line-height: 1.5;
+            font-weight: 300;
+        }
+
+        /* ── Download Section ── */
+        .download-section {
+            text-align: center;
+        }
+
+        .download-section h2 {
+            font-family: 'Poppins', sans-serif;
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--color-ink);
+            margin-bottom: 0.75rem;
+        }
+
+        .download-section>p {
+            color: var(--color-ink-muted);
+            font-size: 0.95rem;
+            margin-bottom: 2.5rem;
+            font-weight: 300;
+        }
+
+        .download-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.9rem 2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: all 0.25s ease;
+            cursor: pointer;
+        }
+
+        .btn svg {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+
+        .btn-primary {
+            background: var(--color-gold);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(158, 124, 56, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: var(--color-gold-dark);
+            box-shadow: 0 4px 16px rgba(158, 124, 56, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--color-ink-soft);
+            border: 1px solid var(--color-border);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(158, 124, 56, 0.06);
+            border-color: var(--color-gold);
+            color: var(--color-gold-dark);
+            transform: translateY(-1px);
+        }
+
+        /* ── Footer ── */
+        footer {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .footer-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--color-border), transparent);
+            margin-bottom: 2rem;
+        }
+
+        .footer-text {
+            font-size: 0.75rem;
+            color: var(--color-ink-muted);
+            letter-spacing: 0.05em;
+        }
+
+        .footer-text a {
+            color: var(--color-gold);
+            text-decoration: none;
+        }
+
+        .footer-text a:hover {
+            text-decoration: underline;
+        }
+
+        /* ── Animations ── */
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate {
+            opacity: 0;
+            animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+
+        .delay-1 {
+            animation-delay: 0.1s;
+        }
+
+        .delay-2 {
+            animation-delay: 0.2s;
+        }
+
+        .delay-3 {
+            animation-delay: 0.3s;
+        }
+
+        .delay-4 {
+            animation-delay: 0.4s;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.25rem;
+            }
+
+            .hero-description {
+                font-size: 1rem;
+            }
+
+            .features {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            main {
+                padding: 3rem 1.5rem 2rem;
+            }
+
+            .header-inner {
+                justify-content: center;
+                gap: 1rem;
+            }
+
+            .nav-version {
+                display: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .hero h1 {
+                font-size: 1.85rem;
+            }
+
+            .features {
+                grid-template-columns: 1fr;
+            }
+
+            .download-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn {
+                width: 100%;
+                max-width: 300px;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-inner">
+            <a href="#" class="brand-logo">
+                <img src="logo.png" alt="BitNotes">
+                <span>BitNotes</span>
+            </a>
+            <span class="nav-version" id="version-text">v0.1.3</span>
+        </div>
+    </header>
+
+    <div class="divider"></div>
+
+    <!-- Main Content -->
+    <main>
+        <!-- Hero -->
+        <section class="hero">
+            <p class="hero-eyebrow animate">Multi-Mint Physical Ecash</p>
+            <h1 class="animate delay-1">The wallet that bridges<br><em>digital and physical</em> money</h1>
+            <p class="hero-description animate delay-2">
+                Print and verify physical bearer notes backed by multiple independent mints simultaneously.
+                A unified wallet bringing together ecash, Lightning, on-chain Bitcoin, and fiat.
+            </p>
+        </section>
+
+        <!-- Features -->
+        <div class="features animate delay-3">
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="6" width="20" height="12" rx="2" />
+                        <circle cx="12" cy="12" r="2" />
+                        <path d="M6 12h.01M18 12h.01" />
+                    </svg>
+                </div>
+                <h3>Physical Ecash</h3>
+                <p>Issue and verify cryptographic bearer notes you can hold in your hand</p>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                        <line x1="12" y1="18" x2="12.01" y2="18" />
+                    </svg>
+                </div>
+                <h3>Digital Ecash</h3>
+                <p>Sending and receiving normal ecash that's not physical</p>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 8h7a3 3 0 0 1 0 6h-7z" />
+                        <path d="M8 14h8a3 3 0 0 1 0 6h-8z" />
+                        <line x1="10" y1="8" x2="10" y2="5" />
+                        <line x1="13" y1="8" x2="13" y2="5" />
+                        <line x1="10" y1="20" x2="10" y2="23" />
+                        <line x1="13" y1="20" x2="13" y2="23" />
+                    </svg>
+                </div>
+                <h3>Bitcoin</h3>
+                <p>Instant payments over the Lightning Network and Native Bitcoin swaps via Boltz exchange</p>
+            </div>
+
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="1" x2="12" y2="23" />
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                </div>
+                <h3>Fiat Ramps</h3>
+                <p>Seamless on and off ramps to traditional currencies</p>
+            </div>
+        </div>
+
+        <!-- Download -->
+        <section class="download-section animate delay-4">
+            <h2>Get the Wallet</h2>
+            <p>Download BitNotes for your platform and start transacting.</p>
+            <div class="download-buttons">
+                <a href="#" id="download-link" class="btn btn-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Android
+                </a>
+                <a href="#" id="mac-download-link" class="btn btn-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    macOS
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-divider"></div>
+        <p class="footer-text">Built on the <a href="https://cashu.space" target="_blank" rel="noopener">Cashu</a>
+            protocol &middot; Open source</p>
+    </footer>
+
+    <!-- Config + Dynamic Version -->
+    <script src="config.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            if (window.ENV && window.ENV.APK_LINK) {
+                const apkLink = window.ENV.APK_LINK;
+                const macLink = window.ENV.MAC_LINK;
+
+                if (apkLink) document.getElementById('download-link').href = apkLink;
+                if (macLink) document.getElementById('mac-download-link').href = macLink;
+
+                const versionMatch = apkLink.match(/(v\d+\.\d+\.\d+)/);
+                if (versionMatch && versionMatch[1]) {
+                    document.getElementById('version-text').innerText = versionMatch[1];
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

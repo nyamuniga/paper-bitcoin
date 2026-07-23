@@ -122,3 +122,7 @@ body {
   border-top: 1px dashed var(--color-outline-variant);
   opacity: 0.5;
 }
+
+body {
+  overscroll-behavior-y: none;
+}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 export interface ActionOption {
   icon: React.ReactNode;
@@ -15,8 +16,8 @@ interface ActionMenuModalProps {
 }
 
 export const ActionMenuModal: React.FC<ActionMenuModalProps> = ({ title, options, onClose }) => {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm transition-opacity" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm transition-opacity" onClick={onClose}>
       <div 
         onClick={e => e.stopPropagation()}
         className="bg-surface-container-high rounded-t-[2rem] sm:rounded-3xl w-full max-w-[480px] border-t border-x sm:border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative animate-slide-up sm:animate-fade-in pb-8 sm:pb-4"
@@ -55,6 +56,7 @@ export const ActionMenuModal: React.FC<ActionMenuModalProps> = ({ title, options
           ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

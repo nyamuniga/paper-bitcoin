@@ -21,11 +21,13 @@ pub struct WalletState {
     pub trusted_keys: HashMap<String, HashMap<u64, String>>,
     #[serde(default)]
     pub transactions: Vec<Transaction>,
+    #[serde(default)]
+    pub custom_nostr_key: Option<String>,
 }
 
 impl WalletState {
     pub fn new(seed_hex: String, mnemonic: Option<String>) -> Self {
-        Self { seed_hex, mnemonic, derivation_index: 0, proofs: HashMap::new(), mints: Vec::new(), trusted_keys: HashMap::new(), transactions: Vec::new() }
+        Self { seed_hex, mnemonic, derivation_index: 0, proofs: HashMap::new(), mints: Vec::new(), trusted_keys: HashMap::new(), transactions: Vec::new(), custom_nostr_key: None }
     }
 
     pub fn default_path() -> PathBuf {

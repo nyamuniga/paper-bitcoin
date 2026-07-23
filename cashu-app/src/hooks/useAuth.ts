@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
+import { useNostrStore } from '../store/nostrStore';
+import { useTransactionStore } from '../store/transactionStore';
 
 export const useAuth = () => {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
@@ -50,6 +52,7 @@ export const useAuth = () => {
     handleClearError();
     try {
       await invoke('unlock_wallet', { passphrase });
+      window.history.replaceState(null, '', '/');
       await refreshWallet();
       return true;
     } catch (e: any) {
@@ -80,6 +83,7 @@ export const useAuth = () => {
     handleClearError();
     try {
       await invoke('restore_wallet', { mnemonic, passphrase, mintUrls });
+      window.history.replaceState(null, '', '/');
       await refreshWallet();
       return true;
     } catch (e: any) {
@@ -95,6 +99,11 @@ export const useAuth = () => {
     handleClearError();
     try {
       await invoke('reset_wallet');
+      useNostrStore.getState().reset();
+      useTransactionStore.getState().reset();
+      localStorage.removeItem('npubx_claimed_quotes');
+      localStorage.removeItem('cashu-nostr-storage');
+      localStorage.removeItem('cashu-transaction-storage');
       await refreshWallet();
       return true;
     } catch (e: any) {
