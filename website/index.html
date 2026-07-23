@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BitNotes | Physical eCash Wallet</title>
+    <title>BitNotes | Physical Ecash Wallet</title>
     <link rel="icon" type="image/png" href="logo.png">
-    <meta name="description" content="A seamless bridge between traditional finance, the Lightning Network, and the Bitcoin base layer. Download the BitNotes Android Wallet today.">
+    <meta name="description"
+        content="A seamless bridge between traditional finance, the Lightning Network, and the Bitcoin base layer. Download the BitNotes Android Wallet today.">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -36,7 +38,8 @@
         }
 
         /* Ambient Background Glows */
-        .bg-glow-1, .bg-glow-2 {
+        .bg-glow-1,
+        .bg-glow-2 {
             position: absolute;
             border-radius: 50%;
             filter: blur(120px);
@@ -246,21 +249,40 @@
 
         /* Animations */
         @keyframes pulse {
-            0% { transform: scale(1) translate(0, 0); opacity: 0.1; }
-            100% { transform: scale(1.2) translate(20px, -20px); opacity: 0.2; }
+            0% {
+                transform: scale(1) translate(0, 0);
+                opacity: 0.1;
+            }
+
+            100% {
+                transform: scale(1.2) translate(20px, -20px);
+                opacity: 0.2;
+            }
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .animate-up {
             animation: fadeIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
         }
 
-        .delay-1 { animation-delay: 0.1s; }
-        .delay-2 { animation-delay: 0.2s; }
+        .delay-1 {
+            animation-delay: 0.1s;
+        }
+
+        .delay-2 {
+            animation-delay: 0.2s;
+        }
 
         @media (max-width: 968px) {
             .hero-container {
@@ -268,22 +290,27 @@
                 gap: 3rem;
                 text-align: center;
             }
+
             .hero-content p {
                 margin: 0 auto 2.5rem;
             }
+
             .features-list li {
                 justify-content: center;
             }
+
             nav {
                 justify-content: center;
                 padding: 1.5rem;
             }
+
             .hero-content h1 {
                 font-size: 3rem;
             }
         }
     </style>
 </head>
+
 <body>
     <div class="noise-overlay"></div>
     <div class="bg-glow-1"></div>
@@ -299,23 +326,41 @@
     <main>
         <div class="hero-container">
             <div class="hero-content">
-                <h1 class="animate-up">Pioneering <br><span>Multi-Mint Physical eCash</span></h1>
-                <p class="animate-up delay-1">Print and verify physical bearer notes backed by multiple independent mints simultaneously. A seamless, unified wallet bringing together traditional finance, Lightning, and the Bitcoin base layer.</p>
+                <h1 class="animate-up">Pioneering <br><span>Multi-Mint Physical Ecash</span></h1>
+                <p class="animate-up delay-1">Print and verify physical bearer notes backed by multiple independent
+                    mints simultaneously. A seamless, unified wallet bringing together traditional finance, Lightning,
+                    and the Bitcoin base layer.</p>
                 <div class="features-list animate-up delay-2">
                     <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                        Physical eCash Issuance & Verification
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        Physical Ecash Issuance & Verification
                     </li>
                     <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
                         Lightning Network Sending & Receiving
                     </li>
                     <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
                         Native On-Chain Bitcoin Swaps
                     </li>
                     <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
                         Seamless Fiat On/Off Ramps
                     </li>
                 </div>
@@ -324,20 +369,38 @@
             <div class="download-section animate-up delay-1">
                 <div class="download-card">
                     <div class="download-badge" id="version-badge">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                        <span id="version-text">Latest Release v0.1.2</span>
-                    </div>
-                    <h2>Get the Android App</h2>
-                    <p>Download the official BitNotes wallet APK directly to your Android device to get started.</p>
-                    
-                    <a href="#" id="download-link" class="btn-download">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                             <polyline points="7 10 12 15 17 10"></polyline>
                             <line x1="12" y1="15" x2="12" y2="3"></line>
                         </svg>
-                        Download APK
-                    </a>
+                        <span id="version-text">Latest Release v0.1.2</span>
+                    </div>
+                    <h2>Get the App</h2>
+                    <p>Download the official BitNotes wallet to your Android device or Mac to get started.</p>
+
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <a href="#" id="download-link" class="btn-download" style="flex: 1; min-width: 200px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Android
+                        </a>
+                        <a href="#" id="mac-download-link" class="btn-download"
+                            style="flex: 1; min-width: 200px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--color-text-main); box-shadow: none;">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            MacOs
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -349,12 +412,14 @@
         document.addEventListener("DOMContentLoaded", () => {
             if (window.ENV && window.ENV.APK_LINK) {
                 const apkLink = window.ENV.APK_LINK;
-                
-                // Update the download button href
-                document.getElementById('download-link').href = apkLink;
-                
+                const macLink = window.ENV.MAC_LINK;
+
+                // Update the download button hrefs
+                if (apkLink) document.getElementById('download-link').href = apkLink;
+                if (macLink) document.getElementById('mac-download-link').href = macLink;
+
                 // Extract version string (e.g., v0.1.2) from the URL using Regex
-                const versionMatch = apkLink.match(/(v\d+\.\d+\.\d+)/);
+                const versionMatch = apkLink ? apkLink.match(/(v\d+\.\d+\.\d+)/) : null;
                 if (versionMatch && versionMatch[1]) {
                     document.getElementById('version-text').innerText = "Latest Release " + versionMatch[1];
                 }
@@ -362,4 +427,5 @@
         });
     </script>
 </body>
+
 </html>
