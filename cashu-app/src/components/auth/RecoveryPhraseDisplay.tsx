@@ -25,6 +25,7 @@ export const RecoveryPhraseDisplay: React.FC<RecoveryPhraseDisplayProps> = ({ mn
         </div>
         <button
           onClick={async () => {
+            window.history.replaceState(null, '', '/');
             onSaved();
             await refreshWallet();
           }}

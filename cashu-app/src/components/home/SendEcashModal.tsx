@@ -20,7 +20,7 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
   const [amount, setAmount] = useState('');
   const [token, setToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const { sending, sendEcash } = useEcash(mintUrl);
+  const { sending, isClaimed, sendEcash } = useEcash(mintUrl);
 
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const availableBalance = mintBalances[mintUrl] || 0;
@@ -98,16 +98,28 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
 
               {/* QR Code */}
               <div className="relative">
-                <div className="bg-white p-4 rounded-xl shadow-lg relative">
-                  <QRCode value={currentFrame || token} size={200} />
-                  {isAnimated && (
-                    <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-label-caps">
-                      {currentFrameIndex + 1}/{totalFrames}
+                {isClaimed ? (
+                  <div className="bg-emerald-500/10 p-8 rounded-xl shadow-lg relative border border-emerald-500/20 flex flex-col items-center gap-3">
+                    <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                      <Check className="w-8 h-8 text-emerald-400" />
                     </div>
-                  )}
-                </div>
-                {/* Pulsing glow */}
-                <div className="absolute inset-0 bg-primary/20 rounded-xl blur-xl -z-10 animate-pulse"></div>
+                    <p className="text-headline-sm font-headline-sm text-emerald-400 text-center">Token Claimed!</p>
+                    <p className="text-body-sm font-body-sm text-emerald-400/80 text-center">The recipient has successfully received these funds.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-white p-4 rounded-xl shadow-lg relative">
+                      <QRCode value={currentFrame || token} size={200} />
+                      {isAnimated && (
+                        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-label-caps">
+                          {currentFrameIndex + 1}/{totalFrames}
+                        </div>
+                      )}
+                    </div>
+                    {/* Pulsing glow */}
+                    <div className="absolute inset-0 bg-primary/20 rounded-xl blur-xl -z-10 animate-pulse"></div>
+                  </>
+                )}
               </div>
 
               {/* Token string */}

@@ -4,7 +4,9 @@ A Rust implementation of the [Cashu](https://github.com/cashubtc/nuts) blind-sig
 
 ## Overview
 
-Paper notes with tamper-evident seals represent redeemable Bitcoin value. Tokens are issued by Cashu-compatible mints using DHKE blind signatures, encoded into printable SVG notes, and can be verified offline before redemption via Lightning.
+Paper notes with tamper-evident seals represent redeemable Bitcoin value. Tokens are issued by Cashu-compatible mints using DHKE blind signatures, encoded into printable SVG notes, and can be verified offline before redemption via Lightning. 
+
+The application goes beyond simple eCash management by providing **Lightning Addresses (via npub.cash)**, **seamless fiat integration (Mobile Money via Blink)**, and **native On-Chain Bitcoin swaps (via Boltz)**, creating a unified bridge between traditional finance, the Lightning Network, and the Bitcoin base layer.
 
 ```
 ┌──────────┐   blind sign   ┌──────────┐   SVG note   ┌──────────┐
@@ -26,6 +28,8 @@ Physical eCash bridges the gap between the abstract Lightning Network and tangib
 - **Offline Circular Economies:** In places like farmers' markets or areas with spotty internet, a physical note can trade hands 50 times completely offline with zero fees and instant settlement. Only the final merchant needs to scan it.
 - **Event "Drink Tickets":** Conferences can issue physical multi-mint notes as tickets. Vendors accept them physically and sweep them into their Lightning nodes at the end of the night, without having to trust the conference organizers.
 - **Privacy-Preserving Cash:** When you hand someone a physical eCash note, there is zero digital footprint of that specific transaction. It is the ultimate privacy tool. A privacy advocate could issue a bunch of notes using their home node, go to a meetup, and trade them for goods with zero on-chain or Lightning surveillance possible until the final redemption.
+- **Frictionless Remittances:** A user receives a physical eCash note from a relative abroad, scans it, and instantly withdraws the funds to their local Mobile Money account (e.g., Rwandan Francs) using the integrated Blink proxy.
+- **Self-Custodial Savings:** Users can accumulate small amounts of eCash from physical notes or Lightning payments, and effortlessly swap them to an On-Chain cold storage wallet using the native Boltz integration.
 
 ## Quick Start
 
@@ -119,6 +123,8 @@ cargo run -p ecash-cli -- issue 1000
 - **Direct Issuance & Redemption**: Notes can be funded directly from and redeemed directly back to your local ecash wallet without incurring Lightning Network routing fees. The DLEQ proofs are securely preserved and transferred into the note's compact payload.
 - **NUT-15 Multi-Path Payments (MPP)**: The system supports redeeming a single note containing tokens from multiple independent mints via a unified Lightning invoice payment. If any leg of the MPP payment fails due to routing errors, the backend gracefully recovers the unspent note proofs directly into your local wallet to ensure no funds are lost.
 - **QR Code Robustness**: Our QR processing features case-insensitive prefix decoding to seamlessly support third-party hardware scanners, mobile keyboards, and various OCR tools which might alter capitalization.
+- **Non-Custodial Swaps (Boltz)**: On-Chain Bitcoin swaps are executed using Boltz Submarine Swaps. If an outbound on-chain swap fails to broadcast, the app securely caches the `refundPrivateKey`, `redeemScript`, and `timeoutBlockHeight` in local storage, allowing the user to seamlessly refund the locked funds once the timelock expires.
+- **Hybrid Transaction History Engine**: Raw Lightning operations from the Rust backend are intelligently stitched to local UI state (`zustand`) using quote IDs and strict timestamp heuristics, providing accurate user-facing labels for complex multi-hop On-Chain and Fiat swaps.
 
 ## References
 

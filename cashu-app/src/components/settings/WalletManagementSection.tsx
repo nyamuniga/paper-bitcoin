@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock, Trash2, AlertTriangle } from 'lucide-react';
+import { Lock, Trash2, AlertTriangle, ChevronRight, ChevronDown, Wallet } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 import { useAuth } from '../../hooks/useAuth';
@@ -11,6 +11,7 @@ export const WalletManagementSection = () => {
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const { lockWallet, resetWallet } = useAuth();
   const [isCleaning, setIsCleaning] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const handleLock = async () => {
     const success = await lockWallet();
@@ -55,13 +56,28 @@ export const WalletManagementSection = () => {
   };
 
   return (
-    <section className="bg-surface-container-high rounded-xl p-6 border border-outline-variant/30">
-      <div className="mb-6">
-        <h2 className="text-body-md font-body-md font-bold text-on-surface mb-1">Wallet Management</h2>
-        <p className="text-sm text-on-surface-variant">Lock your wallet or permanently delete it from this device.</p>
+    <section className="bg-surface-container-high rounded-xl border border-outline-variant/30 overflow-hidden">
+      <div 
+        className="flex items-center justify-between p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex shrink-0 items-center justify-center text-primary border border-primary/20">
+            <Wallet size={20} />
+          </div>
+          <div>
+            <h2 className="text-body-md font-body-md font-bold text-on-surface mb-1">Wallet Management</h2>
+            <p className="text-sm text-on-surface-variant">Lock your wallet or permanently delete it from this device.</p>
+          </div>
+        </div>
+        
+        <div className="text-on-surface-variant">
+          {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+        </div>
       </div>
 
-      <div className="flex flex-col gap-4">
+      {isExpanded && (
+        <div className="px-6 pb-6 pt-2 border-t border-outline-variant/10 flex flex-col gap-4">
         <button
           onClick={handleLock}
           className="flex items-center justify-between p-4 bg-surface-container-highest hover:bg-surface-bright rounded-xl border border-outline-variant/20 transition-colors group cursor-pointer"
@@ -137,7 +153,8 @@ export const WalletManagementSection = () => {
             </div>
           </div>
         )}
-      </div>
+        </div>
+      )}
     </section>
   );
 };

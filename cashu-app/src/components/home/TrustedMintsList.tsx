@@ -4,7 +4,7 @@ import { ChevronRight, Zap, Coins, Info, Plus } from 'lucide-react';
 import { AddMintModal } from '../navigation/AddMintModal';
 import { EcashModal } from './EcashModal';
 import { BitcoinModal } from './BitcoinModal';
-import { formatMintUrl } from '../../utils/format';
+
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
 import { MintInfoModal } from './MintInfoModal';

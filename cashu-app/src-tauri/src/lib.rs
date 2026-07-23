@@ -4,24 +4,30 @@ mod error;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_http::init())
         .setup(|app| {
             use tauri::Manager;
             let wallet_path = app.path().app_data_dir().unwrap().join("gui-wallet.json");
             app.manage(commands::auth::AppState {
                 passphrase: std::sync::Mutex::new(None),
                 wallet_path,
+                wallet_lock: tokio::sync::Mutex::new(()),
             });
             Ok(())
         })
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init());
-        
+
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let builder = builder.plugin(tauri_plugin_biometric::init());
 
-    builder.invoke_handler(tauri::generate_handler![
+    builder
+        .invoke_handler(tauri::generate_handler![
             commands::wallet::wallet_info,
+            commands::wallet::get_seed_hex,
+            commands::wallet::get_custom_nostr_key,
+            commands::wallet::set_custom_nostr_key,
             commands::wallet::get_balance,
             commands::wallet::get_recovery_words,
             commands::wallet::add_mint,
@@ -40,6 +46,7 @@ pub fn run() {
             commands::send::send_ecash,
             commands::send::receive_ecash,
             commands::receive::receive_lightning,
+            commands::receive::batch_mint_external_quotes,
             commands::auth::is_wallet_setup,
             commands::auth::unlock_wallet,
             commands::auth::lock_wallet,

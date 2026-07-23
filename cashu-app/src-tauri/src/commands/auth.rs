@@ -1,11 +1,12 @@
+use crate::error::{CommandError, CommandResult};
+use ecash_wallet::WalletState;
 use std::sync::Mutex;
 use tauri::State;
-use crate::error::{CommandResult, CommandError};
-use ecash_wallet::WalletState;
 
 pub struct AppState {
     pub passphrase: Mutex<Option<String>>,
     pub wallet_path: std::path::PathBuf,
+    pub wallet_lock: tokio::sync::Mutex<()>,
 }
 
 #[tauri::command]
@@ -20,7 +21,7 @@ pub async fn unlock_wallet(passphrase: String, state: State<'_, AppState>) -> Co
     if !path.exists() {
         return Err(CommandError("Wallet not found".to_string()));
     }
-    
+
     // Try to load it to verify the passphrase is correct
     match WalletState::load_encrypted(&path, &passphrase) {
         Ok(_) => {
@@ -28,9 +29,7 @@ pub async fn unlock_wallet(passphrase: String, state: State<'_, AppState>) -> Co
             *pass_lock = Some(passphrase);
             Ok(true)
         }
-        Err(_) => {
-            Err(CommandError("Incorrect passphrase".to_string()))
-        }
+        Err(_) => Err(CommandError("Incorrect passphrase".to_string())),
     }
 }
 
@@ -51,7 +50,8 @@ pub async fn is_wallet_unlocked(state: State<'_, AppState>) -> CommandResult<boo
 pub async fn reset_wallet(state: State<'_, AppState>) -> CommandResult<bool> {
     let path = state.wallet_path.clone();
     if path.exists() {
-        std::fs::remove_file(path).map_err(|e| CommandError(format!("Failed to delete wallet: {}", e)))?;
+        std::fs::remove_file(path)
+            .map_err(|e| CommandError(format!("Failed to delete wallet: {}", e)))?;
     }
     let mut pass_lock = state.passphrase.lock().unwrap();
     *pass_lock = None;
@@ -59,7 +59,10 @@ pub async fn reset_wallet(state: State<'_, AppState>) -> CommandResult<bool> {
 }
 
 #[tauri::command]
-pub async fn create_wallet(passphrase: String, state: State<'_, AppState>) -> CommandResult<crate::commands::wallet::WalletInfo> {
+pub async fn create_wallet(
+    passphrase: String,
+    state: State<'_, AppState>,
+) -> CommandResult<crate::commands::wallet::WalletInfo> {
     let path = state.wallet_path.clone();
     if path.exists() {
         return Err(CommandError("Wallet already exists".to_string()));
@@ -67,6 +70,16 @@ pub async fn create_wallet(passphrase: String, state: State<'_, AppState>) -> Co
 
     let (phrase, seed_hex) = ecash_wallet::generate_mnemonic()?;
     let mut w_state = WalletState::new(seed_hex, Some(phrase.clone()));
+    
+    // Add default mint for new wallets
+    let default_mint = ecash_wallet::DEFAULT_MINT_URL.to_string();
+    w_state.mints.push(default_mint.clone());
+    
+    // Attempt to fetch and cache keys for the default mint (non-fatal if it fails)
+    if let Ok(keyset) = ecash_wallet::client::MintClient::new(&default_mint).fetch_keyset().await {
+        w_state.cache_mint_keys(&default_mint, keyset.keys);
+    }
+    
     w_state.save_encrypted(&path, &passphrase)?;
 
     let mut pass_lock = state.passphrase.lock().unwrap();
@@ -86,12 +99,12 @@ pub async fn restore_wallet(
     mnemonic: String,
     passphrase: String,
     mint_urls: Vec<String>,
-    state: State<'_, AppState>
+    state: State<'_, AppState>,
 ) -> CommandResult<crate::commands::wallet::WalletInfo> {
     let path = state.wallet_path.clone();
     let seed_hex = ecash_wallet::mnemonic_to_seed_hex(&mnemonic)?;
     let mut w_state = WalletState::new(seed_hex, Some(mnemonic.clone()));
-    
+
     // We can do restore logic if we have mint URLs
     if !mint_urls.is_empty() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -103,14 +116,22 @@ pub async fn restore_wallet(
             }
         });
 
-        if let Err(e) = ecash_wallet::restore::restore_from_mints(&mut w_state, &path, &passphrase, mint_urls, Some(tx)).await {
+        if let Err(e) = ecash_wallet::restore::restore_from_mints(
+            &mut w_state,
+            &path,
+            &passphrase,
+            mint_urls,
+            Some(tx),
+        )
+        .await
+        {
             println!("Restore from mints failed: {}", e);
             // We continue, the state still has the seed
         }
     }
-    
+
     w_state.save_encrypted(&path, &passphrase)?;
-    
+
     let mut pass_lock = state.passphrase.lock().unwrap();
     *pass_lock = Some(passphrase);
 
