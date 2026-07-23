@@ -1,6 +1,7 @@
 import React from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { QrCode, Loader2 } from 'lucide-react';
+import { useUrDecoder } from '../../hooks/useUrDecoder';
 
 interface ScanNoteFormProps {
   showScanner: boolean;
@@ -12,9 +13,11 @@ interface ScanNoteFormProps {
   error: string | null;
 }
 
-export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({ 
-  showScanner, setShowScanner, binB64, setBinB64, onDecode, loading, error 
+export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
+  showScanner, setShowScanner, binB64, setBinB64, onDecode, loading, error
 }) => {
+  const urDecoder = useUrDecoder();
+
   return (
     <div className="w-full max-w-2xl bg-surface-container-high rounded-xl relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] p-card-gap flex flex-col gap-8 border border-outline-variant/30">
       <div className="noise-overlay"></div>
@@ -25,15 +28,35 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
               formats={['qr_code']}
               onScan={(result) => {
                 if (!result || result.length === 0) return;
-                const validQr = result.find(r => r.rawValue.toUpperCase().startsWith('ECASHZ:'));
-                const val = validQr ? validQr.rawValue : result[0].rawValue;
-                if (val) {
-                  setShowScanner(false);
-                  onDecode(val);
+                const text = result[0].rawValue;
+                if (text.toLowerCase().startsWith('ur:')) {
+                  const decoded = urDecoder.receivePart(text);
+                  if (decoded) {
+                    setShowScanner(false);
+                    onDecode(decoded);
+                  }
+                } else {
+                  if (text) {
+                    setShowScanner(false);
+                    onDecode(text);
+                  }
                 }
               }}
             />
-            <button onClick={() => setShowScanner(false)} className="w-full mt-2 text-on-surface-variant hover:text-on-surface py-2 text-label-caps font-label-caps">Cancel Scanner</button>
+            {urDecoder.progress > 0 && !urDecoder.isSuccess && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface-container-highest/80 px-4 py-2 rounded-full text-label-caps font-label-caps text-primary backdrop-blur-md">
+                Scanning: {Math.round(urDecoder.progress * 100)}%
+              </div>
+            )}
+            <button
+              onClick={() => {
+                setShowScanner(false);
+                urDecoder.reset();
+              }}
+              className="w-full mt-2 text-on-surface-variant hover:text-on-surface py-2 text-label-caps font-label-caps"
+            >
+              Cancel Scanner
+            </button>
           </div>
         ) : (
           <button
@@ -64,7 +87,7 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
               value={binB64}
               onChange={(e) => setBinB64(e.target.value)}
               className="w-full bg-surface-container-lowest text-on-background rounded-lg border-none px-4 py-4 min-h-[100px] resize-none focus:ring-1 focus:ring-primary/50 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] text-body-md font-body-md placeholder:text-on-surface-variant/40 transition-all glow-effect focus:bg-surface-container-lowest/80"
-              placeholder="Paste binary base45/base64..."
+              placeholder="Ecash token, address, invoice, or note data..."
               spellCheck="false"
             ></textarea>
           </div>
@@ -76,7 +99,7 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
             disabled={loading || !binB64}
             className="w-full bg-gradient-to-r from-[#d4a055] to-[#f7931a] hover:from-[#e8b566] hover:to-[#ffa633] text-on-primary font-headline-lg-mobile text-body-md rounded-full py-4 transition-all transform active:scale-[0.98] shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <span className="font-bold tracking-wide">Decode Note</span>}
+            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <span className="font-bold tracking-wide">Process</span>}
           </button>
         </div>
       </div>

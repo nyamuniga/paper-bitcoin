@@ -1,4 +1,4 @@
-use ecash_wallet::history::check_melt_status;
+use ecash_wallet::history::check_transaction_status;
 use ecash_wallet::WalletState;
 use ecash_core::types::{Transaction, TransactionType, MeltTransactionData, TransactionStatus, Proof};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -54,8 +54,8 @@ async fn test_check_melt_status_recovers_pending_failure() {
 
     let wallet_path = std::env::temp_dir().join(format!("test_wallet_history_{}.json", uuid::Uuid::new_v4()));
     
-    // Simulate check_melt_status
-    let result = check_melt_status(&mut state, &wallet_path, "pass", "tx_123").await.unwrap();
+    // Simulate check_transaction_status
+    let result = check_transaction_status(&mut state, &wallet_path, "pass", "tx_123").await.unwrap();
     
     // The proofs are spent, but invoice wasn't paid -> FailedMintError
     assert_eq!(result, TransactionStatus::FailedMintError);

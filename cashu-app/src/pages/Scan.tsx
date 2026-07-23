@@ -1,7 +1,9 @@
-import { Info } from 'lucide-react';
+import { Info, CheckCircle } from 'lucide-react';
 import { ScanNoteForm } from '../components/scan/ScanNoteForm';
 import { NoteVerificationResult } from '../components/scan/NoteVerificationResult';
 import { RedeemNoteForm } from '../components/scan/RedeemNoteForm';
+import { RedeemLoadingStep } from '../components/scan/RedeemLoadingStep';
+import { PageHeader } from '../components/shared/PageHeader';
 import { useScan } from '../hooks/useScan';
 
 export const Scan = () => {
@@ -11,6 +13,7 @@ export const Scan = () => {
     noteInfo,
     loading,
     error,
+    setError,
     verified,
     verifyResult,
     invoice,
@@ -19,15 +22,28 @@ export const Scan = () => {
     redeemSuccess,
     showScanner,
     setShowScanner,
+    redeemMethod,
+    setRedeemMethod,
     handleDecode,
     handleVerify,
     handleRedeem
   } = useScan();
 
+  const isRedeemingProcess = redeeming || (verified && error && !redeemSuccess);
+
+  if (isRedeemingProcess) {
+    return (
+      <RedeemLoadingStep
+        error={error}
+        onBack={() => setError(null)}
+      />
+    );
+  }
+
   return (
-    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-8 flex flex-col items-center">
-      <div className="w-full max-w-2xl text-left mb-6">
-        <h1 className="text-headline-lg font-headline-lg text-on-background">Scan Note</h1>
+    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col items-center">
+      <div className="w-full max-w-2xl mb-6">
+        <PageHeader title="Scanner" />
       </div>
 
       {!noteInfo ? (
@@ -52,7 +68,7 @@ export const Scan = () => {
       ) : (
         <div className="w-full max-w-2xl bg-surface-container-high rounded-xl p-6 relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-outline-variant/30 flex flex-col space-y-6">
           <div className="noise-overlay"></div>
-          <div className="relative z-10 flex flex-col space-y-6">
+          <div className="flex flex-col space-y-6">
             
             <NoteVerificationResult 
               noteInfo={noteInfo}
@@ -63,15 +79,28 @@ export const Scan = () => {
               onVerify={handleVerify}
             />
 
-            {verified && noteInfo.type === 'full' && (
+            {verified && noteInfo.type === 'full' && !isRedeemingProcess && !redeemSuccess && (
               <RedeemNoteForm 
                 invoice={invoice}
                 setInvoice={setInvoice}
                 redeeming={redeeming}
-                redeemSuccess={redeemSuccess}
-                error={error}
                 onRedeem={handleRedeem}
+                noteAmount={noteInfo.amount}
+                redeemMethod={redeemMethod}
+                setRedeemMethod={setRedeemMethod}
+                hasExtraProofs={verifyResult ? verifyResult.proof_total_sats > verifyResult.face_value_sats : false}
               />
+            )}
+
+
+
+            {redeemSuccess && (
+              <div className="pt-6 border-t border-outline-variant/20 mt-4">
+                <div className="text-center text-emerald-400 py-6 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-3" />
+                  <div className="font-bold text-lg">Successfully Redeemed!</div>
+                </div>
+              </div>
             )}
             
           </div>

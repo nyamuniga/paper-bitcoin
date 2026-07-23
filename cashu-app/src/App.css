@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Sora:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 @theme {
   --color-surface-tint: #d49d42;
@@ -54,11 +54,12 @@
   --spacing-card-gap: 20px;
   --spacing-base: 8px;
 
-  --font-label-caps: 'JetBrains Mono', monospace;
-  --font-headline-lg: 'Sora', sans-serif;
-  --font-headline-lg-mobile: 'Sora', sans-serif;
-  --font-body-md: 'Inter', sans-serif;
-  --font-display-lg: 'Sora', sans-serif;
+  --font-label-caps: 'Poppins', sans-serif;
+  --font-headline-lg: 'Poppins', sans-serif;
+  --font-headline-lg-mobile: 'Poppins', sans-serif;
+  --font-body-md: 'Poppins', sans-serif;
+  --font-display-lg: 'Poppins', sans-serif;
+  --font-sans: 'Poppins', sans-serif;
 
   --text-label-caps: 12px;
   --text-label-caps--line-height: 16px;
@@ -120,4 +121,8 @@ body {
 .divider-dashed {
   border-top: 1px dashed var(--color-outline-variant);
   opacity: 0.5;
+}
+
+body {
+  overscroll-behavior-y: none;
 }

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Loader2 } from 'lucide-react';
+import { PageHeader } from '../shared/PageHeader';
 import QRCode from 'react-qr-code';
 import { useWalletStore } from '../../store/wallet';
+import { useBitcoin } from '../../hooks/useBitcoin';
 
 interface InvoicePaymentPendingProps {
   invoicePayload: any;
@@ -23,23 +24,23 @@ export const InvoicePaymentPending: React.FC<InvoicePaymentPendingProps> = ({
 }) => {
   const [internalLoading, setInternalLoading] = useState(false);
   const balance = useWalletStore((s) => s.balanceSats);
+  const { paying, payInvoice } = useBitcoin();
 
   const handlePayFromWallet = async () => {
     setInternalLoading(true);
-    try {
-      await invoke('pay_invoice', { invoice: invoicePayload.invoice });
-    } catch (e: any) {
-      onError("Payment failed: " + e.toString());
+    const success = await payInvoice(invoicePayload.invoice);
+    if (!success) {
+      onError("Payment failed");
       setInternalLoading(false);
     }
   };
 
-  const isLoading = loading || internalLoading;
+  const isLoading = loading || internalLoading || paying;
 
   return (
-    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-8 flex flex-col items-center">
-      <div className="w-full max-w-2xl text-left mb-6">
-        <h1 className="text-headline-lg font-headline-lg text-on-background">Pay Invoice</h1>
+    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col items-center">
+      <div className="w-full max-w-2xl mb-6">
+        <PageHeader title="Pay Invoice" />
       </div>
 
       <div className="w-full max-w-2xl bg-surface-container-high rounded-xl p-8 relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-outline-variant/30 flex flex-col space-y-6 items-center text-center">
@@ -49,7 +50,7 @@ export const InvoicePaymentPending: React.FC<InvoicePaymentPendingProps> = ({
           <div className="bg-white p-4 rounded-xl inline-block shadow-lg">
             <QRCode value={invoicePayload.invoice} size={200} />
           </div>
-          <div className="text-headline-lg font-headline-lg text-primary">{invoicePayload.total_sats} sats</div>
+          <div className="text-headline-lg font-headline-lg text-primary">₿{invoicePayload.total_sats}</div>
           <div className="text-xs text-on-surface-variant mb-2 truncate w-full max-w-sm px-4 py-3 bg-surface-container-lowest rounded-lg border border-outline-variant/30 select-all shadow-inner">{invoicePayload.invoice}</div>
 
           {balance >= invoicePayload.total_sats ? (

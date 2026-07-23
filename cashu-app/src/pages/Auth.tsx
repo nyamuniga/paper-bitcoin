@@ -19,7 +19,11 @@ export const Auth = () => {
     generatedMnemonic,
     setGeneratedMnemonic,
     triggerError,
-    handleClearError
+    unlockWallet,
+    createWallet,
+    restoreWallet,
+    resetWallet,
+    restoreProgress
   } = useAuth();
 
   if (isSetup === null) {
@@ -28,45 +32,45 @@ export const Auth = () => {
 
   if (generatedMnemonic) {
     return (
-      <RecoveryPhraseDisplay 
-        mnemonic={generatedMnemonic} 
-        onSaved={() => setGeneratedMnemonic('')} 
+      <RecoveryPhraseDisplay
+        mnemonic={generatedMnemonic}
+        onSaved={() => setGeneratedMnemonic('')}
       />
     );
   }
 
   if (showConfirmReset) {
     return (
-      <ConfirmResetDialog 
+      <ConfirmResetDialog
         onCancel={() => setShowConfirmReset(false)}
         onResetComplete={() => {
           setIsSetup(false);
           setMode('create');
           setShowConfirmReset(false);
         }}
-        onError={triggerError}
+        onConfirm={resetWallet}
       />
     );
   }
 
   return (
     <div className="flex h-screen flex-col items-center justify-center p-6 bg-background">
-      <div className={`w-full max-w-sm bg-surface/50 backdrop-blur-xl border border-gray-800 rounded-3xl p-8 shadow-2xl transition-transform duration-300 ${shake ? 'animate-shake' : ''}`}>
-        
+      <div className={`w-full max-w-sm bg-surface-container-high border border-gray-800 rounded-3xl p-8 shadow-2xl transition-transform duration-300 ${shake ? 'animate-shake' : ''}`}>
+
         <div className="flex justify-center mb-6 text-primary">
           {mode === 'login' && <Lock size={48} strokeWidth={1.5} />}
           {mode === 'create' && <Plus size={48} strokeWidth={1.5} />}
           {mode === 'restore' && <KeyRound size={48} strokeWidth={1.5} />}
         </div>
-        
+
         <h1 className="text-3xl font-bold mb-2 text-center">
           {mode === 'login' ? 'Welcome Back' : mode === 'create' ? 'Create Wallet' : 'Restore Wallet'}
         </h1>
-        
-        <p className="text-gray-400 text-center text-sm mb-8">
-          {mode === 'login' ? 'Enter your passphrase to unlock your wallet' : 
-           mode === 'create' ? 'Secure your new wallet with a strong passphrase' : 
-           'Enter your recovery phrase and set a new local passphrase'}
+
+        <p className="text-gray-300 text-center text-sm mb-8">
+          {mode === 'login' ? 'Enter your passphrase to unlock your wallet' :
+            mode === 'create' ? 'Secure your new wallet with a strong passphrase' :
+              'Enter your recovery phrase and set a new local passphrase'}
         </p>
 
         {errorMsg && (
@@ -76,28 +80,29 @@ export const Auth = () => {
         )}
 
         {mode === 'login' && (
-          <LoginForm 
+          <LoginForm
             onRestore={() => setMode('restore')}
             onReset={() => setShowConfirmReset(true)}
             onError={triggerError}
-            onClearError={handleClearError}
+            onLogin={unlockWallet}
           />
         )}
 
         {mode === 'create' && (
-          <CreateWalletForm 
+          <CreateWalletForm
             onRestore={() => setMode('restore')}
             onError={triggerError}
-            onClearError={handleClearError}
+            onCreate={createWallet}
             onSuccess={setGeneratedMnemonic}
           />
         )}
 
         {mode === 'restore' && (
-          <RestoreWalletForm 
+          <RestoreWalletForm
             onCancel={() => setMode(isSetup ? 'login' : 'create')}
             onError={triggerError}
-            onClearError={handleClearError}
+            onRestore={restoreWallet}
+            restoreProgress={restoreProgress}
           />
         )}
       </div>
