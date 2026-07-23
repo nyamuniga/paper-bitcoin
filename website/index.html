@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BitNotes | Physical eCash Wallet</title>
+    <meta name="description" content="A seamless bridge between traditional finance, the Lightning Network, and the Bitcoin base layer. Download the BitNotes Android Wallet today.">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-bg: #1e2a1d;
+            --color-surface: #243323;
+            --color-surface-glass: rgba(36, 51, 35, 0.6);
+            --color-primary: #d49d42;
+            --color-primary-light: #ffb874;
+            --color-text-main: #faf5ec;
+            --color-text-dim: #d8d1c3;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            background-color: var(--color-bg);
+            color: var(--color-text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Ambient Background Glows */
+        .bg-glow-1, .bg-glow-2 {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            z-index: -1;
+            opacity: 0.15;
+            animation: pulse 8s infinite alternate ease-in-out;
+        }
+
+        .bg-glow-1 {
+            background: var(--color-primary-light);
+            width: 400px;
+            height: 400px;
+            top: -100px;
+            left: -100px;
+        }
+
+        .bg-glow-2 {
+            background: #ffffff;
+            width: 300px;
+            height: 300px;
+            bottom: -50px;
+            right: -100px;
+            animation-delay: -4s;
+        }
+
+        /* Noise Texture Overlay */
+        .noise-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            opacity: 0.03;
+            pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        nav {
+            padding: 2rem 4rem;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        .brand-logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-weight: 700;
+            font-size: 1.5rem;
+            color: var(--color-text-main);
+            text-decoration: none;
+            letter-spacing: -0.02em;
+        }
+
+        .brand-logo img {
+            width: 40px;
+            height: 40px;
+            object-fit: contain;
+            filter: drop-shadow(0 0 10px rgba(212, 157, 66, 0.3));
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .hero-container {
+            max-width: 1200px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+        }
+
+        .hero-content h1 {
+            font-size: 4rem;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.03em;
+        }
+
+        .hero-content h1 span {
+            background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
+        }
+
+        .hero-content p {
+            font-size: 1.125rem;
+            color: var(--color-text-dim);
+            margin-bottom: 2.5rem;
+            line-height: 1.6;
+            max-width: 90%;
+        }
+
+        .download-card {
+            background: var(--color-surface-glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 24px;
+            padding: 3rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
+            transform: translateY(0);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
+        }
+
+        .download-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 35px 60px -15px rgba(0, 0, 0, 0.6), 0 0 30px rgba(212, 157, 66, 0.15);
+        }
+
+        .download-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(212, 157, 66, 0.5), transparent);
+        }
+
+        .download-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(212, 157, 66, 0.15);
+            color: var(--color-primary-light);
+            padding: 0.5rem 1rem;
+            border-radius: 100px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(212, 157, 66, 0.3);
+        }
+
+        .download-card h2 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .download-card p {
+            color: var(--color-text-dim);
+            margin-bottom: 2rem;
+            font-size: 1rem;
+        }
+
+        .btn-download {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary));
+            color: #1a1a1a;
+            text-decoration: none;
+            padding: 1.25rem 2rem;
+            border-radius: 16px;
+            font-weight: 700;
+            font-size: 1.125rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 20px -5px rgba(212, 157, 66, 0.4);
+        }
+
+        .btn-download:hover {
+            transform: scale(1.02);
+            box-shadow: 0 15px 30px -5px rgba(212, 157, 66, 0.6);
+        }
+
+        .btn-download svg {
+            width: 24px;
+            height: 24px;
+            transition: transform 0.3s ease;
+        }
+
+        .btn-download:hover svg {
+            transform: translateY(3px);
+        }
+
+        .features-list {
+            margin-top: 2rem;
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .features-list li {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--color-text-dim);
+            font-size: 0.9rem;
+        }
+
+        .features-list li svg {
+            color: var(--color-primary-light);
+            flex-shrink: 0;
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0% { transform: scale(1) translate(0, 0); opacity: 0.1; }
+            100% { transform: scale(1.2) translate(20px, -20px); opacity: 0.2; }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-up {
+            animation: fadeIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+
+        @media (max-width: 968px) {
+            .hero-container {
+                grid-template-columns: 1fr;
+                gap: 3rem;
+                text-align: center;
+            }
+            .hero-content p {
+                margin: 0 auto 2.5rem;
+            }
+            .features-list li {
+                justify-content: center;
+            }
+            nav {
+                justify-content: center;
+                padding: 1.5rem;
+            }
+            .hero-content h1 {
+                font-size: 3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="noise-overlay"></div>
+    <div class="bg-glow-1"></div>
+    <div class="bg-glow-2"></div>
+
+    <nav>
+        <a href="#" class="brand-logo">
+            <img src="logo.png" alt="BitNotes Logo">
+            BitNotes
+        </a>
+    </nav>
+
+    <main>
+        <div class="hero-container">
+            <div class="hero-content">
+                <h1 class="animate-up">Pioneering <br><span>Multi-Mint Physical eCash</span></h1>
+                <p class="animate-up delay-1">Print and verify physical bearer notes backed by multiple independent mints simultaneously. A seamless, unified wallet bringing together traditional finance, Lightning, and the Bitcoin base layer.</p>
+                <div class="features-list animate-up delay-2">
+                    <li>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        Physical eCash Issuance & Verification
+                    </li>
+                    <li>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        Lightning Network Sending & Receiving
+                    </li>
+                    <li>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        Native On-Chain Bitcoin Swaps
+                    </li>
+                    <li>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        Seamless Fiat On/Off Ramps
+                    </li>
+                </div>
+            </div>
+
+            <div class="download-section animate-up delay-1">
+                <div class="download-card">
+                    <div class="download-badge" id="version-badge">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <span id="version-text">Latest Release v0.1.2</span>
+                    </div>
+                    <h2>Get the Android App</h2>
+                    <p>Download the official BitNotes wallet APK directly to your Android device to get started.</p>
+                    
+                    <a href="#" id="download-link" class="btn-download">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Download APK
+                    </a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Load the environment configuration -->
+    <script src="config.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            if (window.ENV && window.ENV.APK_LINK) {
+                const apkLink = window.ENV.APK_LINK;
+                
+                // Update the download button href
+                document.getElementById('download-link').href = apkLink;
+                
+                // Extract version string (e.g., v0.1.2) from the URL using Regex
+                const versionMatch = apkLink.match(/(v\d+\.\d+\.\d+)/);
+                if (versionMatch && versionMatch[1]) {
+                    document.getElementById('version-text').innerText = "Latest Release " + versionMatch[1];
+                }
+            }
+        });
+    </script>
+</body>
+</html>
