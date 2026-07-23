@@ -7,430 +7,486 @@
     <title>BitNotes | Physical Ecash Wallet</title>
     <link rel="icon" type="image/png" href="logo.png">
     <meta name="description"
-        content="A seamless bridge between traditional finance, the Lightning Network, and the Bitcoin base layer. Download the BitNotes Android Wallet today.">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+        content="Pioneering multi-mint physical ecash. A seamless bridge between traditional finance, the Lightning Network, and the Bitcoin base layer.">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --color-bg: #1e2a1d;
-            --color-surface: #243323;
-            --color-surface-glass: rgba(36, 51, 35, 0.6);
-            --color-primary: #d49d42;
-            --color-primary-light: #ffb874;
-            --color-text-main: #faf5ec;
-            --color-text-dim: #d8d1c3;
+            --color-ink: #1a1a18;
+            --color-ink-soft: #3d3b35;
+            --color-ink-muted: #6b675c;
+            --color-gold: #9e7c38;
+            --color-gold-light: #c9a54a;
+            --color-gold-dark: #7a5f2a;
+            --color-cream: #f8f5ef;
+            --color-cream-dark: #eee9df;
+            --color-border: rgba(158, 124, 56, 0.25);
         }
 
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
+        }
+
+        html {
+            scroll-behavior: smooth;
         }
 
         body {
-            background-color: var(--color-bg);
-            /* Dark green overlay fading to slightly darker, combined with the new image */
-            background-image: linear-gradient(rgba(30, 42, 29, 0.60), rgba(30, 42, 29, 0.70)), url('wallet-background.jpg');
+            background-color: var(--color-cream);
+            background-image: url('wallet-background.jpg');
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
-            color: var(--color-text-main);
+            color: var(--color-ink);
             min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ── Header ── */
+        header {
+            padding: 1.5rem 2rem;
             display: flex;
-            flex-direction: column;
-            overflow-x: hidden;
-            position: relative;
+            justify-content: center;
         }
 
-        /* Ambient Background Glows */
-        .bg-glow-1,
-        .bg-glow-2,
-        .bg-glow-3 {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(120px);
-            z-index: -1;
-            opacity: 0.15;
-            animation: pulse 8s infinite alternate ease-in-out;
-        }
-
-        .bg-glow-1 {
-            background: var(--color-primary-light);
-            width: 400px;
-            height: 400px;
-            top: -100px;
-            left: -100px;
-        }
-
-        .bg-glow-2 {
-            background: #8c4f00;
-            /* Warm earthy terracotta/amber */
-            width: 350px;
-            height: 350px;
-            bottom: -50px;
-            right: -100px;
-            animation-delay: -4s;
-        }
-
-        .bg-glow-3 {
-            background: var(--color-primary);
-            width: 250px;
-            height: 250px;
-            top: 40%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            animation-delay: -2s;
-            opacity: 0.1;
-        }
-
-        /* Noise Texture Overlay */
-        .noise-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: -1;
-            opacity: 0.03;
-            pointer-events: none;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-        }
-
-        nav {
-
-            padding: 2rem 4rem;
+        .header-inner {
+            max-width: 960px;
+            width: 100%;
             display: flex;
             align-items: center;
-            justify-content: flex-start;
+            justify-content: space-between;
         }
 
         .brand-logo {
             display: flex;
             align-items: center;
-            gap: 1rem;
-            font-weight: 700;
-            font-size: 1.5rem;
-            color: var(--color-text-main);
+            gap: 0.75rem;
             text-decoration: none;
-            letter-spacing: -0.02em;
+            color: var(--color-ink);
         }
 
         .brand-logo img {
+            width: 36px;
+            height: 36px;
+            object-fit: contain;
+        }
+
+        .brand-logo span {
+            font-family: 'Playfair Display', serif;
+            font-weight: 600;
+            font-size: 1.25rem;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-version {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--color-gold-dark);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: rgba(158, 124, 56, 0.1);
+            padding: 0.35rem 0.85rem;
+            border-radius: 100px;
+            border: 1px solid var(--color-border);
+        }
+
+        /* ── Divider ── */
+        .divider {
+            max-width: 960px;
+            margin: 0 auto;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--color-border), transparent);
+        }
+
+        /* ── Main Content ── */
+        main {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 4rem 2rem 3rem;
+        }
+
+        /* ── Hero Section ── */
+        .hero {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .hero-eyebrow {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--color-gold);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+
+        .hero-eyebrow::before,
+        .hero-eyebrow::after {
+            content: '';
+            width: 40px;
+            height: 1px;
+            background: var(--color-gold);
+            opacity: 0.5;
+        }
+
+        .hero h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 3.5rem;
+            font-weight: 700;
+            line-height: 1.15;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.01em;
+        }
+
+        .hero h1 em {
+            font-style: normal;
+            color: var(--color-gold);
+        }
+
+        .hero-description {
+            font-size: 1.1rem;
+            line-height: 1.7;
+            color: var(--color-ink-soft);
+            max-width: 620px;
+            margin: 0 auto 3rem;
+            font-weight: 300;
+        }
+
+        /* ── Features Grid ── */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: var(--color-border);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 4rem;
+        }
+
+        .feature-item {
+            background: rgba(248, 245, 239, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 2rem 1.25rem;
+            text-align: center;
+            transition: background 0.3s ease;
+        }
+
+        .feature-item:hover {
+            background: rgba(248, 245, 239, 0.95);
+        }
+
+        .feature-icon {
             width: 40px;
             height: 40px;
-            object-fit: contain;
-            filter: drop-shadow(0 0 10px rgba(212, 157, 66, 0.3));
-        }
-
-        main {
-            flex: 1;
+            margin: 0 auto 1rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 2rem;
+            color: var(--color-gold);
         }
 
-        .hero-container {
-            max-width: 1200px;
-            width: 100%;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4rem;
-            align-items: center;
+        .feature-item h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--color-ink);
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
         }
 
-        .hero-content h1 {
-            font-size: 4rem;
-            line-height: 1.1;
-            margin-bottom: 1.5rem;
-            letter-spacing: -0.03em;
+        .feature-item p {
+            font-size: 0.8rem;
+            color: var(--color-ink-muted);
+            line-height: 1.5;
+            font-weight: 300;
         }
 
-        .hero-content h1 span {
-            background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            display: inline-block;
+        /* ── Download Section ── */
+        .download-section {
+            text-align: center;
         }
 
-        .hero-content p {
-            font-size: 1.125rem;
-            color: var(--color-text);
+        .download-section h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--color-ink);
+            margin-bottom: 0.75rem;
+        }
+
+        .download-section > p {
+            color: var(--color-ink-muted);
+            font-size: 0.95rem;
             margin-bottom: 2.5rem;
-            line-height: 1.6;
-            max-width: 90%;
+            font-weight: 300;
         }
 
-        .download-card {
-            background: var(--color-surface-glass);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 24px;
-            padding: 3rem;
-            max-width: 500px;
-            margin: 0 auto;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            position: relative;
-            overflow: hidden;
-            transform: translateY(0);
-            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
+        .download-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
         }
 
-        .download-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 35px 60px -15px rgba(0, 0, 0, 0.6), 0 0 30px rgba(212, 157, 66, 0.15);
-        }
-
-        .download-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            /* Tribal pattern strip along the top of the card */
-            background-image: url("data:image/svg+xml,%3Csvg width='20' height='4' viewBox='0 0 20 4' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 4h4L10 0l6 4h4V0h-4L10 4 4 0H0z' fill='%23d49d42' fill-opacity='0.8'/%3E%3C/svg%3E");
-            background-repeat: repeat-x;
-        }
-
-        .download-badge {
+        .btn {
             display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
-            background: rgba(212, 157, 66, 0.15);
-            color: var(--color-primary-light);
-            padding: 0.5rem 1rem;
-            border-radius: 100px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            margin-bottom: 2rem;
-            border: 1px solid rgba(212, 157, 66, 0.3);
-        }
-
-        .download-card h2 {
-            font-size: 2rem;
-            margin-bottom: 1rem;
-        }
-
-        .download-card p {
-            color: var(--color-text-dim);
-            margin-bottom: 2rem;
-            font-size: 1rem;
-        }
-
-        .btn-download {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1rem;
-            background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary));
-            color: #1a1a1a;
+            gap: 0.6rem;
+            padding: 0.9rem 2rem;
+            border-radius: 8px;
             text-decoration: none;
-            padding: 1.25rem 2rem;
-            border-radius: 16px;
-            font-weight: 700;
-            font-size: 1.125rem;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 10px 20px -5px rgba(212, 157, 66, 0.4);
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: all 0.25s ease;
+            cursor: pointer;
         }
 
-        .btn-download:hover {
-            transform: scale(1.02);
-            box-shadow: 0 15px 30px -5px rgba(212, 157, 66, 0.6);
-        }
-
-        .btn-download svg {
-            width: 24px;
-            height: 24px;
-            transition: transform 0.3s ease;
-        }
-
-        .btn-download:hover svg {
-            transform: translateY(3px);
-        }
-
-        .features-list {
-            margin-top: 2rem;
-            list-style: none;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .features-list li {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            color: var(--color-text);
-            font-size: 0.9rem;
-        }
-
-        .features-list li svg {
-            color: var(--color-primary-light);
+        .btn svg {
+            width: 18px;
+            height: 18px;
             flex-shrink: 0;
         }
 
-        /* Animations */
-        @keyframes pulse {
-            0% {
-                transform: scale(1) translate(0, 0);
-                opacity: 0.1;
-            }
-
-            100% {
-                transform: scale(1.2) translate(20px, -20px);
-                opacity: 0.2;
-            }
+        .btn-primary {
+            background: var(--color-gold);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(158, 124, 56, 0.3);
         }
 
-        @keyframes fadeIn {
+        .btn-primary:hover {
+            background: var(--color-gold-dark);
+            box-shadow: 0 4px 16px rgba(158, 124, 56, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--color-ink-soft);
+            border: 1px solid var(--color-border);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(158, 124, 56, 0.06);
+            border-color: var(--color-gold);
+            color: var(--color-gold-dark);
+            transform: translateY(-1px);
+        }
+
+        /* ── Footer ── */
+        footer {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .footer-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--color-border), transparent);
+            margin-bottom: 2rem;
+        }
+
+        .footer-text {
+            font-size: 0.75rem;
+            color: var(--color-ink-muted);
+            letter-spacing: 0.05em;
+        }
+
+        .footer-text a {
+            color: var(--color-gold);
+            text-decoration: none;
+        }
+
+        .footer-text a:hover {
+            text-decoration: underline;
+        }
+
+        /* ── Animations ── */
+        @keyframes fadeUp {
             from {
                 opacity: 0;
-                transform: translateY(20px);
+                transform: translateY(16px);
             }
-
             to {
                 opacity: 1;
                 transform: translateY(0);
             }
         }
 
-        .animate-up {
-            animation: fadeIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        .animate {
+            opacity: 0;
+            animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
         }
 
-        .delay-1 {
-            animation-delay: 0.1s;
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.25rem;
+            }
+
+            .hero-description {
+                font-size: 1rem;
+            }
+
+            .features {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            main {
+                padding: 3rem 1.5rem 2rem;
+            }
+
+            .header-inner {
+                justify-content: center;
+                gap: 1rem;
+            }
+
+            .nav-version {
+                display: none;
+            }
         }
 
-        .delay-2 {
-            animation-delay: 0.2s;
-        }
+        @media (max-width: 480px) {
+            .hero h1 {
+                font-size: 1.85rem;
+            }
 
-        @media (max-width: 968px) {
-            .hero-container {
+            .features {
                 grid-template-columns: 1fr;
-                gap: 3rem;
-                text-align: center;
             }
 
-            .hero-content p {
-                margin: 0 auto 2.5rem;
+            .download-buttons {
+                flex-direction: column;
+                align-items: center;
             }
 
-            .features-list li {
+            .btn {
+                width: 100%;
+                max-width: 300px;
                 justify-content: center;
-            }
-
-            nav {
-                justify-content: center;
-                padding: 1.5rem;
-            }
-
-            .hero-content h1 {
-                font-size: 3rem;
             }
         }
     </style>
 </head>
 
 <body>
-    <div class="noise-overlay"></div>
-    <div class="bg-glow-1"></div>
-    <div class="bg-glow-2"></div>
-    <div class="bg-glow-3"></div>
+    <!-- Header -->
+    <header>
+        <div class="header-inner">
+            <a href="#" class="brand-logo">
+                <img src="logo.png" alt="BitNotes">
+                <span>BitNotes</span>
+            </a>
+            <span class="nav-version" id="version-text">v0.1.3</span>
+        </div>
+    </header>
 
-    <nav>
-        <a href="#" class="brand-logo">
-            <img src="logo.png" alt="BitNotes Logo">
-            BitNotes
-        </a>
-    </nav>
+    <div class="divider"></div>
 
+    <!-- Main Content -->
     <main>
-        <div class="hero-container">
-            <div class="hero-content">
-                <h1 class="animate-up">Pioneering <br><span>Multi-Mint Physical Ecash</span></h1>
-                <p class="animate-up delay-1">Print and verify physical bearer notes backed by multiple independent
-                    mints simultaneously. A seamless, unified wallet bringing together traditional finance, Lightning,
-                    and the Bitcoin base layer.</p>
-                <div class="features-list animate-up delay-2">
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                        </svg>
-                        Physical Ecash Issuance & Verification
-                    </li>
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                        </svg>
-                        Lightning Network Sending & Receiving
-                    </li>
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                        </svg>
-                        Native On-Chain Bitcoin Swaps
-                    </li>
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                        </svg>
-                        Seamless Fiat On/Off Ramps
-                    </li>
+        <!-- Hero -->
+        <section class="hero">
+            <p class="hero-eyebrow animate">Multi-Mint Physical Ecash</p>
+            <h1 class="animate delay-1">The wallet that bridges<br><em>digital and physical</em> money</h1>
+            <p class="hero-description animate delay-2">
+                Print and verify physical bearer notes backed by multiple independent mints simultaneously.
+                A unified wallet bringing together ecash, Lightning, on-chain Bitcoin, and fiat.
+            </p>
+        </section>
+
+        <!-- Features -->
+        <div class="features animate delay-3">
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="6" width="20" height="12" rx="2"/>
+                        <circle cx="12" cy="12" r="2"/>
+                        <path d="M6 12h.01M18 12h.01"/>
+                    </svg>
                 </div>
+                <h3>Physical Ecash</h3>
+                <p>Issue and verify cryptographic bearer notes you can hold in your hand</p>
             </div>
-
-            <div class="download-section animate-up delay-1">
-                <div class="download-card">
-                    <div class="download-badge" id="version-badge">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="7 10 12 15 17 10"></polyline>
-                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                        </svg>
-                        <span id="version-text">Latest Release v0.1.2</span>
-                    </div>
-                    <h2>Get the App</h2>
-                    <p>Download the official BitNotes wallet to your Android device or Mac to get started.</p>
-
-                    <div style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;">
-                        <a href="#" id="download-link" class="btn-download" style="flex: 1; min-width: 200px;">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                            Android
-                        </a>
-                        <a href="#" id="mac-download-link" class="btn-download"
-                            style="flex: 1; min-width: 200px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--color-text-main); box-shadow: none;">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                            MacOs
-                        </a>
-                    </div>
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                    </svg>
                 </div>
+                <h3>Lightning</h3>
+                <p>Instant payments over the Lightning Network</p>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                    </svg>
+                </div>
+                <h3>On-Chain</h3>
+                <p>Native Bitcoin swaps via Boltz exchange</p>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="1" x2="12" y2="23"/>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    </svg>
+                </div>
+                <h3>Fiat Ramps</h3>
+                <p>Seamless on and off ramps to traditional currencies</p>
             </div>
         </div>
+
+        <!-- Download -->
+        <section class="download-section animate delay-4">
+            <h2>Get the Wallet</h2>
+            <p>Download BitNotes for your platform and start transacting.</p>
+            <div class="download-buttons">
+                <a href="#" id="download-link" class="btn btn-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Android
+                </a>
+                <a href="#" id="mac-download-link" class="btn btn-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    macOS
+                </a>
+            </div>
+        </section>
     </main>
 
-    <!-- Load the environment configuration -->
+    <!-- Footer -->
+    <footer>
+        <div class="footer-divider"></div>
+        <p class="footer-text">Built on the <a href="https://cashu.space" target="_blank" rel="noopener">Cashu</a> protocol &middot; Open source</p>
+    </footer>
+
+    <!-- Config + Dynamic Version -->
     <script src="config.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
@@ -438,14 +494,12 @@
                 const apkLink = window.ENV.APK_LINK;
                 const macLink = window.ENV.MAC_LINK;
 
-                // Update the download button hrefs
                 if (apkLink) document.getElementById('download-link').href = apkLink;
                 if (macLink) document.getElementById('mac-download-link').href = macLink;
 
-                // Extract version string (e.g., v0.1.2) from the URL using Regex
-                const versionMatch = apkLink ? apkLink.match(/(v\d+\.\d+\.\d+)/) : null;
+                const versionMatch = apkLink.match(/(v\d+\.\d+\.\d+)/);
                 if (versionMatch && versionMatch[1]) {
-                    document.getElementById('version-text').innerText = "Latest Release " + versionMatch[1];
+                    document.getElementById('version-text').innerText = versionMatch[1];
                 }
             }
         });
