@@ -37,9 +37,22 @@
             position: relative;
         }
 
+        /* African-inspired Geometric Pattern Overlay */
+        .african-pattern-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: -2;
+            opacity: 0.05;
+            pointer-events: none;
+            /* Interlocking diamonds and triangles often seen in mudcloth and woven textiles */
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d49d42' fill-opacity='1'%3E%3Cpath d='M30 30L15 45 0 30 15 15zM15 15L0 0h30zM45 45L30 60h30zM45 15L30 0h30z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            background-size: 60px 60px;
+        }
+
         /* Ambient Background Glows */
         .bg-glow-1,
-        .bg-glow-2 {
+        .bg-glow-2,
+        .bg-glow-3 {
             position: absolute;
             border-radius: 50%;
             filter: blur(120px);
@@ -57,12 +70,23 @@
         }
 
         .bg-glow-2 {
-            background: #ffffff;
-            width: 300px;
-            height: 300px;
+            background: #8c4f00; /* Warm earthy terracotta/amber */
+            width: 350px;
+            height: 350px;
             bottom: -50px;
             right: -100px;
             animation-delay: -4s;
+        }
+        
+        .bg-glow-3 {
+            background: var(--color-primary);
+            width: 250px;
+            height: 250px;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation-delay: -2s;
+            opacity: 0.1;
         }
 
         /* Noise Texture Overlay */
@@ -164,8 +188,10 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(212, 157, 66, 0.5), transparent);
+            height: 4px;
+            /* Tribal pattern strip along the top of the card */
+            background-image: url("data:image/svg+xml,%3Csvg width='20' height='4' viewBox='0 0 20 4' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 4h4L10 0l6 4h4V0h-4L10 4 4 0H0z' fill='%23d49d42' fill-opacity='0.8'/%3E%3C/svg%3E");
+            background-repeat: repeat-x;
         }
 
         .download-badge {
@@ -312,9 +338,11 @@
 </head>
 
 <body>
+    <div class="african-pattern-overlay"></div>
     <div class="noise-overlay"></div>
     <div class="bg-glow-1"></div>
     <div class="bg-glow-2"></div>
+    <div class="bg-glow-3"></div>
 
     <nav>
         <a href="#" class="brand-logo">
