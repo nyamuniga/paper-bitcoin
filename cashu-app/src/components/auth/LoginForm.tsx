@@ -1,33 +1,24 @@
 import React, { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, Unlock } from 'lucide-react';
-import { useWalletStore } from '../../store/wallet';
 
 interface LoginFormProps {
   onRestore: () => void;
   onReset: () => void;
   onError: (msg: string) => void;
-  onClearError: () => void;
+  onLogin: (passphrase: string) => Promise<boolean>;
 }
 
-export const LoginForm: React.FC<LoginFormProps> = ({ onRestore, onReset, onError, onClearError }) => {
+export const LoginForm: React.FC<LoginFormProps> = ({ onRestore, onReset, onError, onLogin }) => {
   const [passphrase, setPassphrase] = useState('');
   const [loading, setLoading] = useState(false);
-  const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passphrase) return onError('Please enter your passphrase');
-    
+
     setLoading(true);
-    onClearError();
-    try {
-      await invoke('unlock_wallet', { passphrase });
-      await refreshWallet();
-    } catch (e) {
-      console.error(e);
-      onError(String(e));
-    } finally {
+    const success = await onLogin(passphrase);
+    if (!success) {
       setLoading(false);
     }
   };
@@ -50,10 +41,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onRestore, onReset, onErro
         {loading ? <RefreshCw className="animate-spin" size={20} /> : <span className="flex items-center gap-2"><Unlock size={18} /> Unlock Wallet</span>}
       </button>
       <div className="flex flex-col items-center mt-2 space-y-2">
-        <button type="button" onClick={onRestore} className="text-sm text-gray-500 hover:text-primary transition-colors">
+        <button type="button" onClick={onRestore} className="text-sm text-gray-300 hover:text-primary transition-colors">
           Forgot passphrase? Restore from backup
         </button>
-        <button type="button" onClick={onReset} className="text-sm text-red-500/70 hover:text-red-500 transition-colors">
+        <button type="button" onClick={onReset} className="text-sm text-red-400 hover:text-red-500 transition-colors">
           Lost everything? Delete wallet & start fresh
         </button>
       </div>

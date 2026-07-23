@@ -281,8 +281,12 @@ async fn redeem_note_mpp(
         if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == redeem_tx_id) {
             tx.status = TransactionStatus::Failed;
         }
+        // Refund the note's proofs into the user's wallet so they don't lose the money
+        for (mint, proofs, _) in &mint_data {
+            state.proofs.entry(mint.clone()).or_default().extend(proofs.clone());
+        }
         state.save_encrypted(wallet_path, passphrase).ok();
-        return Err(anyhow!("MPP payment failed: one or more legs did not succeed."));
+        return Err(anyhow!("MPP payment failed: one or more legs did not succeed. The note's funds have been deposited into your local wallet."));
     }
 
     // ── Step 7: Process change from all mints ──────────────────────────────
@@ -747,14 +751,20 @@ pub async fn redeem_note(
 
 // ─── Pay Invoice ────────────────────────────────────────────────────────────────
 
-pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, invoice: &str) -> Result<u64> {
+pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, invoice: &str, target_mint: Option<String>) -> Result<u64> {
     let mut selected_mint = None;
     let mut required_amt = 0;
     let mut fee_reserve = 0;
     let mut quote_id = String::new();
     let mut mint_errors = Vec::new();
 
-    for mint in state.proofs.keys() {
+    let mints_to_check: Vec<String> = if let Some(m) = target_mint {
+        vec![m]
+    } else {
+        state.proofs.keys().cloned().collect()
+    };
+
+    for mint in &mints_to_check {
         let client = MintClient::new(mint);
         let resp = client.http.post(format!("{}/v1/melt/quote/bolt11", client.url))
             .json(&serde_json::json!({ "request": invoice, "unit": "sat" })).send().await;

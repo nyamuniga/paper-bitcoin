@@ -18,6 +18,7 @@ pub fn check_api_error(v: &serde_json::Value, prefix: &str) -> Result<()> {
     Ok(())
 }
 
+#[derive(Clone)]
 pub struct MintClient {
     pub http: reqwest::Client,
     pub url: String,
@@ -199,6 +200,54 @@ impl MintClient {
             .unwrap_or_default();
 
         Ok((paid, change))
+    }
+
+    /// Send a swap request (NUT-03).
+    /// Used to exchange existing proofs for new proofs of desired denominations.
+    pub async fn swap_tokens(
+        &self,
+        inputs: Vec<serde_json::Value>,
+        outputs: Vec<serde_json::Value>,
+    ) -> Result<Vec<serde_json::Value>> {
+        let req = serde_json::json!({
+            "inputs": inputs,
+            "outputs": outputs
+        });
+
+        let v: serde_json::Value = self.http.post(format!("{}/v1/swap", self.url))
+            .json(&req).send().await?.json().await?;
+
+        check_api_error(&v, "Swap")?;
+
+        let sigs = v.get("signatures").and_then(|s| s.as_array())
+            .ok_or_else(|| anyhow!("Mint response missing signatures for swap: {:?}", v))?;
+        Ok(sigs.clone())
+    }
+
+    /// Send a restore request (NUT-13).
+    /// Used to fetch previously issued tokens using deterministic secrets.
+    pub async fn restore_tokens(
+        &self,
+        outputs: Vec<serde_json::Value>,
+    ) -> Result<(Vec<serde_json::Value>, Vec<serde_json::Value>)> {
+        let req = serde_json::json!({
+            "outputs": outputs
+        });
+
+        let v: serde_json::Value = self.http.post(format!("{}/v1/restore", self.url))
+            .json(&req).send().await?.json().await?;
+
+        check_api_error(&v, "Restore")?;
+
+        let outputs_arr = v.get("outputs").and_then(|s| s.as_array()).cloned().unwrap_or_default();
+        let sigs_arr = v.get("signatures").and_then(|s| s.as_array()).cloned().unwrap_or_default();
+        
+        if outputs_arr.is_empty() && sigs_arr.is_empty() {
+            // It's possible the mint just didn't find any tokens, which is fine, we return empty
+            return Ok((vec![], vec![]));
+        }
+
+        Ok((outputs_arr, sigs_arr))
     }
 
     pub async fn check_state(&self, ys: &[String]) -> Result<HashMap<String, String>> {

@@ -20,9 +20,11 @@ export const useHistory = () => {
     }
   };
 
+  const lastUpdate = useWalletStore((s) => s.lastUpdate);
+
   useEffect(() => {
     fetchHistory();
-  }, []);
+  }, [lastUpdate]);
 
   const handleRetryMint = async (txId: string) => {
     try {
@@ -36,17 +38,19 @@ export const useHistory = () => {
     }
   };
 
-  const handleCheckMelt = async (txId: string) => {
+  const handleRecoverPendingTransaction = async (txId: string) => {
     try {
-      toast.loading('Checking status with mint...', { id: txId });
-      const status = await invoke<string>('check_melt_status', { txId });
+      toast.loading('Checking status...', { id: txId });
+      const status = await invoke<string>('check_transaction_status', { txId });
       
       if (status === 'Success') {
-        toast.success('Mint confirmed payment was successful.', { id: txId });
+        toast.success('Transaction was successful.', { id: txId });
       } else if (status === 'Failed') {
-        toast.success('Melt failed. Proofs refunded to your wallet.', { id: txId });
+        toast.success('Transaction failed safely. No funds were lost.', { id: txId });
       } else if (status === 'FailedMintError') {
         toast.error('Mint seized proofs but did not pay the invoice!', { id: txId });
+      } else if (status === 'Pending') {
+        toast.error('Transaction is still pending.', { id: txId });
       }
       fetchHistory();
       await refreshWallet();
@@ -55,15 +59,20 @@ export const useHistory = () => {
     }
   };
 
-  const handleCheckIssue = async (txId: string) => {
-    toast.loading('Checking issuance status...', { id: txId });
+  const handleCheckIssue = async (txId: string, navigate: any) => {
     try {
-      await invoke('check_issue_status', { txId });
-      toast.success('Note issued successfully!', { id: txId });
+      toast.loading('Checking issue status...', { id: txId });
+      const success = await invoke<boolean>('check_issue_status', { txId });
+      if (success) {
+        toast.success('Note issued successfully!', { id: txId });
+        navigate('/history');
+      } else {
+        toast.error('Issue is still pending.', { id: txId });
+      }
       fetchHistory();
-      refreshWallet();
+      await refreshWallet();
     } catch (e: any) {
-      toast.error(`Status: ${e}`, { id: txId });
+      toast.error(e.toString(), { id: txId });
     }
   };
 
@@ -99,13 +108,45 @@ export const useHistory = () => {
     }
   };
 
+  const handleCheckTokenSpendStatus = async (txId: string) => {
+    try {
+      toast.loading('Checking token status...', { id: txId });
+      const status = await invoke<string>('check_token_spend_status', { txId });
+      if (status === 'Spent') {
+        toast.success('Tokens have been successfully claimed!', { id: txId });
+      } else if (status === 'Partially Spent') {
+        toast.success('Some tokens were claimed, but some remain unspent.', { id: txId });
+      } else {
+        toast.error('Tokens are still unspent.', { id: txId });
+      }
+      fetchHistory();
+      await refreshWallet();
+    } catch (e: any) {
+      toast.error(`Error checking status: ${e}`, { id: txId });
+    }
+  };
+
+  const handleRetryReceiveEcash = async (txId: string, tokenString: string) => {
+    try {
+      toast.loading('Retrying claim...', { id: txId });
+      await invoke('receive_ecash', { tokenString });
+      toast.success('Successfully claimed eCash!', { id: txId });
+      fetchHistory();
+      await refreshWallet();
+    } catch (e: any) {
+      toast.error(`Failed to claim: ${e}`, { id: txId });
+    }
+  };
+
   return {
     transactions,
     loading,
     fetchHistory,
     handleRetryMint,
-    handleCheckMelt,
+    handleRecoverPendingTransaction,
     handleCheckIssue,
-    handleDownloadNote
+    handleDownloadNote,
+    handleCheckTokenSpendStatus,
+    handleRetryReceiveEcash
   };
 };

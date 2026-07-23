@@ -10,6 +10,11 @@
     "opener:default",
     "dialog:default",
     "fs:default",
-    "fs:allow-write-file"
+    "fs:allow-write-file",
+    "http:default",
+    {
+      "identifier": "http:default",
+      "allow": [{"url": "https://*"}, {"url": "http://*"}]
+    }
   ]
 }

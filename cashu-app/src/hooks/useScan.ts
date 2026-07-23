@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
+import { useNavigate } from 'react-router-dom';
+import { parseBitcoinInput } from '../utils/bitcoinValidation';
 
 export const useScan = () => {
   const [binB64, setBinB64] = useState<string>('');
@@ -18,17 +20,32 @@ export const useScan = () => {
   const [showScanner, setShowScanner] = useState(false);
 
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
+  const navigate = useNavigate();
 
   const handleDecode = async (base64Payload: string) => {
     if (!base64Payload) return;
+    const trimmed = base64Payload.trim();
+    const lower = trimmed.toLowerCase();
+
+    if (lower.startsWith('cashua') || lower.startsWith('cashub')) {
+      navigate('/', { state: { ecashToken: trimmed } });
+      return;
+    }
+    
+    const parsed = parseBitcoinInput(trimmed);
+    if (parsed.type === 'lightning' || parsed.type === 'onchain' || parsed.type === 'lnurl' || parsed.type === 'lnurl-pay') {
+      navigate('/', { state: { lnbcInvoice: parsed.addressOrInvoice } });
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setVerified(null);
     setNoteInfo(null);
     try {
-      const res: any = await invoke('decode_bin', { binB64: base64Payload });
+      const res: any = await invoke('decode_bin', { binB64: trimmed });
       setNoteInfo(res);
-      setBinB64(base64Payload);
+      setBinB64(trimmed);
     } catch (e: any) {
       setError(e.toString());
     }
@@ -50,12 +67,18 @@ export const useScan = () => {
     setLoading(false);
   };
 
+  const [redeemMethod, setRedeemMethod] = useState<'lightning' | 'wallet'>('lightning');
+
   const handleRedeem = async () => {
-    if (!invoice) return;
+    if (redeemMethod === 'lightning' && !invoice) return;
     setRedeeming(true);
     setError(null);
     try {
-      await invoke('redeem_note', { binB64, invoice: invoice.trim() });
+      if (redeemMethod === 'wallet') {
+        await invoke('redeem_note_direct', { binB64 });
+      } else {
+        await invoke('redeem_note', { binB64, invoice: invoice.trim() });
+      }
       setRedeemSuccess(true);
       await refreshWallet();
     } catch (e: any) {
@@ -71,6 +94,7 @@ export const useScan = () => {
     setNoteInfo,
     loading,
     error,
+    setError,
     verified,
     verifyResult,
     invoice,
@@ -79,6 +103,8 @@ export const useScan = () => {
     redeemSuccess,
     showScanner,
     setShowScanner,
+    redeemMethod,
+    setRedeemMethod,
     handleDecode,
     handleVerify,
     handleRedeem

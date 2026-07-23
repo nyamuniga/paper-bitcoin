@@ -1,32 +1,28 @@
 import React, { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw } from 'lucide-react';
 
 interface ConfirmResetDialogProps {
   onCancel: () => void;
   onResetComplete: () => void;
-  onError: (msg: string) => void;
+  onConfirm: () => Promise<boolean>;
 }
 
-export const ConfirmResetDialog: React.FC<ConfirmResetDialogProps> = ({ onCancel, onResetComplete, onError }) => {
+export const ConfirmResetDialog: React.FC<ConfirmResetDialogProps> = ({ onCancel, onResetComplete, onConfirm }) => {
   const [loading, setLoading] = useState(false);
 
   const handleReset = async () => {
     setLoading(true);
-    try {
-      await invoke('reset_wallet');
+    const success = await onConfirm();
+    if (success) {
       onResetComplete();
-    } catch (e) {
-      console.error(e);
-      onError(String(e));
-    } finally {
+    } else {
       setLoading(false);
     }
   };
 
   return (
     <div className="flex h-screen flex-col items-center justify-center p-6 bg-background">
-      <div className="w-full max-w-sm bg-surface/50 backdrop-blur-xl border border-red-900/50 rounded-3xl p-8 shadow-2xl">
+      <div className="w-full max-w-sm bg-surface-container-high border border-red-900/50 rounded-3xl p-8 shadow-2xl">
         <h1 className="text-2xl font-bold mb-4 text-center text-red-500">Delete Wallet?</h1>
         <p className="text-gray-300 text-center text-sm mb-8">
           WARNING: This will permanently delete your existing wallet. If you do not have your 24-word recovery phrase, your funds will be lost forever. Are you absolutely sure?

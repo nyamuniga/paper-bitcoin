@@ -1,50 +1,43 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getVersion, getName } from '@tauri-apps/api/app';
 import { RecoveryPhraseSection } from '../components/settings/RecoveryPhraseSection';
-import { BiometricToggle } from '../components/settings/BiometricToggle';
-import { VaultStatusPanel } from '../components/settings/VaultStatusPanel';
-import { invoke } from '@tauri-apps/api/core';
-import { toast } from 'react-hot-toast';
+import { WalletManagementSection } from '../components/settings/WalletManagementSection';
+import { NostrSection } from '../components/settings/NostrSection';
+import { PageHeader } from '../components/shared/PageHeader';
 
 export const Settings = () => {
-  const [isBackedUp, setIsBackedUp] = useState(true); // Default true for mock
+  const [appInfo, setAppInfo] = useState({ name: '', version: '' });
+
+  useEffect(() => {
+    const fetchInfo = async () => {
+      try {
+        const name = await getName();
+        const version = await getVersion();
+        // Capitalize the first letter of the name
+        const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
+        setAppInfo({ name: formattedName, version });
+      } catch (e) {
+        console.error("Failed to fetch app info", e);
+      }
+    };
+    fetchInfo();
+  }, []);
 
   return (
-    <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding py-8 flex flex-col gap-6">
-      <div className="mb-2">
-        <h1 className="text-headline-lg font-headline-lg text-primary mb-2">Settings & Security</h1>
-        <p className="text-on-surface-variant text-body-md font-body-md">Manage your wallet keys and app preferences.</p>
-      </div>
+    <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col gap-6">
+      <PageHeader title="Settings & Security" subtitle="Manage your wallet keys and app preferences." />
 
-      <VaultStatusPanel isBackedUp={isBackedUp} setIsBackedUp={setIsBackedUp} />
-      <BiometricToggle />
       <RecoveryPhraseSection />
+      <NostrSection />
+      <WalletManagementSection />
 
-      <section className="bg-surface-container-high rounded-xl p-6 border border-outline-variant/30 mt-6">
-        <h2 className="text-body-md font-body-md font-bold text-error mb-4">Danger Zone</h2>
-        <div className="flex justify-between items-center bg-error-container/10 p-4 rounded-lg border border-error/20">
-          <div>
-            <h3 className="font-bold text-error">Reset Wallet</h3>
-            <p className="text-sm text-on-surface-variant max-w-sm">This will permanently delete your local wallet data. Make sure you have your recovery phrase written down.</p>
-          </div>
-          <button 
-            onClick={async () => {
-              const confirm = await window.confirm("Are you sure you want to reset your wallet? THIS CANNOT BE UNDONE.");
-              if (confirm) {
-                try {
-                  await invoke('reset_wallet');
-                  toast.success("Wallet reset successfully.");
-                  window.location.reload();
-                } catch (e: any) {
-                  toast.error("Failed to reset: " + e.toString());
-                }
-              }
-            }}
-            className="px-4 py-2 bg-error hover:bg-error/90 text-on-error rounded-lg font-bold transition-colors"
-          >
-            Reset
-          </button>
+      {appInfo.name && appInfo.version && (
+        <div className="text-center mt-8 pb-4">
+          <p className="text-xs text-on-surface-variant/50 font-bold uppercase tracking-wider">
+            {appInfo.name} v{appInfo.version}
+          </p>
         </div>
-      </section>
+      )}
     </main>
   );
 };

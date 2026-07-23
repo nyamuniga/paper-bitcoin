@@ -6,6 +6,7 @@ interface WalletState {
   balanceSats: number;
   mintBalances: Record<string, number>;
   pendingTxs: number;
+  lastUpdate: number;
   setInitialized: (val: boolean) => void;
   setBalance: (sats: number) => void;
   setMintBalances: (balances: Record<string, number>) => void;
@@ -17,6 +18,7 @@ export const useWalletStore = create<WalletState>()((set) => ({
   balanceSats: 0,
   mintBalances: {},
   pendingTxs: 0,
+  lastUpdate: 0,
   setInitialized: (val) => set({ isInitialized: val }),
   setBalance: (sats) => set({ balanceSats: sats }),
   setMintBalances: (balances) => set({ mintBalances: balances }),
@@ -39,6 +41,7 @@ export const useWalletStore = create<WalletState>()((set) => ({
         balanceSats: res.balance_sats,
         mintBalances: res.mint_balances,
         pendingTxs: pendingCount,
+        lastUpdate: Date.now(),
       });
     } catch (e) {
       console.error("Failed to refresh wallet:", e);

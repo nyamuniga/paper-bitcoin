@@ -1,13 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useLocation } from 'react-router-dom';
 import { useWalletStore } from '../store/wallet';
 
 export const useIssue = () => {
+  const location = useLocation();
+  const state = location.state as any;
+
   const [sats, setSats] = useState<string>('');
   const [mintUrls, setMintUrls] = useState<string[]>([]);
   const [strategy, setStrategy] = useState<'dynamic' | 'static'>('dynamic');
+  const [fundMethod, setFundMethod] = useState<'lightning' | 'wallet'>('lightning');
   const [loading, setLoading] = useState(false);
-  const [invoicePayload, setInvoicePayload] = useState<any>(null);
+  const [invoicePayload, setInvoicePayload] = useState<any>(state?.pendingIssue || null);
   const [issuedNote, setIssuedNote] = useState<any>(null);
   const [pollTrigger, setPollTrigger] = useState(0);
   const [error, setError] = useState<string>('');
@@ -30,10 +35,18 @@ export const useIssue = () => {
     addLog(`Calling issue_note with amt=${amt}, mintUrls=${mintUrls.join(', ')}`);
 
     try {
-      const res = await invoke('issue_note', { sats: amt, mintUrls: mintUrls, strategy: strategy });
-      addLog("issue_note resolved with PendingIssue: " + JSON.stringify(res));
-      setInvoicePayload(res); 
-      await refreshWallet();
+      if (fundMethod === 'wallet') {
+        addLog(`Calling issue_note_direct with amt=${amt}, mintUrls=${mintUrls.join(', ')}`);
+        const res: any = await invoke('issue_note_direct', { sats: amt, mintUrls: mintUrls });
+        addLog("issue_note_direct succeeded!");
+        setIssuedNote(res);
+        await refreshWallet();
+      } else {
+        const res: any = await invoke('issue_note', { sats: amt, mintUrls: mintUrls, strategy: strategy });
+        addLog("issue_note resolved with PendingIssue: " + JSON.stringify(res));
+        setInvoicePayload(res); 
+        await refreshWallet();
+      }
     } catch (e: any) {
       addLog("issue_note failed: " + String(e));
       setError(e.toString());
@@ -100,6 +113,8 @@ export const useIssue = () => {
     setMintUrls,
     strategy,
     setStrategy,
+    fundMethod,
+    setFundMethod,
     loading,
     invoicePayload,
     issuedNote,
