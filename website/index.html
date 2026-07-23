@@ -30,7 +30,7 @@
         body {
             background-color: var(--color-bg);
             /* Dark green overlay fading to slightly darker, combined with the new image */
-            background-image: linear-gradient(rgba(30, 42, 29, 0.82), rgba(30, 42, 29, 0.90)), url('wallet-background.jpg');
+            background-image: linear-gradient(rgba(30, 42, 29, 0.60), rgba(30, 42, 29, 0.70)), url('wallet-background.jpg');
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
@@ -40,18 +40,6 @@
             flex-direction: column;
             overflow-x: hidden;
             position: relative;
-        }
-
-        /* African-inspired Geometric Pattern Overlay */
-        .african-pattern-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: -2;
-            opacity: 0.015; /* Reduced opacity to prevent clashing with the new background */
-            pointer-events: none;
-            /* Interlocking diamonds and triangles often seen in mudcloth and woven textiles */
-            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d49d42' fill-opacity='1'%3E%3Cpath d='M30 30L15 45 0 30 15 15zM15 15L0 0h30zM45 45L30 60h30zM45 15L30 0h30z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-            background-size: 60px 60px;
         }
 
         /* Ambient Background Glows */
@@ -75,14 +63,15 @@
         }
 
         .bg-glow-2 {
-            background: #8c4f00; /* Warm earthy terracotta/amber */
+            background: #8c4f00;
+            /* Warm earthy terracotta/amber */
             width: 350px;
             height: 350px;
             bottom: -50px;
             right: -100px;
             animation-delay: -4s;
         }
-        
+
         .bg-glow-3 {
             background: var(--color-primary);
             width: 250px;
@@ -105,6 +94,7 @@
         }
 
         nav {
+
             padding: 2rem 4rem;
             display: flex;
             align-items: center;
@@ -162,7 +152,7 @@
 
         .hero-content p {
             font-size: 1.125rem;
-            color: var(--color-text-dim);
+            color: var(--color-text);
             margin-bottom: 2.5rem;
             line-height: 1.6;
             max-width: 90%;
@@ -269,7 +259,7 @@
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            color: var(--color-text-dim);
+            color: var(--color-text);
             font-size: 0.9rem;
         }
 
@@ -343,7 +333,6 @@
 </head>
 
 <body>
-    <div class="african-pattern-overlay"></div>
     <div class="noise-overlay"></div>
     <div class="bg-glow-1"></div>
     <div class="bg-glow-2"></div>
