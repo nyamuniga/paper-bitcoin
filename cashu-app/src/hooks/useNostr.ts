@@ -44,7 +44,18 @@ function setupClaimLoop(npub: string, relays: string[]) {
   const claimOnce = async () => {
     if (!globalPrivateKey || globalIsClaiming) return;
     globalIsClaiming = true;
+    
+    let wakeLock: any = null;
     try {
+      // Prevent Android from sleeping and dropping the network connection
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+        } catch (err) {
+          console.warn('[useNostr] Wake Lock error:', err);
+        }
+      }
+
       const claimResult = await fetchV1ClaimToken(globalPrivateKey);
       if (claimResult && claimResult.token) {
         // Skip if we just processed this exact token
@@ -54,21 +65,24 @@ function setupClaimLoop(npub: string, relays: string[]) {
         }
 
         console.log('[useNostr] Claim succeeded, receiving token...', claimResult.count);
-        const toastId = toast.loading(`Claiming ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''}...`);
+        const toastId = toast.loading(`Claiming ${claimResult.count} token${claimResult.count > 1 ? 's' : ''}...`);
         try {
           await invoke('receive_ecash', { tokenString: claimResult.token });
           lastClaimedToken = claimResult.token;
           await refreshWallet();
-          toast.success(`⚡ Received ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''} via Lightning Address!`, { id: toastId });
+          toast.success(`⚡ Received ${claimResult.count} token${claimResult.count > 1 ? 's' : ''} via Lightning Address!`, { id: toastId });
           setLastClaimTimestamp(Date.now());
         } catch (err) {
-          toast.error("Failed to claim payment. Check history to retry.", { id: toastId });
+          toast.error("Failed to claim token. Check history to retry.", { id: toastId });
           throw err;
         }
       }
     } catch (e) {
       // ignore v1 failure
     } finally {
+      if (wakeLock !== null) {
+        wakeLock.release().catch(console.warn);
+      }
       globalIsClaiming = false;
     }
   };
