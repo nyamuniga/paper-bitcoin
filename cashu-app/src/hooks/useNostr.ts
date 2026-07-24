@@ -243,7 +243,7 @@ export const useNostr = () => {
         setIsNostrReady(true);
       } catch (err: any) {
         console.error('Failed to initialize Nostr:', err);
-        toast.error('Nostr Init Error: ' + err.message);
+        toast.error('Nostr Init Error: ' + (err.message || err));
       } finally {
         setIsInitializing(false);
       }
