@@ -14,14 +14,25 @@ interface MintInfoModalProps {
 export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }) => {
   const { info, loading, error } = useMintInfo(mintUrl);
   const mintBalances = useWalletStore((s) => s.mintBalances);
-  const balance = mintBalances[mintUrl] || 0;
-  const { removeMint } = useMints();
+  const normalize = (u: string) => u.replace(/\/+$/, '').toLowerCase();
+  const connectedKey = Object.keys(mintBalances).find(k => normalize(k) === normalize(mintUrl));
+  const isConnected = !!connectedKey;
+  const balance = connectedKey ? mintBalances[connectedKey] : 0;
+  
+  const { removeMint, addMint, loading: isMintActionLoading } = useMints();
 
   const handleRemoveMint = async () => {
-    const success = await removeMint(mintUrl);
-    if (success) {
-      onClose();
+    if (connectedKey) {
+      const success = await removeMint(connectedKey);
+      if (success) {
+        onClose();
+      }
     }
+  };
+
+  const handleAddMint = async () => {
+    if (isMintActionLoading) return;
+    await addMint(mintUrl);
   };
 
   const [copied, setCopied] = useState(false);
@@ -225,16 +236,26 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
             </div>
           </div>
 
-          {/* Remove Mint Button */}
+          {/* Action Button */}
           <div className="mt-8 flex justify-center">
-            <button 
-              onClick={handleRemoveMint}
-              disabled={balance > 0}
-              className="text-error text-[16px] font-medium py-4 px-8 hover:bg-error/10 disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed rounded-full transition-colors"
-              title={balance > 0 ? "Cannot remove mint with a non-zero balance" : undefined}
-            >
-              Remove mint
-            </button>
+            {isConnected ? (
+              <button 
+                onClick={handleRemoveMint}
+                disabled={balance > 0 || isMintActionLoading}
+                className="text-error text-[16px] font-medium py-4 px-8 hover:bg-error/10 disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed rounded-full transition-colors"
+                title={balance > 0 ? "Cannot remove mint with a non-zero balance" : undefined}
+              >
+                {isMintActionLoading ? 'Removing...' : 'Remove mint'}
+              </button>
+            ) : (
+              <button 
+                onClick={handleAddMint}
+                disabled={isMintActionLoading}
+                className="text-primary text-[16px] font-medium py-4 px-8 hover:bg-primary/10 disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed rounded-full transition-colors"
+              >
+                {isMintActionLoading ? 'Adding...' : 'Add mint to wallet'}
+              </button>
+            )}
           </div>
           
         </div>
