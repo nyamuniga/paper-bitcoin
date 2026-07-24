@@ -33,7 +33,7 @@ export const RecoveryPhraseSection = () => {
     e.preventDefault();
     setIsVerifying(true);
     
-    const success = await unlockWallet(passphrase);
+    const success = await unlockWallet(passphrase, false);
     if (success) {
       try {
         const words = await invoke<string[]>('get_recovery_words');

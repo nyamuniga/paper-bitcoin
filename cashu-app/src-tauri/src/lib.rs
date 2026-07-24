@@ -48,6 +48,7 @@ pub fn run() {
             commands::receive::receive_lightning,
             commands::receive::batch_mint_external_quotes,
             commands::auth::is_wallet_setup,
+            commands::auth::auto_login,
             commands::auth::unlock_wallet,
             commands::auth::lock_wallet,
             commands::auth::is_wallet_unlocked,
