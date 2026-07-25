@@ -9,6 +9,7 @@ import { Auth } from './pages/Auth';
 import { Scan } from './pages/Scan';
 import { Home } from './pages/Home';
 import Mints from './pages/Mints';
+import DiscoverMints from './pages/DiscoverMints';
 import { Pay } from './pages/Pay';
 import { TopNav } from './components/navigation/TopNav';
 import { TransactionProcessor } from './hooks/useTransactionProcessor';
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/mints" element={<Mints />} />
+          <Route path="/discover" element={<DiscoverMints />} />
           <Route path="/pay" element={<Pay />} />
         </Routes>
       </div>

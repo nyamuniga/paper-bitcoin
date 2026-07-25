@@ -186,6 +186,7 @@ fn decode_public_internal<'a>(r: &mut Reader<'a>) -> Result<DecodedPublicData, D
                 b_prime: Some(b_prime),
                 y: Some(y),
                 dleq: Some(Dleq { e: dleq_e, s: dleq_s }),
+                witness: None,
                 derivation_index,
             });
         }

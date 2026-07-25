@@ -37,21 +37,35 @@ export const useAuth = () => {
   const handleClearError = () => setErrorMsg('');
 
   useEffect(() => {
-    invoke('is_wallet_setup').then((setup) => {
-      setIsSetup(setup as boolean);
+    invoke('is_wallet_setup').then(async (setup) => {
       if (!setup) {
+        setIsSetup(false);
         setMode('create');
       } else {
+        const shouldAutoLogin = localStorage.getItem('rememberMe') === 'true';
+        if (shouldAutoLogin) {
+          const res = await invoke('auto_login').catch(() => false);
+          if (res) {
+            await refreshWallet();
+            return;
+          }
+        }
+        setIsSetup(true);
         setMode('login');
       }
     }).catch(e => triggerError(String(e)));
   }, []);
 
-  const unlockWallet = async (passphrase: string) => {
+  const unlockWallet = async (passphrase: string, rememberMe: boolean) => {
     setLoading(true);
     handleClearError();
     try {
-      await invoke('unlock_wallet', { passphrase });
+      await invoke('unlock_wallet', { passphrase, rememberMe });
+      if (rememberMe) {
+        localStorage.setItem('rememberMe', 'true');
+      } else {
+        localStorage.removeItem('rememberMe');
+      }
       window.history.replaceState(null, '', '/');
       await refreshWallet();
       return true;
@@ -63,11 +77,16 @@ export const useAuth = () => {
     }
   };
 
-  const createWallet = async (passphrase: string) => {
+  const createWallet = async (passphrase: string, rememberMe: boolean) => {
     setLoading(true);
     handleClearError();
     try {
-      const res: any = await invoke('create_wallet', { passphrase });
+      const res: any = await invoke('create_wallet', { passphrase, rememberMe });
+      if (rememberMe) {
+        localStorage.setItem('rememberMe', 'true');
+      } else {
+        localStorage.removeItem('rememberMe');
+      }
       return res.mnemonic as string;
     } catch (e: any) {
       triggerError(String(e));
@@ -77,12 +96,17 @@ export const useAuth = () => {
     }
   };
 
-  const restoreWallet = async (mnemonic: string, passphrase: string, mintUrls: string[]) => {
+  const restoreWallet = async (mnemonic: string, passphrase: string, rememberMe: boolean, mintUrls: string[]) => {
     setLoading(true);
     setRestoreProgress([]);
     handleClearError();
     try {
-      await invoke('restore_wallet', { mnemonic, passphrase, mintUrls });
+      await invoke('restore_wallet', { mnemonic, passphrase, rememberMe, mintUrls });
+      if (rememberMe) {
+        localStorage.setItem('rememberMe', 'true');
+      } else {
+        localStorage.removeItem('rememberMe');
+      }
       window.history.replaceState(null, '', '/');
       await refreshWallet();
       return true;
@@ -104,6 +128,7 @@ export const useAuth = () => {
       localStorage.removeItem('npubx_claimed_quotes');
       localStorage.removeItem('cashu-nostr-storage');
       localStorage.removeItem('cashu-transaction-storage');
+      localStorage.removeItem('rememberMe');
       await refreshWallet();
       return true;
     } catch (e: any) {
@@ -119,7 +144,8 @@ export const useAuth = () => {
     handleClearError();
     try {
       await invoke('lock_wallet');
-      await refreshWallet();
+      localStorage.removeItem('rememberMe');
+      useWalletStore.getState().clearWalletState();
       return true;
     } catch (e: any) {
       triggerError(String(e));
