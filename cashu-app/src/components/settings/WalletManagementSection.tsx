@@ -7,7 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 export const WalletManagementSection = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const setInitialized = useWalletStore((s) => s.setInitialized);
+  const clearWalletState = useWalletStore((s) => s.clearWalletState);
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const { lockWallet, resetWallet } = useAuth();
   const [isCleaning, setIsCleaning] = useState(false);
@@ -16,7 +16,7 @@ export const WalletManagementSection = () => {
   const handleLock = async () => {
     const success = await lockWallet();
     if (success) {
-      setInitialized(false);
+      clearWalletState();
       toast.success('Wallet locked');
     } else {
       toast.error('Failed to lock wallet');
@@ -27,7 +27,7 @@ export const WalletManagementSection = () => {
     setIsDeleting(true);
     const success = await resetWallet();
     if (success) {
-      setInitialized(false);
+      clearWalletState();
       toast.success('Wallet deleted');
     } else {
       toast.error('Failed to delete wallet');
