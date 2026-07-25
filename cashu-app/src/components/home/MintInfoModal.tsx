@@ -18,7 +18,7 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
   const connectedKey = Object.keys(mintBalances).find(k => normalize(k) === normalize(mintUrl));
   const isConnected = !!connectedKey;
   const balance = connectedKey ? mintBalances[connectedKey] : 0;
-  
+
   const { removeMint, addMint, loading: isMintActionLoading } = useMints();
 
   const handleRemoveMint = async () => {
@@ -71,13 +71,13 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
       <div className="bg-surface-container-high rounded-2xl w-full max-w-md border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative max-h-[90vh]">
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
-        
+
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-outline-variant/10 relative z-10">
           <h2 className="text-headline-sm font-headline-sm text-on-surface flex items-center gap-2">
             <Info className="text-primary w-5 h-5" /> Mint Info
           </h2>
-          <button 
+          <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors"
           >
@@ -87,23 +87,23 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
 
         {/* Content */}
         <div className="p-6 flex flex-col gap-6 relative z-10 overflow-y-auto">
-          
+
           {/* Hero */}
-          <div className="flex flex-col items-center justify-center gap-4 mt-4">
-            <MintIcon 
-              mintUrl={mintUrl} 
-              className="w-24 h-24 rounded-3xl bg-surface-container-high border border-outline-variant/20 shadow-sm" 
-              textClassName="text-on-surface text-[32px] font-bold" 
+          <div className="flex flex-col items-center justify-center gap-4 mt-4 w-full">
+            <MintIcon
+              mintUrl={mintUrl}
+              className="w-24 h-24 shrink-0 rounded-3xl bg-surface-container-high border border-outline-variant/20 shadow-sm"
+              textClassName="text-on-surface text-[32px] font-bold"
             />
-            <h1 className="text-[32px] font-bold text-center leading-tight text-on-surface">
+            <h1 className="text-[22px] font-bold text-center leading-tight text-on-surface break-words w-full px-2">
               {info?.name || formatMintUrl(mintUrl)}
             </h1>
-            
-            <div className="flex items-center gap-2 text-on-surface-variant">
-              <span className="text-[14px]">{formatMintUrl(mintUrl)}</span>
-              <button 
+
+            <div className="flex items-center gap-2 text-on-surface-variant max-w-full px-4">
+              <span className="text-[14px] truncate">{formatMintUrl(mintUrl)}</span>
+              <button
                 onClick={handleCopy}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors"
+                className="w-8 h-8 shrink-0 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors"
               >
                 {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
               </button>
@@ -148,7 +148,7 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
                   <p className={`text-[15px] text-on-surface-variant leading-relaxed ${!showFullDesc && 'line-clamp-3'}`}>
                     {info.description_long}
                   </p>
-                  <button 
+                  <button
                     onClick={() => setShowFullDesc(!showFullDesc)}
                     className="text-on-surface font-semibold text-[14px] self-start py-1"
                   >
@@ -179,15 +179,15 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
                   </div>
                 ))}
               </div>
-              
-              <button 
+
+              <button
                 onClick={() => setShowTechDetails(!showTechDetails)}
                 className="flex justify-between items-center py-4 text-on-surface-variant hover:text-on-surface transition-colors"
               >
                 <span className="text-[16px]">Technical details</span>
                 {showTechDetails ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
               </button>
-              
+
               {showTechDetails && (
                 <div className="bg-surface-container-high p-4 rounded-xl text-[13px] font-mono text-on-surface-variant overflow-x-auto border border-outline-variant/10">
                   <pre>{JSON.stringify(info?.nuts, null, 2)}</pre>
@@ -200,7 +200,7 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
           {(receiveMethods.length > 0 || sendMethods.length > 0) && (
             <div className="flex flex-col gap-0 border-t border-outline-variant/10 pt-6">
               <h3 className="text-[12px] font-bold tracking-[0.2em] text-on-surface-variant uppercase mb-2">Payment Methods</h3>
-              
+
               {receiveMethods.length > 0 && (
                 <div className="flex justify-between items-center py-4 border-b border-outline-variant/10">
                   <div className="flex items-center gap-4 text-[16px] text-on-surface-variant">
@@ -210,7 +210,7 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
                   <span className="text-[16px] font-mono text-on-surface">{receiveMethods.join(', ')}</span>
                 </div>
               )}
-              
+
               {sendMethods.length > 0 && (
                 <div className="flex justify-between items-center py-4">
                   <div className="flex items-center gap-4 text-[16px] text-on-surface-variant">
@@ -226,7 +226,7 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
           {/* Details */}
           <div className="flex flex-col gap-0 border-t border-outline-variant/10 pt-6">
             <h3 className="text-[12px] font-bold tracking-[0.2em] text-on-surface-variant uppercase mb-2">Details</h3>
-            
+
             <div className="flex justify-between items-center py-4">
               <div className="flex items-center gap-4 text-[16px] text-on-surface-variant">
                 <Hash size={18} />
@@ -239,7 +239,7 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
           {/* Action Button */}
           <div className="mt-8 flex justify-center">
             {isConnected ? (
-              <button 
+              <button
                 onClick={handleRemoveMint}
                 disabled={balance > 0 || isMintActionLoading}
                 className="text-error text-[16px] font-medium py-4 px-8 hover:bg-error/10 disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed rounded-full transition-colors"
@@ -248,7 +248,7 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
                 {isMintActionLoading ? 'Removing...' : 'Remove mint'}
               </button>
             ) : (
-              <button 
+              <button
                 onClick={handleAddMint}
                 disabled={isMintActionLoading}
                 className="text-primary text-[16px] font-medium py-4 px-8 hover:bg-primary/10 disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed rounded-full transition-colors"
@@ -257,7 +257,7 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
               </button>
             )}
           </div>
-          
+
         </div>
       </div>
     </div>

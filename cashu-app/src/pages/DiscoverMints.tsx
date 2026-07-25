@@ -156,11 +156,15 @@ export default function DiscoverMints() {
             return (
               <div
                 key={mint.id}
-                className="flex items-center gap-4 bg-surface-container-high border border-outline-variant/30 rounded-xl p-3 hover:border-primary/30 hover:bg-surface-container-highest transition-all duration-300 shadow-sm"
+                onClick={() => setSelectedMint(mint)}
+                className="flex items-center gap-4 bg-surface-container-high border border-outline-variant/30 rounded-xl p-3 hover:border-primary/30 hover:bg-surface-container-highest transition-all duration-300 shadow-sm cursor-pointer group"
               >
                 <div className="flex-shrink-0">
                   <button
-                    onClick={() => added ? handleRemoveMint(mint.url) : handleAddMint(mint.url)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      added ? handleRemoveMint(mint.url) : handleAddMint(mint.url);
+                    }}
                     disabled={isAdding}
                     className={clsx(
                       "bg-surface-container-low w-6 h-6 rounded flex items-center justify-center transition-colors border",
@@ -208,7 +212,10 @@ export default function DiscoverMints() {
                 </div>
 
                 <button
-                  onClick={() => setSelectedMint(mint)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedMint(mint);
+                  }}
                   className="p-2 text-on-surface-variant hover:text-primary transition-colors shrink-0"
                 >
                   <Info size={20} />

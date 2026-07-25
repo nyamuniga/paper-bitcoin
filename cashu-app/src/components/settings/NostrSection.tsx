@@ -183,7 +183,7 @@ export const NostrSection: React.FC = () => {
             <Network size={20} />
           </div>
           <div className="min-w-0">
-            <h2 className="text-body-md font-body-md font-bold text-on-surface mb-1">Nostr Identity</h2>
+            <h2 className="text-body-md font-body-md font-bold text-on-surface mb-1 truncate">Nostr Identity</h2>
             <p className="text-sm text-on-surface-variant truncate">Manage your Lightning Address keys & relays</p>
           </div>
         </div>
@@ -195,14 +195,14 @@ export const NostrSection: React.FC = () => {
                 handleRevertKey();
               }}
               disabled={isReverting}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-amber-500 bg-amber-500/10 rounded-lg hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+              className="flex items-center justify-center gap-2 p-2 sm:px-3 sm:py-1.5 text-sm font-medium text-amber-500 bg-amber-500/10 rounded-lg hover:bg-amber-500/20 transition-colors disabled:opacity-50 shrink-0"
               title="Revert to original wallet seed"
             >
               <RefreshCcw size={16} className={isReverting ? "animate-spin" : ""} />
-              {isReverting ? 'Reverting...' : 'Revert to Default'}
+              <span className="hidden sm:inline">{isReverting ? 'Reverting...' : 'Revert to Default'}</span>
             </button>
           )}
-          <div className="text-on-surface-variant">
+          <div className="text-on-surface-variant shrink-0">
             {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
           </div>
         </div>
