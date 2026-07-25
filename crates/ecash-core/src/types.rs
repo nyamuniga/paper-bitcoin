@@ -37,6 +37,9 @@ pub struct Proof {
     /// Blinded message `B_` (needed for offline verification).
     #[serde(rename = "B_", skip_serializing_if = "Option::is_none")]
     pub b_prime: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub witness: Option<serde_json::Value>,
+
     /// DLEQ Proof (NUT-12).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dleq: Option<Dleq>,
@@ -63,6 +66,9 @@ pub struct PublicProof {
     pub c_prime: Option<String>,
     #[serde(rename = "B_", skip_serializing_if = "Option::is_none")]
     pub b_prime: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub witness: Option<serde_json::Value>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dleq: Option<Dleq>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -122,6 +128,7 @@ impl TokenEntry {
                 c_prime: p.c_prime.clone(),
                 b_prime: p.b_prime.clone(),
                 dleq: p.dleq.clone(),
+                witness: p.witness.clone(),
                 y: Some(crate::dhke::point_to_hex(&crate::dhke::hash_to_curve(p.secret.as_bytes()))),
                 derivation_index: p.derivation_index,
             }).collect(),

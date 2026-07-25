@@ -282,8 +282,9 @@ impl BlindingSession {
             c: point_to_hex(&c),
             c_prime: Some(point_to_hex(c_prime)),
             b_prime: Some(self.b_prime_hex()),
+            witness: None,
             dleq,
-            derivation_index: 0,
+            derivation_index: Default::default(),
         }
     }
 }
