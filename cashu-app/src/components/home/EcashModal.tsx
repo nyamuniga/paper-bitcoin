@@ -31,6 +31,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
 
   // Send state
   const [amount, setAmount] = useState('');
+  const [pubkey, setPubkey] = useState('');
   const [token, setToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -75,7 +76,30 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
 
   const handleSend = async () => {
     if (!isValid) return;
-    const result = await sendEcash(parsedAmount);
+
+    // Check if pubkey is valid hex or npub
+    let targetPubkey = pubkey.trim();
+    if (targetPubkey) {
+      if (targetPubkey.startsWith('npub')) {
+        try {
+          const { nip19 } = await import('nostr-tools');
+          const decoded = nip19.decode(targetPubkey);
+          if (decoded.type === 'npub') {
+            targetPubkey = decoded.data as string;
+          }
+        } catch (e) {
+          toast.error('Invalid npub');
+          return;
+        }
+      }
+
+      // If it's exactly 64 characters long (32 bytes), prepend "02" to make it a compressed secp256k1 pubkey
+      if (targetPubkey.length === 64) {
+        targetPubkey = `02${targetPubkey}`;
+      }
+    }
+
+    const result = await sendEcash(parsedAmount, undefined, targetPubkey || undefined);
     if (result) {
       setToken(result.token);
     }
@@ -145,8 +169,8 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
           <button
             onClick={() => switchTab('send')}
             className={`flex-1 py-3 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'send'
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-on-surface-variant hover:text-on-surface'
+              ? 'text-primary border-b-2 border-primary'
+              : 'text-on-surface-variant hover:text-on-surface'
               }`}
           >
             <ArrowUp size={16} /> SEND
@@ -154,8 +178,8 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
           <button
             onClick={() => switchTab('receive')}
             className={`flex-1 py-3 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'receive'
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-on-surface-variant hover:text-on-surface'
+              ? 'text-primary border-b-2 border-primary'
+              : 'text-on-surface-variant hover:text-on-surface'
               }`}
           >
             <ArrowDown size={16} /> RECEIVE
@@ -218,6 +242,34 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                   <>
                     <AmountDisplay amount={amount} compact />
                     <NumberPad value={amount} onChange={(val) => { setAmount(val); setToken(null); }} compact />
+
+                    <div className="flex flex-col gap-2 mt-2">
+                      <label className="text-[12px] font-label-caps text-on-surface-variant ml-1">Lock to Pubkey (Optional)</label>
+                      <input
+                        type="text"
+                        value={pubkey}
+                        onChange={(e) => {
+                          let val = e.target.value.trim();
+                          if (val.startsWith('npub')) {
+                            import('nostr-tools').then(({ nip19 }) => {
+                              try {
+                                const decoded = nip19.decode(val);
+                                if (decoded.type === 'npub') {
+                                  let hex = decoded.data as string;
+                                  if (hex.length === 64) hex = `02${hex}`;
+                                  setPubkey(hex);
+                                }
+                              } catch (err) {}
+                            });
+                          } else if (val.length === 64) {
+                            val = `02${val}`;
+                          }
+                          setPubkey(val);
+                        }}
+                        placeholder="npub1... or hex pubkey"
+                        className="w-full bg-surface-container p-3 rounded-xl border border-outline-variant/10 text-[14px] text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 transition-colors"
+                      />
+                    </div>
                   </>
                 )}
                 {isInsufficient && !token && (

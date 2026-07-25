@@ -2,6 +2,31 @@ use crate::error::{CommandError, CommandResult};
 use ecash_wallet::WalletState;
 use std::sync::Mutex;
 use tauri::State;
+use keyring::Entry;
+
+fn get_keyring() -> Result<Entry, keyring::Error> {
+    Entry::new("physical-ecash-wallet", "default_user")
+}
+
+fn save_passphrase(passphrase: &str) {
+    if let Ok(entry) = get_keyring() {
+        let _ = entry.set_password(passphrase);
+    }
+}
+
+fn get_saved_passphrase() -> Option<String> {
+    if let Ok(entry) = get_keyring() {
+        entry.get_password().ok()
+    } else {
+        None
+    }
+}
+
+fn clear_saved_passphrase() {
+    if let Ok(entry) = get_keyring() {
+        let _ = entry.delete_credential();
+    }
+}
 
 pub struct AppState {
     pub passphrase: Mutex<Option<String>>,
@@ -16,7 +41,25 @@ pub async fn is_wallet_setup(state: State<'_, AppState>) -> CommandResult<bool> 
 }
 
 #[tauri::command]
-pub async fn unlock_wallet(passphrase: String, state: State<'_, AppState>) -> CommandResult<bool> {
+pub async fn auto_login(state: State<'_, AppState>) -> CommandResult<bool> {
+    let path = state.wallet_path.clone();
+    if !path.exists() {
+        return Ok(false);
+    }
+
+    if let Some(passphrase) = get_saved_passphrase() {
+        if WalletState::load_encrypted(&path, &passphrase).is_ok() {
+            let mut pass_lock = state.passphrase.lock().unwrap();
+            *pass_lock = Some(passphrase);
+            return Ok(true);
+        }
+    }
+    
+    Ok(false)
+}
+
+#[tauri::command]
+pub async fn unlock_wallet(passphrase: String, remember_me: bool, state: State<'_, AppState>) -> CommandResult<bool> {
     let path = state.wallet_path.clone();
     if !path.exists() {
         return Err(CommandError("Wallet not found".to_string()));
@@ -25,6 +68,9 @@ pub async fn unlock_wallet(passphrase: String, state: State<'_, AppState>) -> Co
     // Try to load it to verify the passphrase is correct
     match WalletState::load_encrypted(&path, &passphrase) {
         Ok(_) => {
+            if remember_me {
+                save_passphrase(&passphrase);
+            }
             let mut pass_lock = state.passphrase.lock().unwrap();
             *pass_lock = Some(passphrase);
             Ok(true)
@@ -35,6 +81,7 @@ pub async fn unlock_wallet(passphrase: String, state: State<'_, AppState>) -> Co
 
 #[tauri::command]
 pub async fn lock_wallet(state: State<'_, AppState>) -> CommandResult<bool> {
+    clear_saved_passphrase();
     let mut pass_lock = state.passphrase.lock().unwrap();
     *pass_lock = None;
     Ok(true)
@@ -48,6 +95,7 @@ pub async fn is_wallet_unlocked(state: State<'_, AppState>) -> CommandResult<boo
 
 #[tauri::command]
 pub async fn reset_wallet(state: State<'_, AppState>) -> CommandResult<bool> {
+    clear_saved_passphrase();
     let path = state.wallet_path.clone();
     if path.exists() {
         std::fs::remove_file(path)
@@ -61,6 +109,7 @@ pub async fn reset_wallet(state: State<'_, AppState>) -> CommandResult<bool> {
 #[tauri::command]
 pub async fn create_wallet(
     passphrase: String,
+    remember_me: bool,
     state: State<'_, AppState>,
 ) -> CommandResult<crate::commands::wallet::WalletInfo> {
     let path = state.wallet_path.clone();
@@ -82,6 +131,10 @@ pub async fn create_wallet(
     
     w_state.save_encrypted(&path, &passphrase)?;
 
+    if remember_me {
+        save_passphrase(&passphrase);
+    }
+
     let mut pass_lock = state.passphrase.lock().unwrap();
     *pass_lock = Some(passphrase);
 
@@ -98,6 +151,7 @@ pub async fn restore_wallet(
     app_handle: tauri::AppHandle,
     mnemonic: String,
     passphrase: String,
+    remember_me: bool,
     mint_urls: Vec<String>,
     state: State<'_, AppState>,
 ) -> CommandResult<crate::commands::wallet::WalletInfo> {
@@ -131,6 +185,10 @@ pub async fn restore_wallet(
     }
 
     w_state.save_encrypted(&path, &passphrase)?;
+
+    if remember_me {
+        save_passphrase(&passphrase);
+    }
 
     let mut pass_lock = state.passphrase.lock().unwrap();
     *pass_lock = Some(passphrase);

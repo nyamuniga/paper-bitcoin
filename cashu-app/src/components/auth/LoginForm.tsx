@@ -5,11 +5,12 @@ interface LoginFormProps {
   onRestore: () => void;
   onReset: () => void;
   onError: (msg: string) => void;
-  onLogin: (passphrase: string) => Promise<boolean>;
+  onLogin: (passphrase: string, rememberMe: boolean) => Promise<boolean>;
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onRestore, onReset, onError, onLogin }) => {
   const [passphrase, setPassphrase] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -17,7 +18,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onRestore, onReset, onErro
     if (!passphrase) return onError('Please enter your passphrase');
 
     setLoading(true);
-    const success = await onLogin(passphrase);
+    const success = await onLogin(passphrase, rememberMe);
     if (!success) {
       setLoading(false);
     }
@@ -33,6 +34,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onRestore, onReset, onErro
         className="w-full bg-background border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors"
         autoFocus
       />
+      <div className="flex items-center gap-2 px-1">
+        <input type="checkbox" id="remember" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="rounded bg-background border-gray-700 text-primary focus:ring-primary h-4 w-4" />
+        <label htmlFor="remember" className="text-sm text-gray-300">Remember me on this device</label>
+      </div>
       <button
         type="submit"
         disabled={loading}

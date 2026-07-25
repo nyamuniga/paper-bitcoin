@@ -36,6 +36,7 @@ pub struct SendEcashResult {
 pub async fn send_ecash(
     mint_url: String,
     amount: u64,
+    pubkey: Option<String>,
     state: State<'_, AppState>,
 ) -> CommandResult<SendEcashResult> {
     let path = state.wallet_path.clone();
@@ -65,8 +66,10 @@ pub async fn send_ecash(
 
     let final_send_proofs;
 
-    // 1. Try to find exact proofs
-    if let Some(exact_proofs) = select_exact_proofs(&proofs, amount) {
+    // 1. Try to find exact proofs (ONLY if we are not locking to a pubkey)
+    // If a pubkey is provided, we must do a swap to generate new P2PK-locked proofs.
+    if pubkey.is_none() && select_exact_proofs(&proofs, amount).is_some() {
+        let exact_proofs = select_exact_proofs(&proofs, amount).unwrap();
         final_send_proofs = exact_proofs;
 
         // Remove exactly these proofs from the wallet
@@ -141,6 +144,7 @@ pub async fn send_ecash(
             selected_for_swap,
             desired_denoms,
             change_denoms,
+            pubkey.clone(),
         )
         .await;
 
@@ -323,8 +327,9 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
                 c,
                 c_prime: None,
                 b_prime: None,
-                derivation_index: 0,
+                witness: None,
                 dleq: None,
+                derivation_index: 0,
             });
             total_amount += amount;
         }
@@ -408,8 +413,9 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
                     c,
                     c_prime: None,
                     b_prime: None,
-                    derivation_index: 0,
+                    witness: None,
                     dleq: None,
+                    derivation_index: 0,
                 });
                 total_amount += amount;
             }
@@ -464,6 +470,7 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
         input_proofs,
         desired_amounts,
         vec![], // no change needed — we want all of it
+        None,
     )
     .await;
 

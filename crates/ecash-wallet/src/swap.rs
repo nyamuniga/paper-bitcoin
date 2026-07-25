@@ -27,6 +27,7 @@ pub async fn swap_proofs(
     inputs: Vec<Proof>,
     desired_amounts: Vec<u64>,
     change_amounts: Vec<u64>,
+    target_pubkey: Option<String>,
 ) -> Result<Vec<Proof>> {
     let client = MintClient::new(mint_url);
     let keyset = client.fetch_keyset().await?;
@@ -36,11 +37,35 @@ pub async fn swap_proofs(
     let mut input_secrets = std::collections::HashSet::new();
     for p in &inputs {
         let mut val = serde_json::to_value(p)?;
+        
         if let Some(obj) = val.as_object_mut() {
             obj.remove("derivation_index");
             obj.remove("B_");
             obj.remove("C_");
             obj.remove("dleq");
+
+            // Handle P2PK locked tokens
+            if p.secret.starts_with("[\"P2PK\"") {
+                if let Some(ref privkey_hex) = state.custom_nostr_key {
+                    use k256::schnorr::signature::Signer;
+
+                    let privkey_bytes = hex::decode(privkey_hex)
+                        .map_err(|e| anyhow::anyhow!("Invalid hex in nostr private key: {}", e))?;
+                    
+                    let signing_key = k256::schnorr::SigningKey::from_bytes(privkey_bytes.as_slice())
+                        .map_err(|_| anyhow::anyhow!("Invalid nostr private key bytes"))?;
+
+                    let sig: k256::schnorr::Signature = signing_key.sign(p.secret.as_bytes());
+                    
+                    let witness_obj = serde_json::json!({
+                        "signatures": [hex::encode(sig.to_bytes())]
+                    });
+                    
+                    obj.insert("witness".to_string(), serde_json::Value::String(witness_obj.to_string()));
+                } else {
+                    return Err(anyhow::anyhow!("Cannot spend P2PK locked ecash: No custom Nostr key configured. Go to Settings > Nostr to configure it."));
+                }
+            }
         }
         input_json.push(val);
         input_secrets.insert(p.secret.clone());
@@ -56,7 +81,26 @@ pub async fn swap_proofs(
     // First do desired amounts
     for &amt in &desired_amounts {
         let index = deriv.index;
-        let secret = deriv.next_secret();
+        let mut secret = deriv.next_secret();
+        if let Some(ref pubkey) = target_pubkey {
+            let mut nonce = [0u8; 16];
+            rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce);
+            
+            let normalized_pubkey = if pubkey.len() == 64 {
+                format!("02{}", pubkey)
+            } else {
+                pubkey.clone()
+            };
+
+            secret = serde_json::json!([
+                "P2PK",
+                {
+                    "nonce": hex::encode(nonce),
+                    "data": normalized_pubkey,
+                    "tags": []
+                }
+            ]).to_string();
+        }
         let sess = BlindingSession::new(&secret);
         output_json.push(serde_json::json!({"amount": amt, "id": keyset.id, "B_": sess.b_prime_hex()}));
         sessions.push((amt, sess, index, true)); // true = is_desired

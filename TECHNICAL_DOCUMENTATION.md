@@ -192,7 +192,15 @@ Because the Rust backend natively tracks all fiat and on-chain swaps as generic 
 2. **Strict Matching:** When rendering the history, the engine stitches the raw Rust transactions to the local `momoHistory`. 
 3. **Heuristics:** It links them primarily using the Mint's `quote_id`. For Melt operations that lack a unified quote ID, it uses a strict temporal heuristic (matching exact amounts within a rigid 2-minute execution window) to securely identify the transaction without false positives.
 
-## 9. Codebase Navigation
+## 9. NUT-11 Pay-to-Public-Key (P2PK)
+
+The protocol implements strict **NUT-11 P2PK** conditional spending to protect issued ecash.
+
+1. **Pubkey Normalization:** When users lock tokens to a Nostr `npub` or 32-byte hex string, the system automatically prepends the `02` prefix to construct a mathematically correct 33-byte compressed secp256k1 public key before generating the lock condition.
+2. **Signature Hashing:** During redemption, the system strictly follows BIP340 by passing the raw serialized UTF-8 `secret` directly to the cryptography library, which calculates the required `SHA-256` hash internally. This prevents double-hashing errors that would result in invalid Schnorr signatures.
+3. **Automated Witness Injection:** When swapping P2PK-locked tokens, the wallet engine seamlessly intercepts the inputs, generates valid BIP340 Schnorr signatures using the user's stored Nostr private key, and injects the `witness` JSON objects into the transaction outputs.
+
+## 10. Codebase Navigation
 
 The project is structured as a modular Cargo workspace. If you are exploring the source code, here is where to look to understand the system:
 
