@@ -124,6 +124,7 @@ cargo run -p ecash-cli -- issue 1000
 - **NUT-15 Multi-Path Payments (MPP)**: The system supports redeeming a single note containing tokens from multiple independent mints via a unified Lightning invoice payment. If any leg of the MPP payment fails due to routing errors, the backend gracefully recovers the unspent note proofs directly into your local wallet to ensure no funds are lost.
 - **QR Code Robustness**: Our QR processing features case-insensitive prefix decoding to seamlessly support third-party hardware scanners, mobile keyboards, and various OCR tools which might alter capitalization.
 - **Non-Custodial Swaps (Boltz)**: On-Chain Bitcoin swaps are executed using Boltz Submarine Swaps. If an outbound on-chain swap fails to broadcast, the app securely caches the `refundPrivateKey`, `redeemScript`, and `timeoutBlockHeight` in local storage, allowing the user to seamlessly refund the locked funds once the timelock expires.
+- **NUT-11 P2PK Locks**: Securely issue and redeem tokens locked to secp256k1 public keys (Nostr npub compatible), enforcing spending conditions via mathematically sound BIP340 Schnorr signatures.
 - **Hybrid Transaction History Engine**: Raw Lightning operations from the Rust backend are intelligently stitched to local UI state (`zustand`) using quote IDs and strict timestamp heuristics, providing accurate user-facing labels for complex multi-hop On-Chain and Fiat swaps.
 
 ## References

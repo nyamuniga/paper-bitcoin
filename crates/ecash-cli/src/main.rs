@@ -744,7 +744,7 @@ async fn cmd_resume(wallet_path: &PathBuf, tx_id: &str) -> Result<()> {
             println!("  PDF  → {}", pdf_path.display());
         }
         ecash_core::types::TransactionType::Melt(_) | ecash_core::types::TransactionType::Redeem(_) => {
-            let new_status = ecash_wallet::history::check_transaction_status(&mut state, wallet_path, &passphrase, tx_id).await?;
+            let new_status = ecash_wallet::history::check_transaction_status_legacy(&mut state, wallet_path, &passphrase, tx_id).await?;
             println!("Melt transaction {} is now: {:?}", tx_id, new_status);
         }
         ecash_core::types::TransactionType::Mint(_) => {
