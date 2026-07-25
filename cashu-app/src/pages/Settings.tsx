@@ -3,6 +3,7 @@ import { getVersion, getName } from '@tauri-apps/api/app';
 import { RecoveryPhraseSection } from '../components/settings/RecoveryPhraseSection';
 import { WalletManagementSection } from '../components/settings/WalletManagementSection';
 import { NostrSection } from '../components/settings/NostrSection';
+import { LockedEcashSection } from '../components/settings/LockedEcashSection';
 import { PageHeader } from '../components/shared/PageHeader';
 
 export const Settings = () => {
@@ -29,6 +30,7 @@ export const Settings = () => {
 
       <RecoveryPhraseSection />
       <NostrSection />
+      <LockedEcashSection />
       <WalletManagementSection />
 
       {appInfo.name && appInfo.version && (

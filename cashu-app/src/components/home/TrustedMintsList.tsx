@@ -12,9 +12,10 @@ import { MintInfoModal } from './MintInfoModal';
 interface TrustedMintsListProps {
   mintBalances: Record<string, number>;
   showAll?: boolean;
+  topAction?: React.ReactNode;
 }
 
-export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances, showAll = false }) => {
+export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances, showAll = false, topAction }) => {
   const sortedMints = Object.entries(mintBalances).sort((a, b) => b[1] - a[1]);
   const displayMints = showAll ? sortedMints : sortedMints.slice(0, 6);
 
@@ -33,17 +34,21 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
   };
 
   return (
-    <section className="flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <h2 className="text-label-caps font-label-caps text-on-surface-variant tracking-widest">TRUSTED MINTS</h2>
-        {!showAll && sortedMints.length > 0 && (
-          <Link to="/mints" className="text-label-caps font-label-caps text-primary hover:opacity-80 transition-opacity flex items-center gap-1">
-            VIEW ALL
-            <ChevronRight size={14} />
-          </Link>
-        )}
-      </div>
-      <div className="flex flex-col gap-2 overflow-hidden px-1 -mx-1 py-1 -my-1">
+    <section className="flex flex-col gap-4">
+      {topAction}
+      <div className="flex flex-col gap-2">
+        <div className="flex justify-between items-center">
+          <h2 className="text-label-caps font-label-caps text-on-surface-variant tracking-widest">TRUSTED MINTS</h2>
+          <div className="flex items-center gap-2">
+            {!showAll && sortedMints.length > 0 && (
+              <Link to="/mints" className="text-label-caps font-label-caps text-primary hover:opacity-80 transition-opacity flex items-center gap-1">
+                VIEW ALL
+                <ChevronRight size={14} />
+              </Link>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 overflow-hidden px-1 -mx-1 py-1 -my-1">
         <div 
           onClick={() => setShowAddMint(true)}
           className="bg-surface-container-lowest rounded-2xl p-3.5 md:p-4 flex items-center justify-center gap-3 shadow-inner border-2 border-dotted border-primary/50 relative group hover:bg-surface-container-low hover:border-primary/80 transition-all duration-300 cursor-pointer"
@@ -139,6 +144,7 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
       {showAddMint && (
         <AddMintModal onClose={() => setShowAddMint(false)} />
       )}
+      </div>
     </section>
   );
 };

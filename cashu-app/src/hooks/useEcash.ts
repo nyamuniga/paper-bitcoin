@@ -40,7 +40,7 @@ export const useEcash = (mintUrl?: string) => {
     };
   }, [currentTxId, isClaimed]);
 
-  const sendEcash = async (amount: number, overrideMintUrl?: string) => {
+  const sendEcash = async (amount: number, overrideMintUrl?: string, pubkey?: string) => {
     if (isSendingRef.current) return null;
     
     const targetMint = overrideMintUrl || mintUrl;
@@ -54,7 +54,8 @@ export const useEcash = (mintUrl?: string) => {
     try {
       const result: {token: string, tx_id: string} = await invoke('send_ecash', { 
         mintUrl: targetMint, 
-        amount 
+        amount,
+        pubkey 
       });
       setCurrentTxId(result.tx_id);
       await refreshWallet();

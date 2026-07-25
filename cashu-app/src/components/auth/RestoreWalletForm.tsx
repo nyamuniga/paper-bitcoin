@@ -6,7 +6,7 @@ import { MintIcon } from '../shared/MintIcon';
 interface RestoreWalletFormProps {
   onCancel: () => void;
   onError: (msg: string) => void;
-  onRestore: (mnemonic: string, passphrase: string, mintUrls: string[]) => Promise<boolean>;
+  onRestore: (mnemonic: string, passphrase: string, rememberMe: boolean, mintUrls: string[]) => Promise<boolean>;
   restoreProgress?: string[];
 }
 
@@ -14,6 +14,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
   const [step, setStep] = useState<1 | 2>(1);
   const [mnemonic, setMnemonic] = useState('');
   const [passphrase, setPassphrase] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [mintUrls, setMintUrls] = useState<string[]>([]);
   const [newMint, setNewMint] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,7 +58,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
     e.preventDefault();
 
     setLoading(true);
-    const success = await onRestore(mnemonic, passphrase, mintUrls);
+    const success = await onRestore(mnemonic, passphrase, rememberMe, mintUrls);
     if (!success) {
       setLoading(false);
     }
@@ -80,6 +81,10 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
           onChange={e => setPassphrase(e.target.value)}
           className="w-full bg-background border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors"
         />
+        <div className="flex items-center gap-2 px-1">
+          <input type="checkbox" id="remember-restore" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="rounded bg-background border-gray-700 text-primary focus:ring-primary h-4 w-4" />
+          <label htmlFor="remember-restore" className="text-sm text-gray-300">Remember me on this device</label>
+        </div>
         <button
           type="submit"
           className="w-full bg-primary hover:bg-primary/90 text-background font-bold py-3 rounded-xl transition-colors flex justify-center items-center h-12"

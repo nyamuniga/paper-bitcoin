@@ -11,7 +11,10 @@ interface WalletState {
   setBalance: (sats: number) => void;
   setMintBalances: (balances: Record<string, number>) => void;
   refreshWallet: () => Promise<void>;
+  clearWalletState: () => void;
 }
+
+let currentRefreshSeq = 0;
 
 export const useWalletStore = create<WalletState>()((set) => ({
   isInitialized: false,
@@ -22,7 +25,17 @@ export const useWalletStore = create<WalletState>()((set) => ({
   setInitialized: (val) => set({ isInitialized: val }),
   setBalance: (sats) => set({ balanceSats: sats }),
   setMintBalances: (balances) => set({ mintBalances: balances }),
+  clearWalletState: () => {
+    currentRefreshSeq++;
+    set({
+      isInitialized: false,
+      balanceSats: 0,
+      mintBalances: {},
+      pendingTxs: 0,
+    });
+  },
   refreshWallet: async () => {
+    const seq = currentRefreshSeq;
     try {
       const res: any = await invoke('wallet_info');
       
@@ -36,6 +49,8 @@ export const useWalletStore = create<WalletState>()((set) => ({
         }
       }
 
+      if (seq !== currentRefreshSeq) return;
+
       set({
         isInitialized: res.is_initialized,
         balanceSats: res.balance_sats,
@@ -44,7 +59,15 @@ export const useWalletStore = create<WalletState>()((set) => ({
         lastUpdate: Date.now(),
       });
     } catch (e) {
-      console.error("Failed to refresh wallet:", e);
+      if (seq !== currentRefreshSeq) return;
+      console.error("Failed to refresh wallet (likely locked):", e);
+      set({
+        isInitialized: false,
+        balanceSats: 0,
+        mintBalances: {},
+        pendingTxs: 0,
+        lastUpdate: Date.now(),
+      });
     }
   },
 }));

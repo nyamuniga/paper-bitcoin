@@ -132,7 +132,7 @@ export const LightningAddressCard: React.FC = () => {
             )
           ) : (
             <div className="flex flex-col gap-1">
-              <div className="flex gap-2 ">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <div className="flex-1 flex items-center bg-surface-container-low rounded-lg overflow-hidden">
                   <input
                     type="text"
@@ -143,28 +143,30 @@ export const LightningAddressCard: React.FC = () => {
                     className="flex-1 min-w-0 bg-transparent px-3 py-2 text-sm text-on-surface outline-none"
                     autoFocus
                   />
-                  <span className="text-on-surface-variant text-sm pr-3 whitespace-nowrap">@{NPUB_DOMAIN}</span>
+                  <span className="text-on-surface-variant text-sm pr-3 whitespace-nowrap shrink-0">@{NPUB_DOMAIN}</span>
                 </div>
-                <button
-                  onClick={async () => {
-                    await handleClaimUsername();
-                  }}
-                  disabled={claimingUsername || usernameInput.length < 3}
-                  className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-50 transition-colors"
-                >
-                  {claimingUsername ? <Loader2 size={14} className="animate-spin" /> : 'Claim'}
-                </button>
-                {customUsername && (
+                <div className="flex gap-2 shrink-0">
                   <button
-                    onClick={() => {
-                      setShowUsernameInput(false);
-                      setUsernameInput('');
+                    onClick={async () => {
+                      await handleClaimUsername();
                     }}
-                    className="text-on-surface-variant hover:text-on-surface px-2 transition-colors"
+                    disabled={claimingUsername || usernameInput.length < 3}
+                    className="flex-1 sm:flex-none bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-50 transition-colors flex items-center justify-center"
                   >
-                    Cancel
+                    {claimingUsername ? <Loader2 size={14} className="animate-spin" /> : 'Claim'}
                   </button>
-                )}
+                  {customUsername && (
+                    <button
+                      onClick={() => {
+                        setShowUsernameInput(false);
+                        setUsernameInput('');
+                      }}
+                      className="flex-1 sm:flex-none text-on-surface-variant hover:text-on-surface hover:bg-surface-container px-4 py-2 sm:px-2 rounded-lg transition-colors flex items-center justify-center"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </div>
               {usernameInput.length > 0 && usernameInput.length < 3 && (
                 <p className="text-red-400 text-xs px-1">Username must be at least 3 characters</p>
