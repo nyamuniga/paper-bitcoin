@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { PageHeader } from '../components/shared/PageHeader';
 import { useMints } from '../hooks/useMints';
 import { useWalletStore } from '../store/wallet';
-import { Server, Plus, Check, Search, ShieldCheck, Zap, ChevronLeft, ChevronRight, Info, X, Loader2 } from 'lucide-react';
+import { Server, Check, Search, ChevronLeft, ChevronRight, Info, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import clsx from 'clsx';
 import { MintInfoModal } from '../components/home/MintInfoModal';

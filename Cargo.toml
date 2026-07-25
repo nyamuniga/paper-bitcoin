@@ -11,7 +11,7 @@ resolver = "2"
 
 [workspace.dependencies]
 # Elliptic-curve cryptography (secp256k1, Cashu NUT-00)
-k256        = { version = "0.13", features = ["arithmetic"] }
+k256        = { version = "0.13", features = ["arithmetic", "schnorr"] }
 sha2        = "0.10"
 hmac        = "0.12"
 rand        = { version = "0.8", features = ["getrandom"] }

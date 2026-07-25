@@ -245,6 +245,7 @@ pub async fn redeem_direct_note(
             proofs,
             desired_amounts,
             vec![], // no change needed
+            None,
         ).await.map_err(|e| anyhow!("Failed to receive ecash from {}: {}", mint_url, e))?;
 
         // Add to wallet
