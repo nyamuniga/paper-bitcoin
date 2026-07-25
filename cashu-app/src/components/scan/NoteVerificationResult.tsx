@@ -15,11 +15,13 @@ export const NoteVerificationResult: React.FC<NoteVerificationResultProps> = ({
 }) => {
   return (
     <>
-      <div className="text-center relative">
+      <div className="text-center">
         {noteInfo.type === 'public' && (
-          <span className="absolute -top-3 right-0 bg-primary/10 text-primary text-[10px] font-bold px-2 py-1 rounded border border-primary/20 text-label-caps font-label-caps">
-            VERIFICATION ONLY
-          </span>
+          <div className="mb-2">
+            <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-1 rounded border border-primary/20 text-label-caps font-label-caps">
+              VERIFICATION ONLY
+            </span>
+          </div>
         )}
         <h2 className="text-headline-lg-mobile font-headline-lg-mobile text-on-surface mb-1">E-Cash Note (₿{noteInfo.amount_sats})</h2>
         <div className="text-xs text-on-surface-variant font-mono break-all opacity-70">{noteInfo.validation_hash}</div>

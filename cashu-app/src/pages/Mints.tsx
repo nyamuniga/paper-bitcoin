@@ -10,21 +10,28 @@ export default function Mints() {
 
   return (
     <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
-        <PageHeader 
-          title="Trusted Mints" 
-          subtitle="Manage and view all your connected mints."
-        />
-        <button 
-          onClick={() => navigate('/discover')}
-          className="flex items-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary px-4 py-2.5 rounded-xl font-bold transition-colors shadow-sm"
-        >
-          <Compass size={18} />
-          Discover Mints
-        </button>
-      </div>
+
+      <PageHeader
+        title="Trusted Mints"
+        subtitle="Manage and view all your connected mints."
+      />
       <div className="mt-6">
-        <TrustedMintsList mintBalances={mintBalances} showAll={true} />
+        <TrustedMintsList
+          mintBalances={mintBalances}
+          showAll={true}
+          topAction={
+            <div
+              onClick={() => navigate('/discover')}
+              className="bg-primary/5 rounded-2xl p-3.5 md:p-4 flex items-center justify-center gap-3 shadow-inner border-2 border-primary/20 relative group hover:bg-primary/10 hover:border-primary/40 transition-all duration-300 cursor-pointer"
+            >
+              <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
+              <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 relative z-10 pointer-events-none group-hover:scale-105 transition-transform">
+                <Compass className="text-primary w-5 h-5" />
+              </div>
+              <span className="text-body-md font-body-md text-primary font-bold relative z-10 pointer-events-none tracking-wide">Discover Mints</span>
+            </div>
+          }
+        />
       </div>
     </main>
   );
