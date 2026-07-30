@@ -135,7 +135,7 @@ export const NWCSection = () => {
           </div>
         </div>
         <div className="flex items-center gap-4 shrink-0">
-          <div className="text-on-surface-variant shrink-0 hidden sm:block">
+          <div className="text-on-surface-variant shrink-0">
             {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
           </div>
         </div>
