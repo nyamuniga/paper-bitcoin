@@ -271,7 +271,7 @@ async fn redeem_note_mpp(
     let results = futures::future::join_all(melt_futures).await;
 
     // ── Step 6: Check if all succeeded ──────────────────────────────────────
-    let all_paid = results.iter().all(|r| matches!(r, Ok((true, _))));
+    let all_paid = results.iter().all(|r| matches!(r, Ok((true, _, _))));
 
     if !all_paid {
         // Refund ALL proofs on any failure (atomic)
@@ -292,7 +292,7 @@ async fn redeem_note_mpp(
     // ── Step 7: Process change from all mints ──────────────────────────────
     let mut all_change_proofs = Vec::new();
     for (req, res) in melt_requests.into_iter().zip(results.into_iter()) {
-        let (_paid, change_sigs) = res?;
+        let (_paid, _preimage, change_sigs) = res?;
         let client = MintClient::new(&req.mint);
         let mut keyset_cache = std::collections::HashMap::new();
         keyset_cache.insert(req.keyset.id.clone(), req.keyset.clone());
@@ -467,7 +467,7 @@ async fn redeem_note_legacy(
 
             execution_futures.push(async move {
                 // Melt child proofs to Hub invoice
-                let (paid, change_sigs) = entry_client.melt_tokens(&entry_proofs, &inv_clone, None, Some(change_outputs)).await?;
+                let (paid, _preimage, change_sigs) = entry_client.melt_tokens(&entry_proofs, &inv_clone, None, Some(change_outputs)).await?;
                 if !paid {
                     return Err::<_, anyhow::Error>(anyhow!("Failed to melt child mint to Hub"));
                 }
@@ -589,7 +589,7 @@ async fn redeem_note_legacy(
     // Send the final melt
     let melt_result = hub_client.melt_tokens(&hub_proofs, external_invoice, Some(&final_quote_id), Some(outputs)).await;
 
-    let (paid, change_sigs) = match melt_result {
+    let (paid, _preimage, change_sigs) = match melt_result {
         Ok(res) => res,
         Err(e) => {
             let err_str = e.to_string();
@@ -751,7 +751,7 @@ pub async fn redeem_note(
 
 // ─── Pay Invoice ────────────────────────────────────────────────────────────────
 
-pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, invoice: &str, target_mint: Option<String>) -> Result<u64> {
+pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, invoice: &str, target_mint: Option<String>) -> Result<(u64, String)> {
     let mut selected_mint = None;
     let mut required_amt = 0;
     let mut fee_reserve = 0;
@@ -849,7 +849,7 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
 
     let melt_result = hub_client.melt_tokens(&hub_proofs, invoice, Some(&quote_id), Some(outputs)).await;
 
-    let (paid, change_sigs) = match melt_result {
+    let (paid, preimage, change_sigs) = match melt_result {
         Ok(res) => res,
         Err(e) => {
             let ys: Vec<String> = hub_proofs.iter().map(|p| {
@@ -944,5 +944,5 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
         return Err(anyhow!("Lightning Network payment failed. The mint could not find a route or the invoice expired. Your funds have been refunded."));
     }
 
-    Ok(required_amt)
+    Ok((required_amt, preimage.unwrap_or_default()))
 }
