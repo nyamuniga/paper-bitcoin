@@ -259,7 +259,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                                   if (hex.length === 64) hex = `02${hex}`;
                                   setPubkey(hex);
                                 }
-                              } catch (err) {}
+                              } catch (err) { }
                             });
                           } else if (val.length === 64) {
                             val = `02${val}`;
@@ -399,7 +399,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                         value={receiveToken}
                         onChange={(e) => handleTokenInput(e.target.value)}
                         className="w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-xl border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:ring-primary focus:outline-none resize-none placeholder:text-on-surface-variant/50"
-                        placeholder="Paste cashuA token here to receive..."
+                        placeholder="Paste cashu token here to receive..."
                         rows={4}
                         spellCheck={false}
                       />

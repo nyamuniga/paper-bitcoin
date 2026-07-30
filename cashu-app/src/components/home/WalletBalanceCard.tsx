@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { invoke } from '@tauri-apps/api/core';
 import { QrCode, ArrowDownLeft, ArrowUpRight, Coins, Zap, FileText, ChevronDown, Phone, Check } from 'lucide-react';
 import { ActionMenuModal } from './ActionMenuModal';
 import { EcashModal } from './EcashModal';
@@ -98,7 +99,12 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               {mintUrls.map((mint, index) => (
                 <button
                   key={mint}
-                  onClick={() => { setSelectedMint(mint); localStorage.setItem('preferred_mint_url', mint); setShowMintDropdown(false); }}
+                  onClick={() => { 
+                    setSelectedMint(mint); 
+                    localStorage.setItem('preferred_mint_url', mint); 
+                    invoke('set_app_default_mint', { mintUrl: mint }).catch(console.error);
+                    setShowMintDropdown(false); 
+                  }}
                   className={`flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left ${index > 0 ? 'border-t border-outline-variant/10' : ''}`}
                 >
                   <div className="flex items-center gap-2 min-w-0 pr-2">
