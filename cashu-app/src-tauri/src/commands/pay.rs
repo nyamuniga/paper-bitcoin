@@ -21,7 +21,7 @@ pub async fn pay_invoice(
 
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
 
-    let sats_paid =
+    let (sats_paid, _preimage) =
         ecash_wallet::pay_invoice(&mut w_state, &path, &passphrase, &invoice, mint_url).await?;
 
     Ok(sats_paid)

@@ -167,26 +167,42 @@ pub async fn send_ecash(
         };
     }
 
-    // Build the CashuToken strictly (NUT-00 format), ignoring internal wallet proof fields
-    // which cause other wallets to fail parsing the token.
-    let token_json = serde_json::json!({
-        "token": [{
-            "mint": mint_url.clone(),
-            "proofs": final_send_proofs.iter().map(|p| serde_json::json!({
-                "id": p.id,
-                "amount": p.amount,
-                "secret": p.secret,
-                "C": p.c,
-            })).collect::<Vec<_>>()
-        }],
-        "unit": "sat"
-    });
+    // Build the CBOR Token strictly (NUT-00 V4 format)
+    use ciborium::Value;
+    use std::collections::HashMap;
+
+    let mut proofs_by_id: HashMap<String, Vec<&ecash_core::types::Proof>> = HashMap::new();
+    for p in &final_send_proofs {
+        proofs_by_id.entry(p.id.clone()).or_default().push(p);
+    }
+
+    let mut token_entries = Vec::new();
+    for (id, proofs) in proofs_by_id {
+        let proofs_cbor = proofs.into_iter().map(|p| {
+            Value::Map(vec![
+                (Value::Text("a".to_string()), Value::Integer(p.amount.into())),
+                (Value::Text("s".to_string()), Value::Text(p.secret.clone())),
+                (Value::Text("c".to_string()), Value::Bytes(hex::decode(&p.c).unwrap_or_default())),
+            ])
+        }).collect::<Vec<_>>();
+        
+        token_entries.push(Value::Map(vec![
+            (Value::Text("i".to_string()), Value::Bytes(hex::decode(&id).unwrap_or_default())),
+            (Value::Text("p".to_string()), Value::Array(proofs_cbor)),
+        ]));
+    }
+
+    let token_cbor = Value::Map(vec![
+        (Value::Text("m".to_string()), Value::Text(mint_url.clone())),
+        (Value::Text("t".to_string()), Value::Array(token_entries)),
+    ]);
 
     use base64::Engine;
-    let json_str = serde_json::to_string(&token_json).unwrap();
+    let mut cbor_bytes = Vec::new();
+    ciborium::into_writer(&token_cbor, &mut cbor_bytes).unwrap();
     let encoded = format!(
-        "cashuA{}",
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(json_str.as_bytes())
+        "cashuB{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&cbor_bytes)
     );
 
     // Update transaction to Success

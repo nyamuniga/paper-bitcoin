@@ -57,8 +57,8 @@ export const WalletManagementSection = () => {
 
   return (
     <section className="bg-surface-container-high rounded-xl border border-outline-variant/30 overflow-hidden">
-      <div 
-        className="flex items-center justify-between p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
+      <div
+        className="flex items-center justify-between p-4 md:p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-3">
@@ -70,7 +70,7 @@ export const WalletManagementSection = () => {
             <p className="text-sm text-on-surface-variant">Lock your wallet or permanently delete it from this device.</p>
           </div>
         </div>
-        
+
         <div className="text-on-surface-variant">
           {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
         </div>
@@ -78,81 +78,81 @@ export const WalletManagementSection = () => {
 
       {isExpanded && (
         <div className="px-6 pb-6 pt-2 border-t border-outline-variant/10 flex flex-col gap-4">
-        <button
-          onClick={handleLock}
-          className="flex items-center justify-between p-4 bg-surface-container-highest hover:bg-surface-bright rounded-xl border border-outline-variant/20 transition-colors group cursor-pointer"
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 text-primary rounded-lg">
-              <Lock className="w-5 h-5" />
-            </div>
-            <div className="text-left">
-              <div className="font-bold text-on-surface text-sm">Lock Wallet</div>
-              <div className="text-xs text-on-surface-variant">Require passphrase to access again</div>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={handleCleanWallet}
-          disabled={isCleaning}
-          className="flex items-center justify-between p-4 bg-surface-container-highest hover:bg-surface-bright rounded-xl border border-outline-variant/20 transition-colors group cursor-pointer disabled:opacity-50"
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 text-primary rounded-lg">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div className="text-left">
-              <div className="font-bold text-on-surface text-sm">Clean Wallet</div>
-              <div className="text-xs text-on-surface-variant">Remove ghost spent proofs from balance</div>
-            </div>
-          </div>
-        </button>
-
-        {!showDeleteConfirm ? (
           <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="flex items-center justify-between p-4 bg-surface-container-highest hover:bg-error/10 rounded-xl border border-outline-variant/20 hover:border-error/30 transition-colors group cursor-pointer"
+            onClick={handleLock}
+            className="flex items-center justify-between p-4 bg-surface-container-highest hover:bg-surface-bright rounded-xl border border-outline-variant/20 transition-colors group cursor-pointer"
           >
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-error/10 text-error rounded-lg">
-                <Trash2 className="w-5 h-5" />
+              <div className="p-2 bg-primary/10 text-primary rounded-lg">
+                <Lock className="w-5 h-5" />
               </div>
               <div className="text-left">
-                <div className="font-bold text-error text-sm">Delete Wallet</div>
-                <div className="text-xs text-on-surface-variant group-hover:text-error/70 transition-colors">Permanently remove wallet data</div>
+                <div className="font-bold text-on-surface text-sm">Lock Wallet</div>
+                <div className="text-xs text-on-surface-variant">Require passphrase to access again</div>
               </div>
             </div>
           </button>
-        ) : (
-          <div className="p-4 bg-error/10 border border-error/30 rounded-xl flex flex-col gap-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-error shrink-0 mt-0.5" />
-              <div>
-                <div className="font-bold text-error text-sm">Are you absolutely sure?</div>
-                <div className="text-xs text-error/80 mt-1">
-                  This will permanently delete your wallet data from this device. If you haven't backed up your recovery phrase, your funds will be lost forever.
-                </div>
+
+          <button
+            onClick={handleCleanWallet}
+            disabled={isCleaning}
+            className="flex items-center justify-between p-4 bg-surface-container-highest hover:bg-surface-bright rounded-xl border border-outline-variant/20 transition-colors group cursor-pointer disabled:opacity-50"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-primary/10 text-primary rounded-lg">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <div className="font-bold text-on-surface text-sm">Clean Wallet</div>
+                <div className="text-xs text-on-surface-variant">Remove ghost spent proofs from balance</div>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="flex-1 bg-error hover:bg-error/90 text-on-error font-bold py-2 px-4 rounded-lg text-sm transition-colors disabled:opacity-50"
-              >
-                {isDeleting ? 'Deleting...' : 'Yes, Delete Wallet'}
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={isDeleting}
-                className="flex-1 bg-surface-container-highest hover:bg-surface-bright text-on-surface font-bold py-2 px-4 rounded-lg text-sm transition-colors"
-              >
-                Cancel
-              </button>
+          </button>
+
+          {!showDeleteConfirm ? (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center justify-between p-4 bg-surface-container-highest hover:bg-error/10 rounded-xl border border-outline-variant/20 hover:border-error/30 transition-colors group cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-error/10 text-error rounded-lg">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <div className="font-bold text-error text-sm">Delete Wallet</div>
+                  <div className="text-xs text-on-surface-variant group-hover:text-error/70 transition-colors">Permanently remove wallet data</div>
+                </div>
+              </div>
+            </button>
+          ) : (
+            <div className="p-4 bg-error/10 border border-error/30 rounded-xl flex flex-col gap-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-error shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-error text-sm">Are you absolutely sure?</div>
+                  <div className="text-xs text-error/80 mt-1">
+                    This will permanently delete your wallet data from this device. If you haven't backed up your recovery phrase, your funds will be lost forever.
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="flex-1 bg-error hover:bg-error/90 text-on-error font-bold py-2 px-4 rounded-lg text-sm transition-colors disabled:opacity-50"
+                >
+                  {isDeleting ? 'Deleting...' : 'Yes, Delete Wallet'}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                  className="flex-1 bg-surface-container-highest hover:bg-surface-bright text-on-surface font-bold py-2 px-4 rounded-lg text-sm transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
         </div>
       )}
     </section>
