@@ -32,7 +32,7 @@ export const RecoveryPhraseSection = () => {
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsVerifying(true);
-    
+
     const success = await unlockWallet(passphrase, false);
     if (success) {
       try {
@@ -58,8 +58,8 @@ export const RecoveryPhraseSection = () => {
 
   return (
     <section className="bg-surface-container-high rounded-xl border border-outline-variant/30 overflow-hidden">
-      <div 
-        className="flex items-center justify-between p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
+      <div
+        className="flex items-center justify-between p-4 md:p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -71,7 +71,7 @@ export const RecoveryPhraseSection = () => {
             <p className="text-sm text-on-surface-variant truncate">View your 12-word seed phrase. Keep this secure!</p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-3 shrink-0">
           {isExpanded && (
             <button
@@ -95,27 +95,27 @@ export const RecoveryPhraseSection = () => {
         <div className="px-6 pb-6 pt-2 border-t border-outline-variant/10">
           {showPrompt && !showMnemonic && (
             <form onSubmit={handleVerify} className="p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/50 flex flex-col gap-3">
-          <label className="text-sm text-on-surface-variant font-bold">Enter passphrase to reveal</label>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="password"
-              value={passphrase}
-              onChange={(e) => setPassphrase(e.target.value)}
-              className="flex-1 bg-surface-container-high border border-outline-variant/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary"
-              placeholder="Wallet passphrase"
-              autoFocus
-            />
-            <button
-              type="submit"
-              disabled={isVerifying || !passphrase}
-              className="px-6 py-3 bg-primary text-on-primary font-bold rounded-lg disabled:opacity-50 transition-opacity whitespace-nowrap"
-            >
-              {isVerifying ? 'Verifying...' : 'Reveal'}
-            </button>
-          </div>
-        </form>
-      )}
-      
+              <label className="text-sm text-on-surface-variant font-bold">Enter passphrase to reveal</label>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="password"
+                  value={passphrase}
+                  onChange={(e) => setPassphrase(e.target.value)}
+                  className="flex-1 bg-surface-container-high border border-outline-variant/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary"
+                  placeholder="Wallet passphrase"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={isVerifying || !passphrase}
+                  className="px-6 py-3 bg-primary text-on-primary font-bold rounded-lg disabled:opacity-50 transition-opacity whitespace-nowrap"
+                >
+                  {isVerifying ? 'Verifying...' : 'Reveal'}
+                </button>
+              </div>
+            </form>
+          )}
+
           {showMnemonic && (
             <div className="mt-4 p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/50 relative group">
               <div className="grid grid-cols-3 md:grid-cols-4 gap-3 mb-2">
@@ -126,7 +126,7 @@ export const RecoveryPhraseSection = () => {
                   </div>
                 ))}
               </div>
-              <button 
+              <button
                 onClick={copyMnemonic}
                 className="absolute top-2 right-2 p-2 bg-surface-container-high hover:bg-surface-bright rounded-md text-on-surface-variant transition-colors opacity-0 group-hover:opacity-100"
                 title="Copy phrase"
