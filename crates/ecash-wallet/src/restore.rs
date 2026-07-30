@@ -9,6 +9,7 @@ use crate::{
     client::MintClient,
 };
 use std::path::PathBuf;
+use std::str::FromStr;
 
 pub async fn restore_from_mints(
     state: &mut WalletState,
