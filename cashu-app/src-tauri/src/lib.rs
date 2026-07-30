@@ -1,3 +1,4 @@
+pub mod nwc;
 mod commands;
 mod error;
 
@@ -12,7 +13,16 @@ pub fn run() {
                 passphrase: std::sync::Mutex::new(None),
                 wallet_path,
                 wallet_lock: tokio::sync::Mutex::new(()),
+                pending_nwc_requests: std::sync::Mutex::new(Vec::new()),
             });
+            
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = crate::nwc::spawn_nwc_listener(app_handle).await {
+                    eprintln!("NWC listener error: {}", e);
+                }
+            });
+            
             Ok(())
         })
         .plugin(tauri_plugin_fs::init())
@@ -62,6 +72,15 @@ pub fn run() {
             commands::history::check_token_spend_status,
             commands::history::get_note_svg,
             commands::history::check_issue_status,
+            crate::nwc::get_nwc_uri,
+            crate::nwc::enable_nwc,
+            crate::nwc::reset_nwc_keys,
+            crate::nwc::get_nwc_config,
+            crate::nwc::set_nwc_config,
+            crate::nwc::set_app_default_mint,
+            crate::nwc::get_pending_nwc_requests,
+            crate::nwc::approve_nwc_request,
+            crate::nwc::reject_nwc_request,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -31,6 +31,7 @@ pub struct AppState {
     pub passphrase: Mutex<Option<String>>,
     pub wallet_path: std::path::PathBuf,
     pub wallet_lock: tokio::sync::Mutex<()>,
+    pub pending_nwc_requests: Mutex<Vec<crate::nwc::PendingNwcRequest>>,
 }
 
 #[tauri::command]

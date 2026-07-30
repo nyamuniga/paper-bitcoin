@@ -161,7 +161,7 @@ impl MintClient {
         invoice: &str,
         quote_id: Option<&str>,
         outputs: Option<Vec<serde_json::Value>>,
-    ) -> Result<(bool, Vec<serde_json::Value>)> {
+    ) -> Result<(bool, Option<String>, Vec<serde_json::Value>)> {
         let qid = if let Some(q) = quote_id {
             q.to_string()
         } else {
@@ -194,12 +194,13 @@ impl MintClient {
         check_api_error(&mv, "Melt")?;
 
         let paid = mv["paid"].as_bool().unwrap_or(false);
+        let preimage = mv.get("payment_preimage").and_then(|p| p.as_str()).map(|s| s.to_string());
         let change = mv.get("change")
             .and_then(|c| c.as_array())
             .cloned()
             .unwrap_or_default();
-
-        Ok((paid, change))
+            
+        Ok((paid, preimage, change))
     }
 
     /// Send a swap request (NUT-03).

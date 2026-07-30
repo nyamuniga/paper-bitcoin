@@ -3,9 +3,14 @@ import { Loader2 } from 'lucide-react';
 import { WalletBalanceCard } from '../components/home/WalletBalanceCard';
 import { LightningAddressCard } from '../components/home/LightningAddressCard';
 import { RecentTransactions } from '../components/home/RecentTransactions';
+import { PendingNwcModal } from '../components/home/PendingNwcModal';
 import { useHome } from '../hooks/useHome';
 import { useNostr } from '../hooks/useNostr';
 import { useWalletStore } from '../store/wallet';
+import { useNwcStore } from '../store/nwcStore';
+import { listen } from '@tauri-apps/api/event';
+import { toast } from 'react-hot-toast';
+import { Zap } from 'lucide-react';
 
 export const Home = () => {
   const { balance, mintBalances } = useHome();
@@ -22,6 +27,27 @@ export const Home = () => {
   // Keep mutable refs for state values needed inside native event listeners
   const pullingRef = useRef(false);
   const refreshingRef = useRef(false);
+
+  const { pendingRequests, fetchPendingRequests } = useNwcStore();
+  const [showPendingNwcModal, setShowPendingNwcModal] = useState(false);
+
+  useEffect(() => {
+    fetchPendingRequests();
+    
+    const unlisten1 = listen('nwc_delayed_request_added', () => {
+      fetchPendingRequests();
+      toast.success('New delayed Zap requires approval', { icon: '⚡' });
+    });
+    
+    const unlisten2 = listen('nwc_queue_updated', () => {
+      fetchPendingRequests();
+    });
+    
+    return () => {
+      unlisten1.then(f => f());
+      unlisten2.then(f => f());
+    };
+  }, [fetchPendingRequests]);
 
   useEffect(() => { pullingRef.current = pulling; }, [pulling]);
   useEffect(() => { refreshingRef.current = refreshing; }, [refreshing]);
@@ -180,10 +206,32 @@ export const Home = () => {
         className="px-container-padding pt-4 md:pt-8 flex flex-col gap-6 pb-8 w-full transition-transform duration-200 ease-out"
         style={{ transform: `translateY(${refreshing ? 50 : pullDistance}px)` }}
       >
+        {pendingRequests.length > 0 && (
+          <div 
+            onClick={() => setShowPendingNwcModal(true)}
+            className="bg-amber-500/20 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:bg-amber-500/30 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="bg-amber-500/20 p-2 rounded-lg">
+                <Zap size={20} className="text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-on-surface font-bold">Pending Zaps</h3>
+                <p className="text-sm text-on-surface-variant">You have {pendingRequests.length} zap{pendingRequests.length > 1 ? 's' : ''} awaiting approval</p>
+              </div>
+            </div>
+            <button className="bg-amber-500 text-black px-4 py-2 rounded-lg font-bold text-sm">
+              Review
+            </button>
+          </div>
+        )}
+
         <WalletBalanceCard balance={balance} mintBalances={mintBalances} />
         <LightningAddressCard />
         <RecentTransactions />
       </main>
+
+      {showPendingNwcModal && <PendingNwcModal onClose={() => setShowPendingNwcModal(false)} />}
     </div>
   );
 };
