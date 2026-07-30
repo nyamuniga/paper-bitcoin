@@ -679,8 +679,8 @@ async fn cmd_pay(wallet_path: &PathBuf, invoice: &str) -> Result<()> {
 
     let pb = ui::progress_spinner("Paying invoice…");
     match pay_invoice(&mut state, wallet_path, &passphrase, invoice, None).await {
-        Ok(paid_amt) => pb.finish_with_message(format!("Paid {} sats!", paid_amt)),
-        Err(e) => pb.finish_with_message(format!("Payment failed: {}", e)),
+        Ok((paid_amt, _preimage)) => pb.finish_with_message(format!("Paid {} sats!", paid_amt)),
+        Err(e) => pb.finish_with_message(format!("Failed: {}", e)),
     }
     Ok(())
 }
@@ -949,8 +949,8 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
 
                 let pb = ui::progress_spinner("Paying invoice…");
                 match pay_invoice(&mut state, wallet_path, &passphrase, &ln_invoice, None).await {
-                    Ok(paid_amt) => pb.finish_with_message(format!("Paid {} sats!", paid_amt)),
-                    Err(e) => pb.finish_with_message(format!("Payment failed: {}", e)),
+                    Ok((paid_amt, _preimage)) => pb.finish_with_message(format!("Paid {} sats!", paid_amt)),
+                    Err(e) => pb.finish_with_message(format!("Failed: {}", e)),
                 }
             }
 
