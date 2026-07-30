@@ -40,7 +40,7 @@ export const LockedEcashSection: React.FC = () => {
     <>
       <section className="bg-surface-container-high rounded-xl border border-outline-variant/30 overflow-hidden">
         <div
-          className="flex items-center justify-between p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
+          className="flex items-center justify-between p-4 md:p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
           onClick={() => setIsExpanded(!isExpanded)}
         >
           <div className="flex items-center gap-3 min-w-0">
