@@ -148,6 +148,13 @@ pub async fn resume_issue_note(
         }
     };
 
+    if issue_data.fee_strategy == "direct" {
+        // Direct issues cannot be resumed midway because swaps are atomic per mint.
+        // If it failed, it's safer to just abort and refund.
+        let status = crate::history::check_transaction_status_legacy(state, wallet_path, passphrase, tx_id).await?;
+        return Err(anyhow!("Direct issue failed halfway and cannot be resumed. It has been aborted and any swapped funds have been fully swept back to your wallet. Transaction status is now: {:?}", status));
+    }
+
     let hub_client = MintClient::new(&issue_data.hub_mint);
     
     let check_url = format!("{}/v1/mint/quote/bolt11/{}", hub_client.url, issue_data.quote_id);

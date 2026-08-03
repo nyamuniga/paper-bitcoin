@@ -74,6 +74,23 @@ npm run tauri ios build
 
 ### Running the CLI
 
+If you run `cargo run -p ecash-cli` without any subcommands, you will enter an **interactive menu**.
+
+Alternatively, you can use the available subcommands directly:
+
+| Command | Description |
+|---------|-------------|
+| `init` | Create a new wallet |
+| `recover` | Recover a wallet using a 12-word seed phrase |
+| `migrate` | Migrate an old wallet format to the new format |
+| `info` | Display wallet status, mint balances, and keys |
+| `issue` | Issue a physical note (supports `--direct` to fund from balance) |
+| `verify` | Verify a note's integrity and cryptographic proofs |
+| `redeem` | Redeem a note (supports `--direct` to sweep to balance) |
+| `pay` | Pay a standard Lightning invoice (`bolt11`) |
+| `history` | View your transaction history |
+| `resume` | Resume/recover a pending or failed transaction |
+
 By default, the CLI uses a remote mint.
 
 ```bash
@@ -82,18 +99,24 @@ cargo build --release
 
 # Run step by step:
 cargo run -p ecash-cli -- init                  # create wallet
-cargo run -p ecash-cli -- issue 1000            # issue 1000 sat note → ./notes/
+
+# Issue 1000 sat note via Lightning payment → ./notes/
+cargo run -p ecash-cli -- issue 1000
+
+# Issue 1000 sat note directly from wallet balance
+cargo run -p ecash-cli -- issue 1000 --direct
+
 # Save payload to file
-echo "ECASHZ:NCFOA0/..." > note.txt
+echo 'ECASHZ:NCFOA0/...' > note.txt
 
 # Verify using the file
 cargo run -p ecash-cli -- verify "$(cat note.txt)"
 
-# Save payload to file
-echo "ECASHZ:NCFOA0/..." > note.txt
-
-# Redeem using the file
+# Redeem via Lightning invoice payout
 cargo run -p ecash-cli -- redeem "$(cat note.txt)"
+
+# Redeem directly to wallet balance
+cargo run -p ecash-cli -- redeem "$(cat note.txt)" --direct
 ```
 
 ## Production

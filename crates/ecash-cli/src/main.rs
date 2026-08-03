@@ -105,7 +105,7 @@ mod ui {
                 ecash_core::types::TransactionStatus::FailedMintError => "MintError".red().to_string(),
             };
             table.add_row(vec![
-                tx.id[..8].to_string(),
+                tx.id.clone(),
                 type_str.to_string(),
                 status_str,
                 format!("{:>10}", tx.amount),
@@ -197,9 +197,19 @@ enum Cmd {
     Recover,
     Migrate,
     Info,
-    Issue { sats: u64, out: PathBuf },
+    Issue {
+        sats: u64,
+        #[arg(default_value = "./notes")]
+        out: PathBuf,
+        #[arg(long)]
+        direct: bool,
+    },
     Verify { payload: String },
-    Redeem { payload: String },
+    Redeem {
+        payload: String,
+        #[arg(long)]
+        direct: bool,
+    },
     Pay { invoice: String },
     History,
     Resume { tx_id: String },
@@ -225,9 +235,9 @@ async fn main() -> Result<()> {
             Cmd::Recover         => cmd_recover(&wallet_path),
             Cmd::Migrate         => cmd_migrate(&wallet_path),
             Cmd::Info            => cmd_info(&wallet_path),
-            Cmd::Issue { sats, out } => cmd_issue(&wallet_path, &cli.mint, sats, &out).await,
+            Cmd::Issue { sats, out, direct } => cmd_issue(&wallet_path, &cli.mint, sats, &out, direct).await,
             Cmd::Verify { payload }  => cmd_verify(&cli.mint, &payload).await,
-            Cmd::Redeem { payload }  => cmd_redeem(&wallet_path, &payload).await,
+            Cmd::Redeem { payload, direct }  => cmd_redeem(&wallet_path, &payload, direct).await,
             Cmd::Pay { invoice }     => cmd_pay(&wallet_path, &invoice).await,
             Cmd::History             => cmd_history(&wallet_path).await,
             Cmd::Resume { tx_id }    => cmd_resume(&wallet_path, &tx_id).await,
@@ -405,6 +415,7 @@ async fn cmd_issue(
     mint_urls_str: &str,
     sats: u64,
     out_dir: &PathBuf,
+    direct: bool,
 ) -> Result<()> {
     let (mut state, passphrase) = load_wallet(wallet_path)?;
 
@@ -419,30 +430,43 @@ async fn cmd_issue(
         allocations.push((*url, amt));
     }
 
-    let pb = ui::progress_spinner("Preparing note…");
-
-    let note = issue_multimint_note(
-        &mut state,
-        wallet_path,
-        &passphrase,
-        &allocations,
-        ecash_wallet::ReserveStrategy::Static,
-        |hub_mint, inv, total_sats| async move {
-            pb.finish_and_clear();
-            // Show invoice in a box
-            let mut lines = Vec::new();
-            lines.push(format!("Mint: {}", hub_mint));
-            lines.push(format!("Face value : {} sats", sats));
-            lines.push(format!("Total cost : {} sats (includes {} sats fee reserve)", total_sats, total_sats - sats));
-            lines.push("".to_string());
-            lines.push(inv.clone());
-            ui::print_box(&lines, Some(("ACTION", "Pay the invoice above to fund this note.")));
-            qr2term::print_qr(&inv).unwrap();
-            println!();
-            println!("Waiting for payment…");
-            // The callback must return ()
-        }
-    ).await?;
+    let note = if direct {
+        println!("Using direct wallet balance...");
+        let pb = ui::progress_spinner("Issuing note directly…");
+        let allocs_refs: Vec<(&str, u64)> = allocations.iter().map(|(u, a)| (*u, *a)).collect();
+        let n = ecash_wallet::direct::issue_direct_note(
+            &mut state,
+            wallet_path,
+            &passphrase,
+            &allocs_refs,
+        ).await?;
+        pb.finish_and_clear();
+        n
+    } else {
+        let pb = ui::progress_spinner("Preparing note…");
+        issue_multimint_note(
+            &mut state,
+            wallet_path,
+            &passphrase,
+            &allocations,
+            ecash_wallet::ReserveStrategy::Static,
+            |hub_mint, inv, total_sats| async move {
+                pb.finish_and_clear();
+                // Show invoice in a box
+                let mut lines = Vec::new();
+                lines.push(format!("Mint: {}", hub_mint));
+                lines.push(format!("Face value : {} sats", sats));
+                lines.push(format!("Total cost : {} sats (includes {} sats fee reserve)", total_sats, total_sats - sats));
+                lines.push("".to_string());
+                lines.push(inv.clone());
+                ui::print_box(&lines, Some(("ACTION", "Pay the invoice above to fund this note.")));
+                qr2term::print_qr(&inv).unwrap();
+                println!();
+                println!("Waiting for payment…");
+                // The callback must return ()
+            }
+        ).await?
+    };
 
     // Note: the progress bar `pb` was moved into the closure and finished there.
     // We can now save the files.
@@ -479,6 +503,21 @@ async fn cmd_verify(_mint_url: &str, payload: &str) -> Result<()> {
 
     let decoded = match ecash_core::compact::decode_public_data(&bytes) {
         Ok(d) => d,
+        Err(ecash_core::compact::DecodeError::TrailingData) => {
+            // The payload might be a full private note, which contains extra data
+            match ecash_core::compact::decode_full_note(&bytes) {
+                Ok(full_note) => ecash_core::compact::DecodedPublicData {
+                    data: full_note.public_data,
+                    face_value_sats: full_note.amount_sats,
+                    block_height: full_note.block_height,
+                },
+                Err(e) => {
+                    println!("Failed to decode full note binary: {}", e);
+                    println!("  This payload may not be a valid ecash note binary.");
+                    return Ok(());
+                }
+            }
+        }
         Err(e) => {
             println!("Failed to decode binary file: {}", e);
             println!("  This payload may not be a valid ecash note binary.");
@@ -619,7 +658,7 @@ fn fmt_verbose_result(r: &VerificationResult, decoded: &ecash_core::compact::Dec
     }
 }
 
-async fn cmd_redeem(wallet_path: &PathBuf, payload: &str) -> Result<()> {
+async fn cmd_redeem(wallet_path: &PathBuf, payload: &str, direct: bool) -> Result<()> {
     println!("Redeeming note…");
 
     let (mut state, passphrase) = load_wallet(wallet_path)?;
@@ -632,6 +671,21 @@ async fn cmd_redeem(wallet_path: &PathBuf, payload: &str) -> Result<()> {
     let master_seed_hex = note.private_data.master_seed_hex;
 
     println!("  Face value: {} sats", amount_sats);
+
+    if direct {
+        let pb = ui::progress_spinner("Redeeming directly to wallet…");
+        match ecash_wallet::direct::redeem_direct_note(&mut state, wallet_path, &passphrase, &public_data, &master_seed_hex).await {
+            Ok(redeemed) => {
+                pb.finish_with_message(format!("Successfully redeemed {} sats to wallet balance!", redeemed));
+                println!("  ✓ Redemption completed.");
+            }
+            Err(e) => {
+                pb.finish_with_message("Redemption failed.");
+                println!("  Error: {}", e);
+            }
+        }
+        return Ok(());
+    }
 
     let ln_invoice_raw = Text::new(&format!(
         "Paste a Lightning invoice for exactly {} sats:", amount_sats
@@ -770,8 +824,10 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
         let options = vec![
             "Dashboard & Balance",
             "Issue Physical Note",
+            "Issue Note (Direct from Balance)",
             "Verify Note Offline",
             "Redeem Note (Lightning)",
+            "Redeem Note (Direct to Balance)",
             "Pay Lightning Invoice",
             "Transaction History",
             "Resume Pending Transaction",
@@ -911,6 +967,82 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
                 }
             }
 
+            "Issue Note (Direct from Balance)" => {
+                let (mut state, passphrase) = match load_wallet(wallet_path) {
+                    Ok(s) => s,
+                    Err(e) => { println!("Error: {}", e); continue; }
+                };
+
+                let sats_str = Text::new("Amount to issue (sats):").prompt()?;
+                let sats: u64 = match sats_str.parse() {
+                    Ok(s) => s,
+                    Err(_) => { println!("Invalid amount!"); continue; }
+                };
+
+                let default_mints = if state.mints.is_empty() {
+                    default_mint.to_string()
+                } else {
+                    state.mints.join(",")
+                };
+
+                let mint_urls_str = Text::new("Mint URLs (comma separated):")
+                    .with_default(&default_mints)
+                    .prompt()?;
+
+                let out_dir_str = Text::new("Output directory:")
+                    .with_default("./notes")
+                    .prompt()?;
+
+                let clean_mints: String = mint_urls_str.chars().filter(|c| !c.is_whitespace()).collect();
+                let mint_urls: Vec<&str> = clean_mints.split(',').filter(|s| !s.is_empty()).collect();
+                let mut allocations = Vec::new();
+                let per_mint = sats / mint_urls.len() as u64;
+                let remainder = sats % mint_urls.len() as u64;
+                for (i, url) in mint_urls.iter().enumerate() {
+                    let amt = if i == 0 { per_mint + remainder } else { per_mint };
+                    allocations.push((*url, amt));
+                }
+
+                let pb = ui::progress_spinner("Issuing note directly…");
+                let allocs_refs: Vec<(&str, u64)> = allocations.iter().map(|(u, a)| (*u, *a)).collect();
+                match ecash_wallet::direct::issue_direct_note(
+                    &mut state,
+                    wallet_path,
+                    &passphrase,
+                    &allocs_refs,
+                ).await {
+                    Ok(note) => {
+                        pb.finish_with_message("Note issued directly!");
+                        let out_path = PathBuf::from(&out_dir_str);
+                        std::fs::create_dir_all(&out_path).ok();
+                        let json_path = out_path.join(format!("{}.json", note.serial));
+                        let pdf_path  = out_path.join(format!("{}.pdf",  note.serial));
+                        let bin_path  = out_path.join(format!("{}.bin",  note.serial));
+                        let public_bin = ecash_core::compact::encode_public_data(
+                            &note.public_data,
+                            note.amount_sats,
+                            note.block_height,
+                        ).expect("Encode error");
+                        std::fs::write(&json_path, serde_json::to_string_pretty(&note).unwrap()).ok();
+                        if let Ok(svg) = generate_note_svg(&note) {
+                            std::fs::write(&pdf_path, generate_note_pdf(&svg).unwrap()).ok();
+                        }
+                        std::fs::write(&bin_path, &public_bin).ok();
+                        let summary = vec![
+                            format!("Serial : {}", note.serial),
+                            format!("JSON   : {}", json_path.display()),
+                            format!("BIN    : {}", bin_path.display()),
+                            format!("PDF    : {}", pdf_path.display()),
+                        ];
+                        ui::print_box(&summary, Some(("✓", "Note ready for printing.")));
+                    }
+                    Err(e) => {
+                        pb.finish_with_message("Error issuing note directly.");
+                        println!("Error: {:?}", e);
+                    }
+                }
+            }
+
             "Verify Note Offline" => {
                 let payload = Text::new("Scan the public QR code (Base45/Base64 payload):").prompt()?;
                 let payload = payload.trim();
@@ -920,7 +1052,13 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
             "Redeem Note (Lightning)" => {
                 let payload = Text::new("Scan the private/full QR code (Base45/Base64 payload):").prompt()?;
                 let payload = payload.trim();
-                let _ = cmd_redeem(wallet_path, payload).await;
+                let _ = cmd_redeem(wallet_path, payload, false).await;
+            }
+
+            "Redeem Note (Direct to Balance)" => {
+                let payload = Text::new("Scan the private/full QR code (Base45/Base64 payload):").prompt()?;
+                let payload = payload.trim();
+                let _ = cmd_redeem(wallet_path, payload, true).await;
             }
 
             "Pay Lightning Invoice" => {
