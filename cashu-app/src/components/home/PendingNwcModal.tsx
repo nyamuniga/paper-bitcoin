@@ -65,7 +65,7 @@ export const PendingNwcModal: React.FC<PendingNwcModalProps> = ({ onClose }) => 
         </button>
 
         <div className="flex items-center gap-3 mb-6">
-          <div className="bg-amber-500/20 p-2 rounded-xl text-amber-400">
+          <div className="bg-primary/20 p-2 rounded-xl text-primary">
             <Zap size={24} />
           </div>
           <div>
@@ -109,7 +109,7 @@ export const PendingNwcModal: React.FC<PendingNwcModalProps> = ({ onClose }) => 
                   <button
                     onClick={() => handleApprove(req)}
                     disabled={processingId !== null}
-                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-black rounded-lg py-2 text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="flex-1 bg-primary hover:bg-primary text-on-primary rounded-lg py-2 text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {processingId === req.event_id ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                     Approve

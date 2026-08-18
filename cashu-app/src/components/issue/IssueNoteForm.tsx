@@ -111,7 +111,7 @@ export const IssueNoteForm: React.FC<IssueNoteFormProps> = ({
               </div>
               <div
                 onClick={() => setStrategy('static')}
-                className={`p-4 rounded-xl border cursor-pointer transition-colors flex flex-col items-center text-center ${strategy === 'static' ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] text-amber-500' : 'bg-surface-container-lowest border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60'}`}
+                className={`p-4 rounded-xl border cursor-pointer transition-colors flex flex-col items-center text-center ${strategy === 'static' ? 'bg-primary/10 border-primary/50 shadow-[0_0_15px_rgba(201,165,74,0.15)] text-primary' : 'bg-surface-container-lowest border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60'}`}
               >
                 <div className="font-bold mb-1">Static (Safer)</div>
                 <div className="text-xs opacity-80">Best for long-term cold storage.</div>

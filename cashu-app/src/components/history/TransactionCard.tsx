@@ -83,7 +83,7 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
 
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-label-caps font-label-caps">
           <div className={`flex items-center gap-2 w-full md:w-auto justify-between md:justify-start ${
-            tx.status === 'Pending' ? 'text-amber-500' :
+            tx.status === 'Pending' ? 'text-primary' :
             tx.status === 'Success' ? 'text-emerald-400' :
             tx.status === 'FailedMintError' ? 'text-rose-500' :
             'text-on-surface-variant'
@@ -117,7 +117,7 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
                   Check Status & Resume
                 </button>
               ) : (
-                <button onClick={(e) => { e.stopPropagation(); onCheckMelt(tx.id); }} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors border border-amber-500/30 text-label-caps font-label-caps">
+                <button onClick={(e) => { e.stopPropagation(); onCheckMelt(tx.id); }} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors border border-primary/30 text-label-caps font-label-caps">
                   Check Status & Refund
                 </button>
               )}
