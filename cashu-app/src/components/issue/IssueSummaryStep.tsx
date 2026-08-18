@@ -116,11 +116,11 @@ export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
               onClick={() => setStrategy('static')}
               className={`p-4 md:p-5 rounded-2xl border cursor-pointer transition-all duration-200 flex flex-col items-center text-center gap-2 ${
                 strategy === 'static'
-                  ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] text-amber-500'
+                  ? 'bg-primary/10 border-primary/50 shadow-[0_0_15px_rgba(201,165,74,0.15)] text-primary'
                   : 'bg-surface-container-high border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40'
               }`}
             >
-              <Shield size={20} className={strategy === 'static' ? 'text-amber-500' : 'text-on-surface-variant'} />
+              <Shield size={20} className={strategy === 'static' ? 'text-primary' : 'text-on-surface-variant'} />
               <div className="font-bold text-[14px]">Static</div>
               <div className="text-[11px] opacity-80 leading-tight">Safer reserves. Best for cold storage.</div>
             </button>

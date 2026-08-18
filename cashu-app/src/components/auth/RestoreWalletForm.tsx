@@ -71,7 +71,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
           placeholder="Enter your 24-word recovery phrase..."
           value={mnemonic}
           onChange={e => setMnemonic(e.target.value)}
-          className="w-full bg-background border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors min-h-[100px] resize-none text-sm"
+          className="w-full bg-background border border-outline-variant rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors min-h-[100px] resize-none text-sm"
           autoFocus
         />
         <input
@@ -79,11 +79,11 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
           placeholder="Choose a new local passphrase"
           value={passphrase}
           onChange={e => setPassphrase(e.target.value)}
-          className="w-full bg-background border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors"
+          className="w-full bg-background border border-outline-variant rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors"
         />
         <div className="flex items-center gap-2 px-1">
-          <input type="checkbox" id="remember-restore" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="rounded bg-background border-gray-700 text-primary focus:ring-primary h-4 w-4" />
-          <label htmlFor="remember-restore" className="text-sm text-gray-300">Remember me on this device</label>
+          <input type="checkbox" id="remember-restore" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="rounded bg-background border-outline-variant text-primary focus:ring-primary h-4 w-4" />
+          <label htmlFor="remember-restore" className="text-sm text-on-surface-variant">Remember me on this device</label>
         </div>
         <button
           type="submit"
@@ -91,7 +91,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
         >
           Next
         </button>
-        <button type="button" onClick={onCancel} className="text-sm text-gray-300 hover:text-primary transition-colors mt-2">
+        <button type="button" onClick={onCancel} className="text-sm text-on-surface-variant hover:text-primary transition-colors mt-2">
           Cancel
         </button>
       </form>
@@ -100,7 +100,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
 
   return (
     <form onSubmit={handleRestoreSubmit} className="flex flex-col gap-4">
-      <div className="text-sm text-gray-300 text-center mb-2">
+      <div className="text-sm text-on-surface-variant text-center mb-2">
         Optionally, add Mint URLs to restore historical tokens from. If left blank, the wallet will just be imported with a 0 balance.
       </div>
       
@@ -112,7 +112,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
               <MintIcon mintUrl={url} className="w-9 h-9 rounded-full bg-primary/15 border border-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[12px] font-bold" />
               <div className="flex flex-col min-w-0">
                 <p className="text-body-md font-body-md text-white text-[14px] truncate">{formatMintUrl(url)}</p>
-                <p className="text-label-caps font-label-caps text-gray-400 text-[10px] truncate">{url}</p>
+                <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] truncate">{url}</p>
               </div>
             </div>
             <button
@@ -132,7 +132,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
               value={newMint}
               onChange={(e) => setNewMint(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="w-full bg-background border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors text-sm placeholder:text-gray-500 h-[54px]"
+              className="w-full bg-background border border-outline-variant rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors text-sm placeholder:text-on-surface-variant h-[54px]"
               placeholder="https://mint.example.com"
               autoCapitalize="none"
               autoCorrect="off"
@@ -155,7 +155,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
           type="button"
           onClick={() => setStep(1)}
           disabled={loading}
-          className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 rounded-xl transition-colors h-12"
+          className="flex-1 bg-surface-container-high hover:bg-surface-container text-white font-bold py-3 rounded-xl transition-colors h-12"
         >
           Back
         </button>
@@ -169,7 +169,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
       </div>
 
       {loading && restoreProgress.length > 0 && (
-        <div className="mt-4 p-3 bg-black/40 border border-gray-800 rounded-xl max-h-40 overflow-y-auto font-mono text-[10px] text-gray-400 flex flex-col gap-1">
+        <div className="mt-4 p-3 bg-black/40 border border-outline-variant rounded-xl max-h-40 overflow-y-auto font-mono text-[10px] text-on-surface-variant flex flex-col gap-1">
           {restoreProgress.map((msg, i) => (
             <div key={i} className="whitespace-pre-wrap">{msg}</div>
           ))}

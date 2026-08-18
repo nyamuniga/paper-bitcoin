@@ -171,7 +171,7 @@ export const NostrSection: React.FC = () => {
   };
 
   return (
-    <div className="bg-surface-container-high  rounded-2xl border border-outline-variant/20 shadow-sm relative overflow-hidden group">
+    <div className="bg-surface-container-high rounded-2xl border border-outline-variant relative overflow-hidden group">
       <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none transition-transform group-hover:scale-110 duration-700"></div>
 
       <div
@@ -182,26 +182,12 @@ export const NostrSection: React.FC = () => {
           <div className="w-10 h-10 rounded-full bg-primary/10 flex shrink-0 items-center justify-center text-primary border border-primary/20">
             <Network size={20} />
           </div>
-          <div className="min-w-0">
-            <h2 className="text-body-md font-body-md font-bold text-on-surface mb-1 truncate">Nostr Identity</h2>
-            <p className="text-sm text-on-surface-variant truncate">Manage your Lightning Address keys & relays</p>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-body-md font-body-md font-bold text-on-surface mb-0.5">Nostr Identity</h2>
+            <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">Lightning Address & relays</p>
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {hasCustomKey && isExpanded && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleRevertKey();
-              }}
-              disabled={isReverting}
-              className="flex items-center justify-center gap-2 p-2 sm:px-3 sm:py-1.5 text-sm font-medium text-amber-500 bg-amber-500/10 rounded-lg hover:bg-amber-500/20 transition-colors disabled:opacity-50 shrink-0"
-              title="Revert to original wallet seed"
-            >
-              <RefreshCcw size={16} className={isReverting ? "animate-spin" : ""} />
-              <span className="hidden sm:inline">{isReverting ? 'Reverting...' : 'Revert to Default'}</span>
-            </button>
-          )}
           <div className="text-on-surface-variant shrink-0">
             {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
           </div>
@@ -209,7 +195,7 @@ export const NostrSection: React.FC = () => {
       </div>
 
       {isExpanded && (
-        <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2 border-t border-outline-variant/10 space-y-4 relative z-10">
+        <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2 border-t border-outline-variant space-y-4 relative z-10">
           {/* npub */}
           <div>
             <label className="text-label-md font-label-md text-on-surface-variant mb-2 block">
@@ -220,7 +206,7 @@ export const NostrSection: React.FC = () => {
                 type="text"
                 value={isInitializing ? 'Loading keys...' : (truncateKey(npub) || 'Not registered')}
                 readOnly
-                className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-3 text-body-md text-on-surface font-mono text-sm focus:outline-none pr-12"
+                className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-4 py-3 text-body-md text-on-surface font-mono text-sm focus:outline-none pr-12"
               />
               <button
                 onClick={() => handleCopy(npub)}
@@ -235,24 +221,24 @@ export const NostrSection: React.FC = () => {
 
           {/* nsec */}
           <div>
-            <label className="text-label-md font-label-md text-on-surface-variant mb-2 flex items-center justify-between">
-              <span>Private Key (nsec)</span>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-label-md font-label-md text-on-surface-variant">Private Key (nsec)</span>
               {!isEditingNsec && (
                 <button
                   onClick={() => {
                     setIsEditingNsec(true);
                     setEditNsecValue('');
                   }}
-                  className="flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
+                  className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-semibold cursor-pointer"
                 >
-                  <Edit2 size={14} />
+                  <Edit2 size={13} />
                   <span>Edit</span>
                 </button>
               )}
-            </label>
+            </div>
 
             {isEditingNsec ? (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
@@ -266,14 +252,14 @@ export const NostrSection: React.FC = () => {
                   <button
                     onClick={handleSaveNsec}
                     disabled={isSaving || (editNsecValue.length > 0 && (editNsecValue.length !== 63 || !editNsecValue.startsWith('nsec1')))}
-                    className="p-3 bg-primary text-on-primary rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    className="p-3 bg-primary text-on-primary rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
                     title="Save custom nsec"
                   >
                     {isSaving ? <span className="w-5 h-5 border-2 border-on-primary/30 border-t-on-primary rounded-full animate-spin block"></span> : <Check size={20} />}
                   </button>
                   <button
                     onClick={() => setIsEditingNsec(false)}
-                    className="p-3 bg-surface-variant text-on-surface-variant rounded-xl hover:bg-surface-variant/80 transition-colors"
+                    className="p-3 bg-surface-variant text-on-surface-variant rounded-xl hover:bg-surface-variant/80 transition-colors cursor-pointer"
                     title="Cancel"
                   >
                     <X size={20} />
@@ -292,7 +278,7 @@ export const NostrSection: React.FC = () => {
                   type="text"
                   value={isInitializing ? 'Loading keys...' : (showNsec ? truncateKey(nsec) : '..............')}
                   readOnly
-                  className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-3 text-body-md text-on-surface font-mono text-sm focus:outline-none pr-20"
+                  className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-4 py-3 text-body-md text-on-surface font-mono text-sm focus:outline-none pr-20"
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
                   <button
@@ -314,14 +300,30 @@ export const NostrSection: React.FC = () => {
             )}
 
             <div className="flex items-start gap-2 mt-2">
-              <Shield className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <Shield className="w-4 h-4 text-primary shrink-0 mt-0.5" />
               <p className="text-label-sm text-on-surface-variant">
                 Never share your private key. Anyone with your nsec can control your Lightning Address.
               </p>
             </div>
+
+            {hasCustomKey && (
+              <div className="mt-3 pt-3 border-t border-outline-variant flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="text-xs text-on-surface-variant">Custom Nostr identity active</span>
+                <button
+                  type="button"
+                  onClick={handleRevertKey}
+                  disabled={isReverting}
+                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-colors disabled:opacity-50 cursor-pointer w-fit"
+                  title="Revert to original wallet seed"
+                >
+                  <RefreshCcw size={12} className={isReverting ? "animate-spin" : ""} />
+                  <span>{isReverting ? 'Restoring...' : 'Restore Default Identity'}</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          <div className="divider-dashed my-6 border-outline-variant/20"></div>
+          <div className="divider-dashed my-6"></div>
 
           {/* Relays */}
           <div>
@@ -329,7 +331,7 @@ export const NostrSection: React.FC = () => {
 
             <div className="space-y-2 mb-4">
               {relays.map((relay) => (
-                <div key={relay} className="flex items-center justify-between bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-3">
+                <div key={relay} className="flex items-center justify-between bg-surface-container-low border border-outline-variant rounded-xl px-4 py-3">
                   <span className="text-body-md text-on-surface font-mono text-sm truncate mr-2">{relay}</span>
                   <button
                     onClick={() => handleRemoveRelay(relay)}
@@ -349,7 +351,7 @@ export const NostrSection: React.FC = () => {
                 value={newRelay}
                 onChange={(e) => setNewRelay(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddRelay()}
-                className="flex-1 min-w-0 bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-3 text-body-md text-on-surface focus:outline-none focus:border-primary/50"
+                className="flex-1 min-w-0 bg-surface-container-low border border-outline-variant rounded-xl px-4 py-3 text-body-md text-on-surface focus:outline-none focus:border-primary/80"
               />
               <button
                 onClick={handleAddRelay}

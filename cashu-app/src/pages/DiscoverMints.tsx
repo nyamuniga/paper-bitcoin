@@ -111,8 +111,8 @@ export default function DiscoverMints() {
     <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
         <PageHeader
-          title="Discover Mints"
-          subtitle="Find and connect to public Cashu mints globally."
+          title="Discover"
+          subtitle="Public Cashu mint registry"
         />
         <div className="relative w-full md:w-64 shrink-0">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-on-surface-variant">
@@ -126,7 +126,7 @@ export default function DiscoverMints() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            className="w-full bg-surface-container-highest border border-outline-variant/30 text-on-surface text-sm rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
+            className="w-full bg-surface-container-highest border border-outline-variant text-on-surface text-sm rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary transition-all"
           />
         </div>
       </div>
@@ -134,12 +134,12 @@ export default function DiscoverMints() {
       {loading ? (
         <div className="flex flex-col gap-3">
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className="h-16 bg-surface-container-high rounded-xl animate-pulse"></div>
+            <div key={i} className="h-16 bg-surface-container-high rounded-xl border border-outline-variant animate-pulse"></div>
           ))}
         </div>
       ) : filteredMints.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-12 bg-surface-container-high rounded-2xl border border-outline-variant/20 text-center">
-          <div className="w-16 h-16 bg-surface-container-highest rounded-full flex items-center justify-center text-on-surface-variant mb-4">
+        <div className="flex flex-col items-center justify-center p-12 bg-surface-container-high rounded-2xl border border-outline-variant text-center">
+          <div className="w-16 h-16 bg-surface-container-highest rounded-full flex items-center justify-center text-on-surface-variant mb-4 border border-outline-variant">
             <Search size={32} />
           </div>
           <h3 className="text-body-lg font-bold text-on-surface mb-2">No mints found</h3>
@@ -157,7 +157,7 @@ export default function DiscoverMints() {
               <div
                 key={mint.id}
                 onClick={() => setSelectedMint(mint)}
-                className="flex items-center gap-4 bg-surface-container-high border border-outline-variant/30 rounded-xl p-3 hover:border-primary/30 hover:bg-surface-container-highest transition-all duration-300 shadow-sm cursor-pointer group"
+                className="flex items-center gap-4 bg-surface-container-high border border-outline-variant rounded-xl p-3 hover:border-primary/60 hover:bg-surface-container-highest transition-all duration-300 cursor-pointer group"
               >
                 <div className="flex-shrink-0">
                   <button
@@ -169,10 +169,10 @@ export default function DiscoverMints() {
                     className={clsx(
                       "bg-surface-container-low w-6 h-6 rounded flex items-center justify-center transition-colors border",
                       isThisMintActioning 
-                        ? "border-amber-500 text-amber-500" 
+                        ? "border-primary text-primary" 
                         : added 
-                          ? "bg-amber-500 border-amber-500 text-white" 
-                          : "border-outline-variant text-transparent hover:border-amber-500/50",
+                          ? "bg-primary border-primary text-white" 
+                          : "border-outline-variant text-transparent hover:border-primary/80",
                       isAdding && !isThisMintActioning && "opacity-50 cursor-not-allowed"
                     )}
                   >
@@ -184,7 +184,7 @@ export default function DiscoverMints() {
                   </button>
                 </div>
 
-                <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-surface-container-highest flex items-center justify-center border border-outline-variant/20">
+                <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-surface-container-highest flex items-center justify-center border border-outline-variant">
                   {mint.parsedInfo?.icon_url ? (
                     <img
                       src={mint.parsedInfo.icon_url}
@@ -231,7 +231,7 @@ export default function DiscoverMints() {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="p-2 rounded-xl border border-outline-variant/30 bg-surface-container hover:bg-surface-container-high disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="p-2 rounded-xl border border-outline-variant bg-surface-container hover:bg-surface-container-high disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <ChevronLeft size={20} className="text-on-surface" />
           </button>
@@ -241,7 +241,7 @@ export default function DiscoverMints() {
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="p-2 rounded-xl border border-outline-variant/30 bg-surface-container hover:bg-surface-container-high disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="p-2 rounded-xl border border-outline-variant bg-surface-container hover:bg-surface-container-high disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <ChevronRight size={20} className="text-on-surface" />
           </button>
