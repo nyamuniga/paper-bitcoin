@@ -276,7 +276,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-outline-variant/10 relative z-10">
           <h2 className="text-headline-sm font-headline-sm text-on-surface flex items-center gap-2">
-            <Zap className="text-amber-400 w-5 h-5" /> Bitcoin
+            <Zap className="text-primary w-5 h-5" /> Bitcoin
           </h2>
           <button
             onClick={onClose}
@@ -292,7 +292,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
             <button
               onClick={() => switchTab('send')}
               className={`flex-1 py-3 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'send'
-                ? 'text-amber-400 border-b-2 border-amber-400'
+                ? 'text-primary border-b-2 border-primary'
                 : 'text-on-surface-variant hover:text-on-surface'
                 }`}
             >
@@ -301,7 +301,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
             <button
               onClick={() => switchTab('receive')}
               className={`flex-1 py-3 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'receive'
-                ? 'text-amber-400 border-b-2 border-amber-400'
+                ? 'text-primary border-b-2 border-primary'
                 : 'text-on-surface-variant hover:text-on-surface'
                 }`}
             >
@@ -372,7 +372,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <div className="flex items-center gap-4">
                       <div className="relative flex items-center justify-center w-8 h-8">
                         {activeTransaction?.currentPhase === AppPhase.GENERATING_ONCHAIN_INVOICE ? (
-                          <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                         ) : [AppPhase.PAYING_ONCHAIN_INVOICE, AppPhase.EXECUTING_ONCHAIN_PAYOUT, AppPhase.ONCHAIN_PAYOUT_FAILED].includes(activeTransaction?.currentPhase!) ? (
                           <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
                             <Check className="w-4 h-4" />
@@ -382,7 +382,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         )}
                       </div>
                       <div className="flex-1">
-                        <p className={`text-label-lg ${activeTransaction?.currentPhase === AppPhase.GENERATING_ONCHAIN_INVOICE ? 'text-amber-400' : [AppPhase.PAYING_ONCHAIN_INVOICE, AppPhase.EXECUTING_ONCHAIN_PAYOUT, AppPhase.ONCHAIN_PAYOUT_FAILED].includes(activeTransaction?.currentPhase!) ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>Securing Invoice</p>
+                        <p className={`text-label-lg ${activeTransaction?.currentPhase === AppPhase.GENERATING_ONCHAIN_INVOICE ? 'text-primary' : [AppPhase.PAYING_ONCHAIN_INVOICE, AppPhase.EXECUTING_ONCHAIN_PAYOUT, AppPhase.ONCHAIN_PAYOUT_FAILED].includes(activeTransaction?.currentPhase!) ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>Securing Invoice</p>
                         <p className={`text-body-sm ${activeTransaction?.currentPhase === AppPhase.GENERATING_ONCHAIN_INVOICE ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}`}>Requesting on-chain invoice from proxy</p>
                       </div>
                     </div>
@@ -390,7 +390,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <div className="flex items-center gap-4">
                       <div className="relative flex items-center justify-center w-8 h-8">
                         {activeTransaction?.currentPhase === AppPhase.PAYING_ONCHAIN_INVOICE ? (
-                          <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                         ) : [AppPhase.EXECUTING_ONCHAIN_PAYOUT, AppPhase.ONCHAIN_PAYOUT_FAILED].includes(activeTransaction?.currentPhase!) ? (
                           <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
                             <Check className="w-4 h-4" />
@@ -400,7 +400,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         )}
                       </div>
                       <div className="flex-1">
-                        <p className={`text-label-lg ${activeTransaction?.currentPhase === AppPhase.PAYING_ONCHAIN_INVOICE ? 'text-amber-400' : [AppPhase.EXECUTING_ONCHAIN_PAYOUT, AppPhase.ONCHAIN_PAYOUT_FAILED].includes(activeTransaction?.currentPhase!) ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>Funding Transfer</p>
+                        <p className={`text-label-lg ${activeTransaction?.currentPhase === AppPhase.PAYING_ONCHAIN_INVOICE ? 'text-primary' : [AppPhase.EXECUTING_ONCHAIN_PAYOUT, AppPhase.ONCHAIN_PAYOUT_FAILED].includes(activeTransaction?.currentPhase!) ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>Funding Transfer</p>
                         <p className={`text-body-sm ${activeTransaction?.currentPhase === AppPhase.PAYING_ONCHAIN_INVOICE ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}`}>Melting eCash to fund on-chain transaction</p>
                       </div>
                     </div>
@@ -408,7 +408,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <div className="flex items-center gap-4">
                       <div className="relative flex items-center justify-center w-8 h-8">
                         {activeTransaction?.currentPhase === AppPhase.EXECUTING_ONCHAIN_PAYOUT ? (
-                          <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                         ) : activeTransaction?.currentPhase === AppPhase.ONCHAIN_PAYOUT_FAILED ? (
                           <div className="w-6 h-6 rounded-full bg-error/20 text-error flex items-center justify-center">
                             <X className="w-4 h-4" />
@@ -418,7 +418,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         )}
                       </div>
                       <div className="flex-1">
-                        <p className={`text-label-lg ${activeTransaction?.currentPhase === AppPhase.EXECUTING_ONCHAIN_PAYOUT ? 'text-amber-400' : activeTransaction?.currentPhase === AppPhase.ONCHAIN_PAYOUT_FAILED ? 'text-error' : 'text-on-surface-variant/50'}`}>Initiating Payout</p>
+                        <p className={`text-label-lg ${activeTransaction?.currentPhase === AppPhase.EXECUTING_ONCHAIN_PAYOUT ? 'text-primary' : activeTransaction?.currentPhase === AppPhase.ONCHAIN_PAYOUT_FAILED ? 'text-error' : 'text-on-surface-variant/50'}`}>Initiating Payout</p>
                         <p className={`text-body-sm ${activeTransaction?.currentPhase === AppPhase.EXECUTING_ONCHAIN_PAYOUT ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}`}>Instructing proxy to send Bitcoin</p>
                       </div>
                     </div>
@@ -454,14 +454,14 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       <textarea
                         value={destinationInput}
                         onChange={(e) => setDestinationInput(e.target.value)}
-                        className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInsufficient ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-amber-400'}`}
+                        className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInsufficient ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`}
                         placeholder="Invoice or Address..."
                         rows={4}
                         spellCheck={false}
                       />
                       <button
                         onClick={() => setShowScanner(true)}
-                        className="absolute right-3 top-3 p-2 bg-surface-container-highest rounded-lg text-amber-400 hover:bg-surface-bright transition-colors"
+                        className="absolute right-3 top-3 p-2 bg-surface-container-highest rounded-lg text-primary hover:bg-surface-bright transition-colors"
                         title="Scan QR Code"
                       >
                         <QrCode size={20} />
@@ -490,7 +490,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <button
                       onClick={handlePayLightning}
                       disabled={paying || !destinationInput || isInsufficient}
-                      className={`mt-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${paying || !destinationInput || isInsufficient ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${paying || !destinationInput || isInsufficient ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                         }`}
                     >
                       {paying ? <Loader2 className="animate-spin w-6 h-6" /> : <><Zap className="w-5 h-5 mr-2" /> Pay Invoice</>}
@@ -499,7 +499,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <button
                       onClick={handleNextFromInput}
                       disabled={parsedInput.type !== 'onchain' && parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay'}
-                      className={`mt-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(parsedInput.type !== 'onchain' && parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay') ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(parsedInput.type !== 'onchain' && parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay') ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                         }`}
                     >
                       {isFetchingFee ? <Loader2 className="animate-spin w-6 h-6" /> : 'Next'}
@@ -531,7 +531,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   <button
                     onClick={handleNextFromAmount}
                     disabled={!parseInt(onchainSendAmount) || parseInt(onchainSendAmount) > availableBalance || (!lnurlParams && (parseInt(onchainSendAmount) < MIN_ONCHAIN_SATS || parseInt(onchainSendAmount) > MAX_ONCHAIN_SATS))}
-                    className={`mt-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(!parseInt(onchainSendAmount) || parseInt(onchainSendAmount) > availableBalance || (!lnurlParams && (parseInt(onchainSendAmount) < MIN_ONCHAIN_SATS || parseInt(onchainSendAmount) > MAX_ONCHAIN_SATS))) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                    className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(!parseInt(onchainSendAmount) || parseInt(onchainSendAmount) > availableBalance || (!lnurlParams && (parseInt(onchainSendAmount) < MIN_ONCHAIN_SATS || parseInt(onchainSendAmount) > MAX_ONCHAIN_SATS))) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                       }`}
                   >
                     {isFetchingFee ? <Loader2 className="animate-spin w-6 h-6" /> : lnurlParams ? 'Pay Lightning' : 'Calculate Fee'}
@@ -548,7 +548,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
 
                   {isFetchingFee ? (
                     <div className="py-12 flex flex-col items-center justify-center gap-4">
-                      <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+                      <Loader2 className="w-8 h-8 text-primary animate-spin" />
                       <p className="text-on-surface-variant text-sm">Calculating mempool fee...</p>
                     </div>
                   ) : (
@@ -563,7 +563,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       </div>
                       <div className="flex justify-between items-center pb-4 border-b border-outline-variant/20">
                         <span className="text-on-surface-variant text-sm">Mining Fee</span>
-                        <span className="text-amber-400 text-sm font-bold">₿{miningFee}</span>
+                        <span className="text-primary text-sm font-bold">₿{miningFee}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-on-surface-variant font-bold">Total Cost</span>
@@ -583,7 +583,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <button
                       onClick={handleConfirmOnChainSend}
                       disabled={paying || (((parseInt(onchainSendAmount) || parsedInput.amountSats || 0) + (miningFee || 0)) > availableBalance)}
-                      className={`mt-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(paying || (((parseInt(onchainSendAmount) || parsedInput.amountSats || 0) + (miningFee || 0)) > availableBalance)) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(paying || (((parseInt(onchainSendAmount) || parsedInput.amountSats || 0) + (miningFee || 0)) > availableBalance)) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                         }`}
                     >
                       {paying ? <Loader2 className="animate-spin w-6 h-6" /> : 'Confirm Send'}
@@ -612,7 +612,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         href={`${MEMPOOL_EXPLORER_URL}/tx/${txSuccessId}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-3 flex items-center justify-center gap-2 text-amber-400 hover:text-amber-300 transition-colors text-sm font-bold"
+                        className="mt-3 flex items-center justify-center gap-2 text-primary hover:text-primary/80 transition-colors text-sm font-bold"
                       >
                         View on Mempool.space <ExternalLink size={14} />
                       </a>
@@ -666,20 +666,20 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     </div>
                     <div
                       onClick={() => handleCopy(activeTransaction.onchainAddress!)}
-                      className="w-full bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30 shadow-inner cursor-pointer hover:border-amber-400/30 transition-colors"
+                      className="w-full bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30 shadow-inner cursor-pointer hover:border-primary/30 transition-colors"
                     >
                       <p className="text-[11px] font-mono text-on-surface-variant break-all select-all text-center">{activeTransaction.onchainAddress}</p>
                     </div>
                     <button
                       onClick={() => handleCopy(activeTransaction.onchainAddress!)}
-                      className="w-full py-3 rounded-full bg-amber-500/15 text-amber-400 font-bold text-[15px] hover:bg-amber-500/25 transition-colors border border-amber-500/20 flex items-center justify-center gap-2"
+                      className="w-full py-3 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20 flex items-center justify-center gap-2"
                     >
                       {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Address</>}
                     </button>
 
-                    <div className="w-full bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl flex items-start gap-3 mt-1">
-                      <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                      <div className="text-[12px] text-amber-500/90 leading-tight">
+                    <div className="w-full bg-primary/10 border border-primary/20 p-3 rounded-xl flex items-start gap-3 mt-1">
+                      <AlertCircle className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                      <div className="text-[12px] text-primary/90 leading-tight">
                         <span className="font-bold">Exact amount required: ₿{activeTransaction.satsAmount?.toLocaleString()}</span> Please send the exact amount to avoid deposit failures.
                       </div>
                     </div>
@@ -714,7 +714,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     return (
                       <div key={idx} className="relative flex items-center gap-4 bg-surface-container p-3 rounded-xl border border-outline-variant/10">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 transition-colors ${state === 'completed' ? 'bg-emerald-500 text-on-primary' :
-                          state === 'active' ? 'bg-amber-500 text-on-primary' :
+                          state === 'active' ? 'bg-primary text-on-primary' :
                             state === 'error' ? 'bg-red-500 text-on-primary' :
                               'bg-surface-container-highest text-on-surface-variant'
                           }`}>
@@ -722,7 +722,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                             state === 'active' ? <Loader2 size={16} className="animate-spin" /> :
                               <span className="text-xs font-bold">{idx + 1}</span>}
                         </div>
-                        <span className={`font-bold text-[15px] ${state === 'active' ? 'text-amber-400' :
+                        <span className={`font-bold text-[15px] ${state === 'active' ? 'text-primary' :
                           state === 'completed' ? 'text-emerald-400' :
                             state === 'error' ? 'text-red-400' :
                               'text-on-surface-variant'
@@ -760,7 +760,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                 </div>
                 <button
                   onClick={onClose}
-                  className="w-full py-4 rounded-full bg-amber-500/15 text-amber-400 font-bold text-[15px] hover:bg-amber-500/25 transition-colors border border-amber-500/20"
+                  className="w-full py-4 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20"
                 >
                   Done
                 </button>
@@ -770,27 +770,27 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
               <div className="flex flex-col items-center gap-5">
                 <div className="text-center">
                   <p className="text-label-caps font-label-caps text-on-surface-variant mb-1">AMOUNT</p>
-                  <p className="text-[28px] font-display-lg text-amber-400">₿{parsedReceiveAmount.toLocaleString()}</p>
+                  <p className="text-[28px] font-display-lg text-primary">₿{parsedReceiveAmount.toLocaleString()}</p>
                 </div>
 
                 <div className="relative">
                   <div className="bg-white p-4 rounded-xl shadow-lg">
                     <QRCode value={receiveInvoice} size={200} />
                   </div>
-                  <div className="absolute inset-0 bg-amber-400/20 rounded-xl blur-xl -z-10 animate-pulse"></div>
+                  <div className="absolute inset-0 bg-primary/20 rounded-xl blur-xl -z-10 animate-pulse"></div>
                 </div>
 
                 <div className="w-full flex flex-col gap-2">
                   <div
                     onClick={() => handleCopy(receiveInvoice)}
-                    className="w-full bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30 shadow-inner cursor-pointer hover:border-amber-400/30 transition-colors"
+                    className="w-full bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30 shadow-inner cursor-pointer hover:border-primary/30 transition-colors"
                   >
                     <p className="text-[11px] font-mono text-on-surface-variant break-all line-clamp-3 select-all">{receiveInvoice}</p>
                   </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleCopy(receiveInvoice)}
-                      className="flex-1 flex items-center justify-center gap-2 py-3 rounded-full bg-amber-500/15 text-amber-400 font-bold text-[15px] hover:bg-amber-500/25 transition-colors border border-amber-500/20"
+                      className="flex-1 flex items-center justify-center gap-2 py-3 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20"
                     >
                       {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Invoice</>}
                     </button>
@@ -816,7 +816,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   <button
                     onClick={() => setReceiveMode('lightning')}
                     className={`flex-1 py-2 text-sm font-bold rounded-full transition-all ${receiveMode === 'lightning'
-                        ? 'bg-amber-500 text-on-primary shadow-md'
+                        ? 'bg-primary text-on-primary shadow-md'
                         : 'text-on-surface-variant hover:text-on-surface'
                       }`}
                   >
@@ -825,7 +825,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   <button
                     onClick={() => setReceiveMode('onchain')}
                     className={`flex-1 py-2 text-sm font-bold rounded-full transition-all ${receiveMode === 'onchain'
-                        ? 'bg-amber-500 text-on-primary shadow-md'
+                        ? 'bg-primary text-on-primary shadow-md'
                         : 'text-on-surface-variant hover:text-on-surface'
                       }`}
                   >
@@ -851,7 +851,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <button
                       onClick={handleRequestInvoice}
                       disabled={requesting || parsedReceiveAmount <= 0}
-                      className={`bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${requesting || parsedReceiveAmount <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      className={`bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${requesting || parsedReceiveAmount <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                         }`}
                     >
                       {requesting ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Invoice'}
@@ -860,7 +860,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <button
                       onClick={handleRequestOnChain}
                       disabled={requesting || parsedReceiveAmount <= 0}
-                      className={`bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${requesting || parsedReceiveAmount <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      className={`bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${requesting || parsedReceiveAmount <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                         }`}
                     >
                       {requesting ? <Loader2 className="animate-spin w-6 h-6" /> : 'Generate Address'}

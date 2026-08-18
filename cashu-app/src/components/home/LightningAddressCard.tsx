@@ -63,13 +63,13 @@ export const LightningAddressCard: React.FC = () => {
   // Full modal view (teleported to body to escape CSS transform context)
   const modalContent = showQR ? (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <div className="bg-surface-container-high rounded-2xl w-full max-w-md p-6 relative">
+      <div className="bg-surface-container-high/95 backdrop-blur-xl rounded-2xl w-full max-w-md p-6 relative border border-outline-variant shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
         <button onClick={() => setShowQR(false)} className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface">
           <X size={20} />
         </button>
 
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 bg-amber-500/10 text-amber-400 px-3 py-1.5 rounded-full text-sm font-bold mb-3">
+          <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1.5 rounded-full text-sm font-bold mb-3">
             <Zap size={14} />
             Lightning Address
           </div>
@@ -88,7 +88,7 @@ export const LightningAddressCard: React.FC = () => {
         {/* Address */}
         <div
           onClick={handleCopy}
-          className="bg-surface rounded-xl p-3 cursor-pointer hover:bg-surface-variant/70 transition-colors mb-4"
+          className="bg-surface-container rounded-xl p-3 cursor-pointer hover:bg-surface-bright/50 transition-colors mb-4"
         >
           <p className="text-center text-on-surface font-mono text-sm break-all select-all">
             {lightningAddress}
@@ -98,7 +98,7 @@ export const LightningAddressCard: React.FC = () => {
         {/* Copy Button */}
         <button
           onClick={handleCopy}
-          className="w-full flex items-center justify-center gap-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-xl py-3 font-bold transition-colors mb-4"
+          className="w-full flex items-center justify-center gap-2 bg-primary/15 hover:bg-primary/25 text-primary rounded-xl py-3 font-bold transition-colors mb-4"
         >
           {copied ? <Check size={16} /> : <Copy size={16} />}
           {copied ? 'Copied!' : 'Copy Address'}
@@ -106,16 +106,16 @@ export const LightningAddressCard: React.FC = () => {
 
 
         {/* Username Section */}
-        <div className="border-t border-outline-variant/30 pt-4">
+        <div className="border-t border-outline-variant pt-4">
           {!showUsernameInput ? (
             customUsername ? (
               <div className="flex items-center justify-center gap-2">
                 <p className="text-center text-on-surface-variant text-xs">
-                  Username: <span className="text-amber-400 font-bold">{customUsername}@{NPUB_DOMAIN}</span>
+                  Username: <span className="text-primary font-bold">{customUsername}@{NPUB_DOMAIN}</span>
                 </p>
                 <button
                   onClick={() => setShowUsernameInput(true)}
-                  className="text-amber-400 hover:text-amber-300 p-1 transition-colors"
+                  className="text-primary hover:text-primary/80 p-1 transition-colors"
                   title="Change username"
                 >
                   <Edit2 size={12} />
@@ -151,7 +151,7 @@ export const LightningAddressCard: React.FC = () => {
                       await handleClaimUsername();
                     }}
                     disabled={claimingUsername || usernameInput.length < 3}
-                    className="flex-1 sm:flex-none bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-50 transition-colors flex items-center justify-center"
+                    className="flex-1 sm:flex-none bg-primary/15 hover:bg-primary/25 text-primary rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-50 transition-colors flex items-center justify-center"
                   >
                     {claimingUsername ? <Loader2 size={14} className="animate-spin" /> : 'Claim'}
                   </button>
@@ -161,7 +161,7 @@ export const LightningAddressCard: React.FC = () => {
                         setShowUsernameInput(false);
                         setUsernameInput('');
                       }}
-                      className="flex-1 sm:flex-none text-on-surface-variant hover:text-on-surface hover:bg-surface-container px-4 py-2 sm:px-2 rounded-lg transition-colors flex items-center justify-center"
+                      className="flex-1 sm:flex-none text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/50 px-4 py-2 sm:px-2 rounded-lg transition-colors flex items-center justify-center"
                     >
                       Cancel
                     </button>
@@ -184,11 +184,11 @@ export const LightningAddressCard: React.FC = () => {
   return (
     <>
       {modalContent && createPortal(modalContent, document.body)}
-      <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-xl p-3">
+      <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-outline-variant rounded-xl p-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="bg-amber-500/20 rounded-lg p-1.5 shrink-0">
-              <Zap size={14} className="text-amber-400" />
+            <div className="bg-primary/20 rounded-lg p-1.5 shrink-0">
+              <Zap size={14} className="text-primary" />
             </div>
             <div className="min-w-0">
               <p className="text-[10px] text-on-surface-variant uppercase tracking-wider font-medium">Lightning Address</p>
