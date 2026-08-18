@@ -84,7 +84,7 @@ export const NoteVerificationResult: React.FC<NoteVerificationResultProps> = ({
             </div>
           )}
           {verifyResult.untrusted ? (
-            <div className="flex items-start text-amber-400">
+            <div className="flex items-start text-primary">
               <span className="mr-2 flex-shrink-0">⚠️</span>
               <span>Mints not trusted/Offline (DLEQ signatures skipped)</span>
             </div>
