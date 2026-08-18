@@ -70,8 +70,8 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
       {/* Balance display */}
       <div className="relative p-6 md:p-10 flex flex-col items-center justify-center min-h-[140px] md:min-h-[200px] z-10">
         {/* Background layer */}
-        <div className="absolute inset-0 bg-surface-container-high rounded-2xl overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-outline-variant/20 -z-10">
-          <div className="absolute inset-0 texture-overlay opacity-50"></div>
+        <div className="absolute inset-0 bg-surface-container-high/80 backdrop-blur-xl rounded-2xl overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_16px_rgba(0,0,0,0.3)] border border-outline-variant -z-10">
+          <div className="absolute inset-0 texture-overlay opacity-30"></div>
         </div>
 
         {showMintDropdown && (
@@ -81,7 +81,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
         <div className="relative z-20 flex flex-col items-center">
           <button
             onClick={() => setShowMintDropdown(!showMintDropdown)}
-            className="flex items-center gap-2 bg-surface/40 hover:bg-surface/70 px-3 py-1.5 rounded-full transition-colors mb-2 border border-outline-variant/20 shadow-sm"
+            className="flex items-center gap-2 bg-surface-container/60 hover:bg-surface-container px-3 py-1.5 rounded-full transition-colors mb-2 border border-outline-variant shadow-sm"
           >
             {activeMint ? (
               <>
@@ -95,7 +95,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
           </button>
 
           {showMintDropdown && (
-            <div className="absolute top-full mt-2 w-64 bg-surface-container-highest rounded-2xl shadow-2xl border border-outline-variant/20 overflow-hidden flex flex-col animate-fade-in z-50 max-h-[300px] overflow-y-auto">
+            <div className="absolute top-full mt-2 w-64 bg-surface-container-highest/95 backdrop-blur-xl rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-outline-variant overflow-hidden flex flex-col animate-fade-in z-50 max-h-[300px] overflow-y-auto">
               {mintUrls.map((mint, index) => (
                 <button
                   key={mint}
@@ -105,7 +105,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
                     invoke('set_app_default_mint', { mintUrl: mint }).catch(console.error);
                     setShowMintDropdown(false); 
                   }}
-                  className={`flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left ${index > 0 ? 'border-t border-outline-variant/10' : ''}`}
+                  className={`flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left ${index > 0 ? 'border-t border-outline-variant' : ''}`}
                 >
                   <div className="flex items-center gap-2 min-w-0 pr-2">
                     <MintIcon mintUrl={mint} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
@@ -135,20 +135,20 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
       <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
         <button
           onClick={() => setShowReceive(true)}
-          className="flex items-center justify-center gap-2 py-3 px-2 rounded-2xl bg-surface-container-high text-on-surface font-headline-lg-mobile text-[14px] md:text-[15px] border border-outline-variant/30 hover:bg-surface-container-highest active:scale-[0.97] transition-all duration-200"
+          className="flex items-center justify-center gap-2 py-3 px-2 rounded-2xl bg-surface-container-high/80 backdrop-blur-sm text-on-surface font-headline-lg-mobile text-[14px] md:text-[15px] border border-outline-variant hover:bg-surface-container-highest active:scale-[0.97] transition-all duration-200"
         >
           <ArrowDownLeft size={20} className="text-primary" />
           <span>Receive</span>
         </button>
         <Link
           to="/scan"
-          className="flex items-center justify-center w-14 h-14 rounded-full bg-primary text-on-primary shadow-[0_4px_20px_rgba(212,157,66,0.3)] hover:opacity-90 active:scale-[0.97] transition-all duration-200"
+          className="flex items-center justify-center w-14 h-14 rounded-full bg-primary text-on-primary shadow-[0_4px_20px_rgba(158,124,56,0.3)] hover:opacity-90 active:scale-[0.97] transition-all duration-200"
         >
           <QrCode size={24} />
         </Link>
         <button
           onClick={() => setShowSend(true)}
-          className="flex items-center justify-center gap-2 py-3 px-2 rounded-2xl bg-surface-container-high text-on-surface font-headline-lg-mobile text-[14px] md:text-[15px] border border-outline-variant/30 hover:bg-surface-container-highest active:scale-[0.97] transition-all duration-200"
+          className="flex items-center justify-center gap-2 py-3 px-2 rounded-2xl bg-surface-container-high/80 backdrop-blur-sm text-on-surface font-headline-lg-mobile text-[14px] md:text-[15px] border border-outline-variant hover:bg-surface-container-highest active:scale-[0.97] transition-all duration-200"
         >
           <ArrowUpRight size={20} className="text-primary" />
           <span>Send</span>

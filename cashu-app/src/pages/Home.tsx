@@ -193,10 +193,10 @@ export const Home = () => {
           opacity: pullDistance > 10 || refreshing ? 1 : 0 
         }}
       >
-        <div className="bg-surface-variant rounded-full p-2 shadow-lg border border-outline-variant/30 flex items-center justify-center">
+        <div className="bg-surface-container-high rounded-full p-2 shadow-lg border border-outline-variant flex items-center justify-center">
           <Loader2 
             size={24} 
-            className={`text-amber-500 ${refreshing ? 'animate-spin' : ''}`} 
+            className={`text-primary ${refreshing ? 'animate-spin' : ''}`} 
             style={{ transform: !refreshing ? `rotate(${pullDistance * 5}deg)` : 'none' }}
           />
         </div>
@@ -209,18 +209,18 @@ export const Home = () => {
         {pendingRequests.length > 0 && (
           <div 
             onClick={() => setShowPendingNwcModal(true)}
-            className="bg-amber-500/20 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:bg-amber-500/30 transition-colors"
+            className="bg-primary/15 border border-primary/20 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:bg-primary/25 transition-colors"
           >
             <div className="flex items-center gap-3">
-              <div className="bg-amber-500/20 p-2 rounded-lg">
-                <Zap size={20} className="text-amber-400" />
+              <div className="bg-primary/20 p-2 rounded-lg">
+                <Zap size={20} className="text-primary" />
               </div>
               <div>
                 <h3 className="text-on-surface font-bold">Pending Zaps</h3>
                 <p className="text-sm text-on-surface-variant">You have {pendingRequests.length} zap{pendingRequests.length > 1 ? 's' : ''} awaiting approval</p>
               </div>
             </div>
-            <button className="bg-amber-500 text-black px-4 py-2 rounded-lg font-bold text-sm">
+            <button className="bg-primary text-on-primary px-4 py-2 rounded-lg font-bold text-sm">
               Review
             </button>
           </div>

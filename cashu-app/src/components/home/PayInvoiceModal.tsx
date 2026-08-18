@@ -59,7 +59,7 @@ export const PayInvoiceModal: React.FC<PayInvoiceModalProps> = ({ mintUrl, onClo
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-outline-variant/10 relative z-10">
           <h2 className="text-headline-sm font-headline-sm text-on-surface flex items-center gap-2">
-            <Zap className="text-amber-400 w-5 h-5" /> Pay Invoice
+            <Zap className="text-primary w-5 h-5" /> Pay Invoice
           </h2>
           <button 
             onClick={onClose}

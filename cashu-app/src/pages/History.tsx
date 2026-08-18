@@ -165,8 +165,8 @@ export default function History() {
   return (
     <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
       <PageHeader 
-        title="Transaction History" 
-        subtitle="Track your past and pending payments."
+        title="History" 
+        subtitle="Recent and pending activity"
         rightAction={
           <button
             onClick={fetchHistory}
@@ -223,17 +223,17 @@ export default function History() {
               const tx = item.data;
               const isFailed = tx.currentPhase === AppPhase.PAYMENT_FAILED;
               return (
-                <div key={tx.id} className={`obsidian-card rounded-xl p-5 border group relative overflow-hidden ${isFailed ? 'border-error/30 bg-error/5' : 'border-amber-500/30 bg-amber-500/5'}`}>
-                  <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none ${isFailed ? 'bg-error/10' : 'bg-amber-500/10'}`}></div>
+                <div key={tx.id} className={`obsidian-card rounded-xl p-5 border group relative overflow-hidden ${isFailed ? 'border-error/30 bg-error/5' : 'border-primary/30 bg-primary/5'}`}>
+                  <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none ${isFailed ? 'bg-error/10' : 'bg-primary/10'}`}></div>
                   <div className="noise-overlay opacity-30"></div>
                   <div className="relative z-10">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${isFailed ? 'bg-error/20 border-error/30' : 'bg-amber-500/20 border-amber-500/30'}`}>
-                          <ArrowDown className={`w-4 h-4 ${isFailed ? 'text-error' : 'text-amber-500'}`} />
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${isFailed ? 'bg-error/20 border-error/30' : 'bg-primary/20 border-primary/30'}`}>
+                          <ArrowDown className={`w-4 h-4 ${isFailed ? 'text-error' : 'text-primary'}`} />
                         </div>
                         <div>
-                          <h3 className={`text-body-md font-body-md font-semibold ${isFailed ? 'text-error' : 'text-amber-500'}`}>
+                          <h3 className={`text-body-md font-body-md font-semibold ${isFailed ? 'text-error' : 'text-primary'}`}>
                             {isFailed ? 'Failed On-Chain Receive' : 'Receiving On-Chain'}
                           </h3>
                           <p className="text-label-caps font-label-caps text-on-surface-variant mt-1 max-w-[200px] truncate" title={tx.onchainAddress}>
@@ -242,14 +242,14 @@ export default function History() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className={`text-body-md font-body-md font-bold block ${isFailed ? 'text-error' : 'text-amber-500'}`}>
+                        <span className={`text-body-md font-body-md font-bold block ${isFailed ? 'text-error' : 'text-primary'}`}>
                           +₿{tx.satsAmount || '???'}
                         </span>
                       </div>
                     </div>
-                    <div className={`divider-dashed my-3 ${isFailed ? 'border-error/20' : 'border-amber-500/20'}`}></div>
+                    <div className={`divider-dashed my-3 ${isFailed ? 'border-error/20' : 'border-primary/20'}`}></div>
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-label-caps font-label-caps">
-                      <div className={`flex items-center gap-2 w-full md:w-auto justify-between md:justify-start ${isFailed ? 'text-error' : 'text-amber-500'}`}>
+                      <div className={`flex items-center gap-2 w-full md:w-auto justify-between md:justify-start ${isFailed ? 'text-error' : 'text-primary'}`}>
                         <div className="flex items-center gap-2">
                           {!isFailed && <RefreshCw className={`w-4 h-4 ${checkingDepositIds[tx.id] ? 'animate-spin' : ''}`} />}
                           {isFailed && <AlertCircle className="w-4 h-4" />}
@@ -271,7 +271,7 @@ export default function History() {
                           <button
                             onClick={() => handleCheckDeposit(tx.id, tx.onchainAddress!)}
                             disabled={checkingDepositIds[tx.id]}
-                            className={`w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors font-bold ${checkingDepositIds[tx.id] ? 'bg-amber-500/10 text-amber-500/50 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-400 text-on-primary'}`}
+                            className={`w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors font-bold ${checkingDepositIds[tx.id] ? 'bg-primary/10 text-primary/50 cursor-not-allowed' : 'bg-primary hover:bg-primary/80 text-on-primary'}`}
                           >
                             {checkingDepositIds[tx.id] ? 'Checking...' : 'Check Status'}
                           </button>

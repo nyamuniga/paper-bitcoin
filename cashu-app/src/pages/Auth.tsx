@@ -55,7 +55,7 @@ export const Auth = () => {
 
   return (
     <div className="flex h-screen flex-col items-center justify-center p-6 bg-background">
-      <div className={`w-full max-w-sm bg-surface-container-high border border-gray-800 rounded-3xl p-8 shadow-2xl transition-transform duration-300 ${shake ? 'animate-shake' : ''}`}>
+      <div className={`w-full max-w-sm bg-surface-container-high/90 backdrop-blur-xl border border-outline-variant rounded-3xl p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_32px_rgba(0,0,0,0.4)] transition-transform duration-300 ${shake ? 'animate-shake' : ''}`}>
 
         <div className="flex justify-center mb-6 text-primary">
           {mode === 'login' && <Lock size={48} strokeWidth={1.5} />}
@@ -67,14 +67,14 @@ export const Auth = () => {
           {mode === 'login' ? 'Welcome Back' : mode === 'create' ? 'Create Wallet' : 'Restore Wallet'}
         </h1>
 
-        <p className="text-gray-300 text-center text-sm mb-8">
+        <p className="text-on-surface-variant text-center text-sm mb-8">
           {mode === 'login' ? 'Enter your passphrase to unlock your wallet' :
             mode === 'create' ? 'Secure your new wallet with a strong passphrase' :
               'Enter your recovery phrase and set a new local passphrase'}
         </p>
 
         {errorMsg && (
-          <div className="mb-6 bg-red-500/10 border border-red-500/30 text-red-500 p-3 rounded-xl text-sm text-center">
+          <div className="mb-6 bg-error/10 border border-error/30 text-error p-3 rounded-xl text-sm text-center">
             {errorMsg}
           </div>
         )}

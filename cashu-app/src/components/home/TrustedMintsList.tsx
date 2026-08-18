@@ -51,17 +51,17 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
         <div className="flex flex-col gap-2 overflow-hidden px-1 -mx-1 py-1 -my-1">
         <div 
           onClick={() => setShowAddMint(true)}
-          className="bg-surface-container-lowest rounded-2xl p-3.5 md:p-4 flex items-center justify-center gap-3 shadow-inner border-2 border-dotted border-primary/50 relative group hover:bg-surface-container-low hover:border-primary/80 transition-all duration-300 cursor-pointer"
+          className="bg-surface-container-lowest rounded-2xl p-3.5 md:p-4 flex items-center justify-center gap-3 border border-dashed border-primary/50 relative group hover:bg-surface-container-low hover:border-primary/80 transition-all duration-300 cursor-pointer"
         >
           <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
-          <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 relative z-10 pointer-events-none group-hover:scale-105 transition-transform">
+          <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 relative z-10 pointer-events-none group-hover:scale-105 transition-transform border border-primary/30">
             <Plus className="text-primary w-5 h-5" />
           </div>
           <span className="text-body-md font-body-md text-primary font-bold relative z-10 pointer-events-none tracking-wide">Add New Mint</span>
         </div>
 
         {sortedMints.length === 0 ? (
-          <div className="text-center text-on-surface-variant py-6 bg-surface-container-high rounded-2xl border border-outline-variant/10 text-body-md font-body-md">No mints connected yet</div>
+          <div className="text-center text-on-surface-variant py-6 bg-surface-container-high rounded-2xl border border-outline-variant text-body-md font-body-md">No mints connected yet</div>
         ) : (
           displayMints.map(([mint, amt], index) => {
             const isRevealed = revealedMint === mint;
@@ -79,15 +79,15 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
                     <Coins className="w-5 h-5" />
                     <span className="text-[10px] font-label-caps uppercase tracking-wider">Ecash</span>
                   </button>
-                  <div className="w-px h-8 bg-outline-variant/20"></div>
+                  <div className="w-px h-8 bg-outline-variant"></div>
                   <button 
                     onClick={(e) => { e.stopPropagation(); setBitcoinMint(mint); setRevealedMint(null); }}
-                    className="flex flex-col items-center justify-center gap-1 transition-all duration-200 text-amber-500 hover:text-amber-400 hover:scale-105 active:scale-95"
+                    className="flex flex-col items-center justify-center gap-1 transition-all duration-200 text-primary hover:text-primary hover:scale-105 active:scale-95"
                   >
                     <Zap className="w-5 h-5" />
                     <span className="text-[10px] font-label-caps uppercase tracking-wider">Bitcoin</span>
                   </button>
-                  <div className="w-px h-8 bg-outline-variant/20"></div>
+                  <div className="w-px h-8 bg-outline-variant"></div>
                   <button 
                     onClick={(e) => { e.stopPropagation(); setInfoMint(mint); setRevealedMint(null); }}
                     className="flex flex-col items-center justify-center gap-1 transition-all duration-200 text-tertiary hover:text-tertiary/80 hover:scale-105 active:scale-95"
@@ -100,7 +100,7 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
                 {/* Foreground Card */}
                 <div 
                   onClick={() => toggleReveal(mint)}
-                  className={`bg-surface-container-high rounded-2xl p-3.5 md:p-4 flex justify-between items-center shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] border border-outline-variant/10 relative group hover:bg-surface-container-highest transition-all duration-300 cursor-pointer ${isRevealed ? 'translate-x-[210px]' : 'translate-x-0'}`}
+                  className={`bg-surface-container-high rounded-2xl p-3.5 md:p-4 flex justify-between items-center border border-outline-variant relative z-10 group hover:bg-surface-container-highest transition-all duration-300 cursor-pointer ${isRevealed ? 'translate-x-[210px]' : 'translate-x-0'}`}
                 >
                   <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
                   <div className="flex items-center gap-3 relative z-10 min-w-0 mr-4 pointer-events-none">
