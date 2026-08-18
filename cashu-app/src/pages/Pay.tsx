@@ -192,7 +192,7 @@ export const Pay = () => {
   return (
     <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6 flex flex-col items-center">
       <div className="w-full max-w-2xl mb-6">
-        <PageHeader title="Pay Lightning Invoice" />
+        <PageHeader title="Pay Invoice" subtitle="Lightning invoice or LNURL" />
       </div>
 
       <div className="w-full max-w-2xl bg-surface-container-high rounded-xl relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] p-card-gap flex flex-col gap-8 border border-outline-variant/30">
@@ -237,17 +237,17 @@ export const Pay = () => {
             ) : (
               <button
                 onClick={() => setShowScanner(true)}
-                className="w-full aspect-[21/9] sm:aspect-[21/7] rounded-lg border-2 border-dashed border-outline-variant/50 hover:border-amber-400/50 transition-colors flex flex-col items-center justify-center gap-4 group relative bg-surface-container-lowest/50"
+                className="w-full aspect-[21/9] sm:aspect-[21/7] rounded-lg border-2 border-dashed border-outline-variant/50 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-4 group relative bg-surface-container-lowest/50"
               >
-                <div className="absolute inset-0 bg-amber-400/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></div>
+                <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></div>
                 <div className="relative w-16 h-16 flex items-center justify-center">
-                  <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-amber-400 rounded-tl-sm shadow-[0_0_10px_rgba(251,191,36,0.3)]"></div>
-                  <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-amber-400 rounded-tr-sm shadow-[0_0_10px_rgba(251,191,36,0.3)]"></div>
-                  <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-amber-400 rounded-bl-sm shadow-[0_0_10px_rgba(251,191,36,0.3)]"></div>
-                  <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-amber-400 rounded-br-sm shadow-[0_0_10px_rgba(251,191,36,0.3)]"></div>
-                  <QrCode className="w-10 h-10 text-amber-400 opacity-80 group-hover:opacity-100 transition-opacity" />
+                  <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-primary rounded-tl-sm shadow-[0_0_10px_rgba(251,191,36,0.3)]"></div>
+                  <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-primary rounded-tr-sm shadow-[0_0_10px_rgba(251,191,36,0.3)]"></div>
+                  <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-primary rounded-bl-sm shadow-[0_0_10px_rgba(251,191,36,0.3)]"></div>
+                  <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-primary rounded-br-sm shadow-[0_0_10px_rgba(251,191,36,0.3)]"></div>
+                  <QrCode className="w-10 h-10 text-primary opacity-80 group-hover:opacity-100 transition-opacity" />
                 </div>
-                <span className="text-label-caps font-label-caps text-amber-400 relative z-10">Tap to Scan Lightning QR</span>
+                <span className="text-label-caps font-label-caps text-primary relative z-10">Tap to Scan Lightning QR</span>
               </button>
             )}
 
@@ -263,7 +263,7 @@ export const Pay = () => {
                   <textarea 
                     value={invoice}
                     onChange={(e) => setInvoice(e.target.value)}
-                    className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInvalidAmount && invoice ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-amber-400'}`} 
+                    className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInvalidAmount && invoice ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`} 
                     placeholder="lnbc... or user@domain.com" 
                     rows={4}
                     spellCheck="false"
@@ -273,7 +273,7 @@ export const Pay = () => {
                 <div className="flex flex-col gap-4 bg-surface-container-lowest p-4 rounded-lg shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]">
                   <div className="flex justify-between items-center">
                     <span className="text-on-surface-variant font-label-caps text-xs">Paying</span>
-                    <span className="text-amber-400 font-bold truncate">{lnurlParams.domain || 'LNURL'}</span>
+                    <span className="text-primary font-bold truncate">{lnurlParams.domain || 'LNURL'}</span>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-on-surface-variant font-label-caps text-xs">Amount (sats)</label>
@@ -282,10 +282,10 @@ export const Pay = () => {
                         type="number"
                         value={lnurlAmount}
                         onChange={(e) => setLnurlAmount(e.target.value)}
-                        className="flex-1 bg-surface-container text-on-surface font-bold text-xl p-3 rounded-lg border-none focus:ring-1 focus:ring-amber-400 outline-none"
+                        className="flex-1 bg-surface-container text-on-surface font-bold text-xl p-3 rounded-lg border-none focus:ring-1 focus:ring-primary outline-none"
                         placeholder="0"
                       />
-                      <span className="text-amber-400 font-bold">sats</span>
+                      <span className="text-primary font-bold">sats</span>
                     </div>
                     <div className="text-[10px] text-on-surface-variant/70 flex justify-between mt-1">
                       <span>Min: {Math.ceil(lnurlParams.minSendable / 1000)} sats</span>
@@ -326,7 +326,7 @@ export const Pay = () => {
             <button 
               onClick={handlePay}
               disabled={paying || fetchingInvoice || (!invoice && !lnurlParams) || isInvalidAmount}
-              className={`mt-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${
+              className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${
                 paying || fetchingInvoice || (!invoice && !lnurlParams) || isInvalidAmount ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
               }`}
             >

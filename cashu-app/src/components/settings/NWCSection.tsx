@@ -118,7 +118,7 @@ export const NWCSection = () => {
   };
 
   return (
-    <div className="bg-surface-container-high rounded-2xl border border-outline-variant/20 shadow-sm relative overflow-hidden group">
+    <div className="bg-surface-container-high rounded-2xl border border-outline-variant relative overflow-hidden group">
       <div className="absolute top-0 left-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 -translate-x-1/4 pointer-events-none transition-transform group-hover:scale-110 duration-700"></div>
 
       <div
@@ -129,9 +129,9 @@ export const NWCSection = () => {
           <div className="w-10 h-10 rounded-full bg-primary/10 flex shrink-0 items-center justify-center text-primary border border-primary/20">
             <Link2 size={20} />
           </div>
-          <div className="min-w-0">
-            <h2 className="text-body-md font-body-md font-bold text-on-surface mb-1 truncate">Wallet Connect</h2>
-            <p className="text-sm text-on-surface-variant truncate">Connect a Nostr app to this wallet.</p>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-body-md font-body-md font-bold text-on-surface mb-0.5">Wallet Connect</h2>
+            <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">NWC remote app link</p>
           </div>
         </div>
         <div className="flex items-center gap-4 shrink-0">
@@ -142,7 +142,7 @@ export const NWCSection = () => {
       </div>
 
       {isExpanded && (
-        <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2 border-t border-outline-variant/10 relative z-10">
+        <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2 border-t border-outline-variant relative z-10">
           <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
             Connect a Nostr app to this wallet. Paired apps can check your balance, create invoices, and pay Lightning invoices with your ecash.
           </p>
@@ -161,7 +161,7 @@ export const NWCSection = () => {
                     e.stopPropagation();
                     handleToggle();
                   }}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${isEnabled ? 'bg-primary' : ' bg-surface-container-low'
+                  className={`w-12 h-6 rounded-full transition-colors relative border border-outline-variant ${isEnabled ? 'bg-primary' : 'bg-surface-container-low'
                     }`}
                 >
                   <div
@@ -175,9 +175,9 @@ export const NWCSection = () => {
             {isEnabled && nwcUri && (
               <>
                 {/* CONNECTION Section */}
-                <div className="border-t border-outline-variant/10 pt-6">
+                <div className="border-t border-outline-variant pt-6">
                   <h3 className="text-xs font-bold text-on-surface-variant/70 uppercase tracking-wider mb-3">Connection</h3>
-                  <div className="flex bg-surface-container-low p-4 rounded-xl items-center justify-between py-2">
+                  <div className="flex bg-surface-container-low border border-outline-variant p-4 rounded-xl items-center justify-between py-2">
                     <div className="flex items-center gap-2 overflow-hidden">
                       <div className="w-2 h-2 rounded-full bg-green-500 shrink-0"></div>
                       <span className="font-mono text-sm text-on-surface truncate">{truncateUri(nwcUri)}</span>
@@ -193,14 +193,14 @@ export const NWCSection = () => {
                   </div>
                   {showQR && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowQR(false)}>
-                      <div className="bg-surface-container-high p-6 rounded-2xl max-w-sm w-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
+                      <div className="bg-surface-container-high border border-outline-variant p-6 rounded-2xl max-w-sm w-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
                         <div className="w-full flex justify-between items-center mb-6">
                           <h3 className="text-body-lg font-bold text-on-surface">Scan to Connect</h3>
                           <button onClick={() => setShowQR(false)} className="p-2 hover:bg-surface-variant rounded-full transition-colors text-on-surface-variant">
                             <XIcon size={20} />
                           </button>
                         </div>
-                        <div className="bg-white p-4 rounded-xl shadow-inner mb-6">
+                        <div className="bg-white p-4 rounded-xl border border-outline-variant mb-6">
                           <QRCode value={nwcUri} size={240} />
                         </div>
                         <p className="text-center text-sm text-on-surface-variant leading-relaxed">
@@ -216,7 +216,7 @@ export const NWCSection = () => {
                 </div>
 
                 {/* SPENDING Section */}
-                <div className="border-t border-outline-variant/10 pt-6">
+                <div className="border-t border-outline-variant pt-6">
                   <h3 className="text-xs font-bold text-on-surface-variant/70 uppercase tracking-wider mb-3">Spending</h3>
 
                   <div className="space-y-4">
@@ -281,7 +281,7 @@ export const NWCSection = () => {
                 </div>
 
                 {/* CONNECTION MANAGEMENT Section */}
-                <div className="border-t border-outline-variant/10 pt-6">
+                <div className="border-t border-outline-variant pt-6">
                   <h3 className="text-xs font-bold text-on-surface-variant/70 uppercase tracking-wider mb-3">Connection Management</h3>
 
                   <button

@@ -10,7 +10,7 @@ export const RecentTransactions: React.FC = () => {
   const { transactions, loading, handleCheckIssue, handleRecoverPendingTransaction, handleCheckTokenSpendStatus, handleRetryReceiveEcash } = useHistory();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
-  const recentTxs = transactions.slice(0, 5);
+  const recentTxs = transactions.slice(0, 4);
 
 
 
@@ -97,11 +97,11 @@ export const RecentTransactions: React.FC = () => {
 
   return (
     <section className="flex flex-col gap-2">
-      <div className="bg-surface-container-high rounded-2xl overflow-hidden border border-outline-variant/10 relative">
+      <div className="bg-surface-container-high/80 backdrop-blur-xl rounded-2xl overflow-hidden border border-outline-variant relative shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)]">
         <div className="absolute inset-0 texture-overlay opacity-20"></div>
-        
+
         {/* Header moved inside the box */}
-        <div className="flex justify-between items-center p-4 border-b border-outline-variant/10 relative z-10">
+        <div className="flex justify-between items-center p-4 relative z-10">
           <h2 className="text-label-caps font-label-caps text-on-surface-variant tracking-widest">RECENT ACTIVITY</h2>
           {(loading || recentTxs.length > 0) && (
             <Link to="/history" className="text-label-caps font-label-caps text-primary hover:opacity-80 transition-opacity flex items-center gap-1">
@@ -121,34 +121,34 @@ export const RecentTransactions: React.FC = () => {
           </div>
         ) : (
           <div className="relative z-10">
-            {recentTxs.map((tx, index) => {
-            const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type;
-            return (
-            <div
-              key={tx.id}
-              onClick={() => handleRowClick(tx)}
-              className={`flex items-center gap-3 p-3.5 md:p-4 relative z-10 hover:bg-surface-container-highest/50 transition-colors ${index < recentTxs.length - 1 ? 'border-b border-outline-variant/10' : ''
-                } ${isClickable ? 'cursor-pointer active:scale-[0.99]' : ''}`}
-            >
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center border flex-shrink-0 ${getTxIconBg(tx)}`}>
-                {getTxIcon(tx)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-body-md font-body-md font-medium text-on-surface text-[14px]">{getTxLabel(tx)}</p>
-                {/* Mobile: relative time / Desktop: full date */}
-                <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] md:hidden">{formatTime(tx.timestamp)}</p>
-                <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] hidden md:block">{formatFullDate(tx.timestamp)}</p>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <span className={`text-body-md font-body-md font-semibold ${getTxAmountColor(tx)} text-[14px]`}>
-                  {getTxSign(tx)}₿{tx.amount}
-                </span>
-                {tx.status === 'Pending' && (
-                  <span className="block text-[10px] text-amber-500 font-label-caps">Pending</span>
-                )}
-              </div>
-            </div>
-          )})}
+            {recentTxs.map((tx) => {
+              const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type;
+              return (
+                <div
+                  key={tx.id}
+                  onClick={() => handleRowClick(tx)}
+                  className={`flex items-center gap-3 p-3.5 md:p-4 relative z-10 hover:bg-surface-bright/50 transition-colors ${isClickable ? 'cursor-pointer active:scale-[0.99]' : ''}`}
+                >
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center border flex-shrink-0 ${getTxIconBg(tx)}`}>
+                    {getTxIcon(tx)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-body-md font-body-md font-medium text-on-surface text-[14px]">{getTxLabel(tx)}</p>
+                    {/* Mobile: relative time / Desktop: full date */}
+                    <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] md:hidden">{formatTime(tx.timestamp)}</p>
+                    <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] hidden md:block">{formatFullDate(tx.timestamp)}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <span className={`text-body-md font-body-md font-semibold ${getTxAmountColor(tx)} text-[14px]`}>
+                      {getTxSign(tx)}₿{tx.amount}
+                    </span>
+                    {tx.status === 'Pending' && (
+                      <span className="block text-[10px] text-primary font-label-caps">Pending</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

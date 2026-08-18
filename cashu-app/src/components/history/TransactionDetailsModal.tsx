@@ -103,7 +103,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             <div className="flex justify-between items-center">
               <span className="text-label-caps font-label-caps text-on-surface-variant">STATUS</span>
               <div className={`flex items-center gap-1.5 text-body-md font-body-md font-semibold ${
-                tx.status === 'Pending' ? 'text-amber-500' :
+                tx.status === 'Pending' ? 'text-primary' :
                 tx.status === 'Success' ? 'text-emerald-400' :
                 tx.status === 'FailedMintError' ? 'text-rose-500' :
                 'text-on-surface-variant'
@@ -152,7 +152,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             {tx.status === 'Pending' && onRecover && (
               <button
                 onClick={onRecover}
-                className="mt-2 w-full py-2.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-500 rounded-xl font-label-lg transition-colors border border-amber-500/30 flex items-center justify-center gap-2"
+                className="mt-2 w-full py-2.5 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-label-lg transition-colors border border-primary/30 flex items-center justify-center gap-2"
               >
                 <CheckCircle className="w-4 h-4" />
                 Check Status & Recover
