@@ -7,11 +7,6 @@ import {
   startPaymentVerification, 
   executeSendPayment, 
   initiateAndVerifyPayout,
-  executeOnChainSend,
-  initiateAndVerifyOnChainPayout,
-  initiateOnChainReceive,
-  pollOnChainDeposit,
-  executeOnChainReceiveFulfillment
 } from '../services/flowServices';
 
 const POLLING_INTERVAL = 2000;
@@ -25,7 +20,7 @@ export const TransactionProcessor = () => {
   const backendPollingRef = useRef<any>(null);
   const isPollingRef = useRef<boolean>(false);
 
-  // 1. Transaction Resumption (MoMo & OnChain)
+  // 1. Transaction Resumption (MoMo)
   useEffect(() => {
     if (!activeTransaction) {
       if (momoPollingRef.current) { clearInterval(momoPollingRef.current); momoPollingRef.current = null; }
@@ -49,22 +44,6 @@ export const TransactionProcessor = () => {
       initiateAndVerifyPayout(stopPolling, momoPollingRef, momoTimeoutRef);
     } else if (phase === AppPhase.READY_TO_CLAIM) {
       refreshWallet();
-    }
-    
-    // On-Chain specific phases
-    if (phase === AppPhase.GENERATING_ONCHAIN_INVOICE || phase === AppPhase.PAYING_ONCHAIN_INVOICE) {
-      executeOnChainSend(stopPolling, momoPollingRef, momoTimeoutRef);
-    } else if (phase === AppPhase.EXECUTING_ONCHAIN_PAYOUT) {
-      initiateAndVerifyOnChainPayout(stopPolling, momoPollingRef, momoTimeoutRef);
-    }
-
-    // On-Chain Receive specific phases
-    if (phase === AppPhase.GENERATING_ONCHAIN_ADDRESS) {
-      initiateOnChainReceive();
-    } else if (phase === AppPhase.AWAITING_ONCHAIN_DEPOSIT) {
-      pollOnChainDeposit(stopPolling, momoPollingRef, momoTimeoutRef);
-    } else if (phase === AppPhase.DEPOSIT_CONFIRMED) {
-      executeOnChainReceiveFulfillment();
     }
 
     return stopPolling;
