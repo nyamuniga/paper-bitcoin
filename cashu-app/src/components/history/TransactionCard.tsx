@@ -54,9 +54,7 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
             </div>
             <div>
               <h3 className="text-body-md font-body-md font-semibold text-on-surface">
-                {tx.momo_direction === 'ONCHAIN_SEND' ? 'Sent On-chain' :
-                 tx.momo_direction === 'ONCHAIN_RECEIVE' ? 'Received On-chain' :
-                 tx.momo_direction === 'RWF_TO_SATS' ? 'Received RWF' :
+                {tx.momo_direction === 'RWF_TO_SATS' ? 'Received RWF' :
                  tx.momo_direction === 'SATS_TO_RWF' ? 'Sent RWF' :
                  isMint ? 'Received Lightning' : 
                  isReceiveEcash ? 'Received eCash' : 
