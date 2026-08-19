@@ -31,8 +31,6 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   const { currentFrame, isAnimated, currentFrameIndex, totalFrames } = useUrEncoder(tokenString, 150, 400);
 
   const getTxLabel = () => {
-    if (tx.momo_direction === 'ONCHAIN_SEND') return 'On-Chain Send';
-    if (tx.momo_direction === 'ONCHAIN_RECEIVE') return 'On-Chain Receive';
     if (tx.momo_direction === 'RWF_TO_SATS') return 'Receive RWF';
     if (tx.momo_direction === 'SATS_TO_RWF') return 'Send RWF';
     if (isMint) return 'Lightning Deposit';

@@ -2,7 +2,6 @@ import { useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { toast } from 'react-hot-toast';
-import { getOnChainFee } from '../services/lightningService';
 
 export const useBitcoin = (mintUrl?: string) => {
   const [paying, setPaying] = useState(false);
@@ -58,104 +57,10 @@ export const useBitcoin = (mintUrl?: string) => {
     }
   };
 
-  const sendOnChain = async (address: string, amount: number, miningFee: number, overrideMintUrl?: string) => {
-    if (isPayingRef.current) return null;
-    const targetMint = overrideMintUrl || mintUrl;
-    if (!targetMint) {
-      toast.error('No mint specified for sending');
-      return null;
-    }
-
-    setPaying(true);
-    isPayingRef.current = true;
-    try {
-      // Create new transaction record
-      const newTx: any = {
-        id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        direction: "ONCHAIN_SEND",
-        satsAmount: amount,
-        fee: miningFee,
-        onchainAddress: address,
-        mintUrl: targetMint,
-        status: "PENDING",
-        currentPhase: "GENERATING_ONCHAIN_INVOICE",
-        timestamp: Date.now()
-      };
-
-      const { useTransactionStore } = await import('../store/transactionStore');
-      useTransactionStore.getState().setActiveTransaction(newTx);
-
-      return { success: true, status: 'PENDING' };
-    } catch (e: any) {
-      toast.error(`Send failed: ${e.message}`);
-      return null;
-    } finally {
-      setPaying(false);
-      isPayingRef.current = false;
-    }
-  };
-
-  const receiveOnChain = async (amount: number, overrideMintUrl?: string) => {
-    if (isRequestingRef.current) return null;
-    const targetMint = overrideMintUrl || mintUrl;
-    if (!targetMint) {
-      toast.error('No mint specified for receiving');
-      return null;
-    }
-
-    setRequesting(true);
-    isRequestingRef.current = true;
-    try {
-      // Validate amount with Boltz limits
-      const { getBoltzPair } = await import('../services/boltzService');
-      const pair = await getBoltzPair('BTC/BTC');
-      if (amount < pair.limits.minimal) {
-        toast.error(`Amount must be at least ${pair.limits.minimal} sats for on-chain receive.`);
-        return null;
-      }
-      if (amount > pair.limits.maximal) {
-        toast.error(`Amount must be at most ${pair.limits.maximal} sats for on-chain receive.`);
-        return null;
-      }
-
-      // First, request a lightning invoice from the Mint
-      const res: any = await invoke('receive_lightning', { mintUrl: targetMint, amount });
-      const quoteId = res.quote_id as string;
-      const receiveInvoice = res.invoice as string;
-
-      // Create new transaction record
-      const newTx: any = {
-        id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        direction: "ONCHAIN_RECEIVE",
-        mintUrl: targetMint,
-        status: "PENDING",
-        satsAmount: amount,
-        invoice: receiveInvoice,
-        mintQuoteId: quoteId,
-        currentPhase: "GENERATING_ONCHAIN_ADDRESS",
-        timestamp: Date.now()
-      };
-
-      const { useTransactionStore } = await import('../store/transactionStore');
-      useTransactionStore.getState().setActiveTransaction(newTx);
-
-      return { success: true, status: 'PENDING' };
-    } catch (e: any) {
-      toast.error(`Receive failed: ${e.message}`);
-      return null;
-    } finally {
-      setRequesting(false);
-      isRequestingRef.current = false;
-    }
-  };
-
   return {
     paying,
     requesting,
     payInvoice,
     receiveLightning,
-    getOnChainFee,
-    sendOnChain,
-    receiveOnChain,
   };
 };

@@ -31,8 +31,7 @@ export const RecentTransactions: React.FC = () => {
     const isReceiveEcash = 'ReceiveEcash' in tx.tx_type;
     const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
 
-    if (tx.momo_direction === 'ONCHAIN_SEND') return 'Sent On-chain';
-    if (tx.momo_direction === 'ONCHAIN_RECEIVE') return 'Received On-chain';
+
     if (tx.momo_direction === 'RWF_TO_SATS') return 'Received RWF';
     if (tx.momo_direction === 'SATS_TO_RWF') return 'Sent RWF';
     if (isMint) return 'Received Lightning';
