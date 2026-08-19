@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Loader2, Zap, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
+import { initBarkWallet } from '../../services/barkService';
 
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
@@ -26,6 +27,7 @@ interface BitcoinModalProps {
 
 type Tab = 'send' | 'receive';
 type SendStep = 'input' | 'amount';
+type ReceiveMode = 'lightning' | 'onchain';
 
 export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialInvoice = '', onClose }) => {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
@@ -44,17 +46,23 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const [sendStep, setSendStep] = useState<SendStep>('input');
 
   // Receive state
+  const [receiveMode, setReceiveMode] = useState<ReceiveMode>('lightning');
   const [receiveAmount, setReceiveAmount] = useState('');
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [receiveInvoice, setReceiveInvoice] = useState<string | null>(null);
+  const [boardingAddress, setBoardingAddress] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    initBarkWallet().catch(console.error);
+  }, []);
 
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const mintUrls = Object.keys(mintBalances || {});
   const availableBalance = mintBalances[mintUrl] || 0;
 
   const { transactions } = useHistory();
-  const { paying, requesting, payInvoice, receiveLightning } = useBitcoin(mintUrl);
+  const { paying, requesting, payInvoice, receiveLightning, receiveOnChain, sendOnChain } = useBitcoin(mintUrl);
 
 
   const currentTx = quoteId ? transactions.find(t => t.id === quoteId) : null;
@@ -71,7 +79,9 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   };
 
   const handleNextFromInput = async () => {
-    if (parsedInput.type === 'lnurl' || parsedInput.type === 'lnurl-pay') {
+    if (parsedInput.type === 'onchain') {
+      setSendStep('amount');
+    } else if (parsedInput.type === 'lnurl' || parsedInput.type === 'lnurl-pay') {
       try {
         setIsFetchingLnurl(true);
         const params = await resolveLnurlPay(parsedInput.addressOrInvoice);
@@ -97,6 +107,12 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
       return;
     }
 
+    if (parsedInput.type === 'onchain' && parsedInput.addressOrInvoice) {
+      const success = await sendOnChain(parsedInput.addressOrInvoice, amt);
+      if (success) onClose();
+      return;
+    }
+
     if (lnurlParams) {
       setIsFetchingLnurl(true);
       try {
@@ -117,6 +133,14 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const parsedReceiveAmount = parseInt(receiveAmount) || 0;
 
   const handleRequestInvoice = async () => {
+    if (receiveMode === 'onchain') {
+      const res = await receiveOnChain();
+      if (res) {
+        setBoardingAddress(res.boardingAddress);
+      }
+      return;
+    }
+
     if (parsedReceiveAmount <= 0) return;
     const res = await receiveLightning(parsedReceiveAmount);
     if (res) {
@@ -147,6 +171,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
       setReceiveAmount('');
       setQuoteId(null);
       setReceiveInvoice(null);
+      setBoardingAddress(null);
     }
   };
 
@@ -263,7 +288,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         value={destinationInput}
                         onChange={(e) => setDestinationInput(e.target.value)}
                         className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInsufficient ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`}
-                        placeholder="Lightning Invoice or Address..."
+                        placeholder="Lightning, LNURL, or On-Chain..."
                         rows={4}
                         spellCheck={false}
                       />
@@ -300,8 +325,8 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   ) : (
                     <button
                       onClick={handleNextFromInput}
-                      disabled={parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay'}
-                      className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay') ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      disabled={parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay' && parsedInput.type !== 'onchain'}
+                      className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay' && parsedInput.type !== 'onchain') ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                         }`}
                     >
                       {isFetchingLnurl ? <Loader2 className="animate-spin w-6 h-6" /> : 'Next'}
@@ -333,7 +358,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(!parseInt(lnurlSendAmount) || parseInt(lnurlSendAmount) > availableBalance) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                       }`}
                   >
-                    {isFetchingLnurl ? <Loader2 className="animate-spin w-6 h-6" /> : 'Pay Lightning'}
+                    {isFetchingLnurl ? <Loader2 className="animate-spin w-6 h-6" /> : parsedInput.type === 'onchain' ? 'Send via ASP' : 'Pay Lightning'}
                   </button>
                 </div>
               )}
@@ -394,34 +419,105 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-on-surface-variant text-[13px]">
-                  <Loader2 className="animate-spin w-4 h-4" />
-                  <span>Waiting for payment...</span>
+                  <div className="flex items-center gap-2 text-on-surface-variant text-[13px]">
+                    <Loader2 className="animate-spin w-4 h-4" />
+                    <span>Waiting for payment...</span>
+                  </div>
                 </div>
-              </div>
+              ) : boardingAddress ? (
+                /* Show ASP Boarding QR */
+                <div className="flex flex-col items-center gap-5">
+                  <div className="text-center">
+                    <p className="text-[20px] font-display-sm text-primary">Ark On-Chain Deposit</p>
+                  </div>
+  
+                  <div className="relative">
+                    <div className="bg-white p-4 rounded-xl shadow-lg">
+                      <QRCode value={`bitcoin:${boardingAddress}`} size={200} />
+                    </div>
+                  </div>
+  
+                  <div className="w-full flex flex-col gap-2">
+                    <div
+                      onClick={() => handleCopy(boardingAddress)}
+                      className="w-full bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30 shadow-inner cursor-pointer hover:border-primary/30 transition-colors text-center"
+                    >
+                      <p className="text-[12px] font-mono text-on-surface-variant break-all">{boardingAddress}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleCopy(boardingAddress)}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20"
+                      >
+                        {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Address</>}
+                      </button>
+                      <button
+                        onClick={() => setBoardingAddress(null)}
+                        className="px-6 py-3 rounded-full bg-surface-container-highest text-on-surface-variant font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20"
+                      >
+                        Back
+                      </button>
+                    </div>
+                  </div>
+  
+                  <div className="flex items-center gap-2 text-on-surface-variant text-[13px] bg-surface-container-highest p-3 rounded-lg border border-outline-variant/10">
+                    <Loader2 className="animate-spin w-4 h-4 text-primary" />
+                    <span>Waiting for ASP boarding (vUTXO)...</span>
+                  </div>
+                </div>
             ) : (
               <div className="flex flex-col gap-6">
+                {/* Mode Toggle */}
+                <div className="flex bg-surface-container-highest rounded-lg p-1 border border-outline-variant/10">
+                  <button
+                    onClick={() => { setReceiveMode('lightning'); setReceiveAmount(''); }}
+                    className={`flex-1 py-2 text-[13px] font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${receiveMode === 'lightning'
+                      ? 'bg-surface-bright text-on-surface shadow-sm'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                      }`}
+                  >
+                    Lightning
+                  </button>
+                  <button
+                    onClick={() => { setReceiveMode('onchain'); setReceiveAmount(''); }}
+                    className={`flex-1 py-2 text-[13px] font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${receiveMode === 'onchain'
+                      ? 'bg-surface-bright text-on-surface shadow-sm'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                      }`}
+                  >
+                    On-Chain (Ark)
+                  </button>
+                </div>
+
                 <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-4">
-                    <AmountDisplay amount={receiveAmount} compact />
-                    <NumberPad
-                      value={receiveAmount}
-                      onChange={(val) => {
-                        setReceiveAmount(val);
-                        setReceiveInvoice(null);
-                        setQuoteId(null);
-                      }}
-                      compact
-                    />
-                  </div>
+                  {receiveMode === 'lightning' ? (
+                    <div className="flex flex-col gap-4 animate-fade-in">
+                      <AmountDisplay amount={receiveAmount} compact />
+                      <NumberPad
+                        value={receiveAmount}
+                        onChange={(val) => {
+                          setReceiveAmount(val);
+                          setReceiveInvoice(null);
+                          setQuoteId(null);
+                        }}
+                        compact
+                      />
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-surface-container-highest rounded-xl border border-outline-variant/10 flex flex-col gap-3 animate-fade-in text-center">
+                      <p className="text-[14px] text-on-surface-variant leading-relaxed">
+                        Receive regular on-chain Bitcoin. Funds will be converted to a vUTXO via the Ark Service Provider and then minted as eCash automatically.
+                      </p>
+                    </div>
+                  )}
 
                   <button
                     onClick={handleRequestInvoice}
-                    disabled={requesting || parsedReceiveAmount <= 0}
-                    className={`bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${requesting || parsedReceiveAmount <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                    disabled={requesting || (receiveMode === 'lightning' && parsedReceiveAmount <= 0)}
+                    className={`bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${requesting || (receiveMode === 'lightning' && parsedReceiveAmount <= 0) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                       }`}
                   >
-                    {requesting ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Invoice'}
+                    {requesting ? <Loader2 className="animate-spin w-6 h-6" /> : receiveMode === 'onchain' ? 'Get Boarding Address' : 'Create Invoice'}
                   </button>
                 </div>
               </div>

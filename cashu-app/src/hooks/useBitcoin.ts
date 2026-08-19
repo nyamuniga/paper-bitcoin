@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { toast } from 'react-hot-toast';
+import { getBarkBoardingAddress, sendOnChainBark } from '../services/barkService';
 
 export const useBitcoin = (mintUrl?: string) => {
   const [paying, setPaying] = useState(false);
@@ -57,10 +58,44 @@ export const useBitcoin = (mintUrl?: string) => {
     }
   };
 
+  const receiveOnChain = async () => {
+    if (isRequestingRef.current) return null;
+    isRequestingRef.current = true;
+    setRequesting(true);
+    try {
+      const res = await getBarkBoardingAddress();
+      return { boardingAddress: res.address };
+    } catch (e: any) {
+      toast.error(`Failed to get boarding address: ${e.message || e}`);
+      return null;
+    } finally {
+      setRequesting(false);
+      isRequestingRef.current = false;
+    }
+  };
+
+  const sendOnChain = async (address: string, amount: number) => {
+    if (isPayingRef.current) return null;
+    isPayingRef.current = true;
+    setPaying(true);
+    try {
+      const txid = await sendOnChainBark(address, amount);
+      return { txid };
+    } catch (e: any) {
+      toast.error(`On-Chain send failed: ${e.message || e}`);
+      return null;
+    } finally {
+      setPaying(false);
+      isPayingRef.current = false;
+    }
+  };
+
   return {
     paying,
     requesting,
     payInvoice,
     receiveLightning,
+    receiveOnChain,
+    sendOnChain,
   };
 };

@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { useNostrStore } from '../store/nostrStore';
 import { useTransactionStore } from '../store/transactionStore';
+import { initBarkWallet } from '../services/barkService';
 
 export const useAuth = () => {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
@@ -11,6 +12,7 @@ export const useAuth = () => {
   const [shake, setShake] = useState(false);
   const [showConfirmReset, setShowConfirmReset] = useState(false);
   const [generatedMnemonic, setGeneratedMnemonic] = useState('');
+  const [generatedBarkMnemonic, setGeneratedBarkMnemonic] = useState('');
   const [loading, setLoading] = useState(false);
   const [restoreProgress, setRestoreProgress] = useState<string[]>([]);
   
@@ -46,6 +48,7 @@ export const useAuth = () => {
         if (shouldAutoLogin) {
           const res = await invoke('auto_login').catch(() => false);
           if (res) {
+            try { await initBarkWallet(); } catch (e) { console.error("Failed to init Bark:", e); }
             await refreshWallet();
             return;
           }
@@ -67,6 +70,7 @@ export const useAuth = () => {
         localStorage.removeItem('rememberMe');
       }
       window.history.replaceState(null, '', '/');
+      try { await initBarkWallet(); } catch (e) { console.error("Failed to init Bark:", e); }
       await refreshWallet();
       return true;
     } catch (e: any) {
@@ -87,6 +91,10 @@ export const useAuth = () => {
       } else {
         localStorage.removeItem('rememberMe');
       }
+      try { await initBarkWallet(); } catch (e) { console.error("Failed to init Bark:", e); }
+      let barkMnemonic = '';
+      try { barkMnemonic = await invoke<string>('bark_get_mnemonic'); } catch (e) { console.error(e); }
+      setGeneratedBarkMnemonic(barkMnemonic);
       return res.mnemonic as string;
     } catch (e: any) {
       triggerError(String(e));
@@ -108,6 +116,7 @@ export const useAuth = () => {
         localStorage.removeItem('rememberMe');
       }
       window.history.replaceState(null, '', '/');
+      try { await initBarkWallet(); } catch (e) { console.error("Failed to init Bark:", e); }
       await refreshWallet();
       return true;
     } catch (e: any) {
@@ -166,6 +175,8 @@ export const useAuth = () => {
     setShowConfirmReset,
     generatedMnemonic,
     setGeneratedMnemonic,
+    generatedBarkMnemonic,
+    setGeneratedBarkMnemonic,
     triggerError,
     handleClearError,
     loading,

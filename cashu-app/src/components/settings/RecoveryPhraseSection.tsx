@@ -10,7 +10,10 @@ export const RecoveryPhraseSection = () => {
   const [passphrase, setPassphrase] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [mnemonic, setMnemonic] = useState<string>('');
+  const [barkMnemonic, setBarkMnemonic] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [copiedBark, setCopiedBark] = useState(false);
+  const [copiedAll, setCopiedAll] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const { unlockWallet } = useAuth();
 
@@ -23,6 +26,12 @@ export const RecoveryPhraseSection = () => {
       try {
         const words = await invoke<string[]>('get_recovery_words');
         setMnemonic(words.join(' '));
+        try {
+          const bWords = await invoke<string>('bark_get_mnemonic');
+          setBarkMnemonic(bWords);
+        } catch (e) {
+          console.warn("Bark mnemonic not found", e);
+        }
         setShowMnemonic(true);
         setShowPrompt(false);
       } catch (err: any) {
@@ -37,8 +46,25 @@ export const RecoveryPhraseSection = () => {
   const copyMnemonic = () => {
     navigator.clipboard.writeText(mnemonic);
     setCopied(true);
-    toast.success('Recovery phrase copied!');
+    toast.success('Cashu recovery phrase copied!');
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const copyBarkMnemonic = () => {
+    navigator.clipboard.writeText(barkMnemonic);
+    setCopiedBark(true);
+    toast.success('Bitcoin recovery phrase copied!');
+    setTimeout(() => setCopiedBark(false), 2000);
+  };
+
+  const copyAllMnemonics = () => {
+    const text = barkMnemonic 
+      ? `Cashu Wallet (24 words):\n${mnemonic}\n\nBitcoin Wallet (12 words):\n${barkMnemonic}` 
+      : mnemonic;
+    navigator.clipboard.writeText(text);
+    setCopiedAll(true);
+    toast.success('All recovery phrases copied!');
+    setTimeout(() => setCopiedAll(false), 2000);
   };
 
   return (
@@ -116,7 +142,8 @@ export const RecoveryPhraseSection = () => {
           {showMnemonic && (
             <div className="space-y-3">
               <div className="p-4 bg-surface-container-lowest rounded-xl border border-outline-variant relative group">
-                <div className="grid grid-cols-3 md:grid-cols-4 gap-3 mb-2">
+                <div className="text-sm font-bold text-on-surface mb-2 px-2 pt-2">Cashu Wallet (24 words)</div>
+                <div className="grid grid-cols-3 md:grid-cols-4 gap-3 mb-2 px-2 pb-2">
                   {mnemonic.split(' ').map((word, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <span className="text-xs text-on-surface-variant/50 w-4">{i + 1}.</span>
@@ -124,6 +151,7 @@ export const RecoveryPhraseSection = () => {
                     </div>
                   ))}
                 </div>
+
                 <button
                   onClick={copyMnemonic}
                   className="absolute top-2 right-2 p-2 bg-surface-container-high hover:bg-surface-bright rounded-md text-on-surface-variant transition-colors opacity-0 group-hover:opacity-100"
@@ -133,13 +161,35 @@ export const RecoveryPhraseSection = () => {
                 </button>
               </div>
 
-              <div className="flex items-center justify-between gap-3">
+              {barkMnemonic && (
+                <div className="p-4 bg-surface-container-lowest rounded-xl border border-outline-variant relative group">
+                  <div className="text-sm font-bold text-on-surface mb-2 px-2 pt-2">Bitcoin Wallet (12 words)</div>
+                  <div className="grid grid-cols-3 md:grid-cols-4 gap-3 mb-2 px-2 pb-2">
+                    {barkMnemonic.split(' ').map((word, i) => (
+                      <div key={`bark-${i}`} className="flex items-center gap-2">
+                        <span className="text-xs text-on-surface-variant/50 w-4">{i + 1}.</span>
+                        <span className="font-mono text-on-surface font-bold text-sm">{word}</span>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <button
+                    onClick={copyBarkMnemonic}
+                    className="absolute top-2 right-2 p-2 bg-surface-container-high hover:bg-surface-bright rounded-md text-on-surface-variant transition-colors opacity-0 group-hover:opacity-100"
+                    title="Copy phrase"
+                  >
+                    {copiedBark ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-3 pt-2">
                 <button
-                  onClick={copyMnemonic}
+                  onClick={copyAllMnemonics}
                   className="flex items-center gap-2 px-4 py-2 bg-surface-container-highest hover:bg-surface-bright border border-outline-variant rounded-lg text-xs font-bold text-on-surface transition-colors cursor-pointer"
                 >
-                  {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copied ? 'Copied' : 'Copy Words'}</span>
+                  {copiedAll ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedAll ? 'Copied' : 'Copy All'}</span>
                 </button>
 
                 <button

@@ -16,6 +16,8 @@ pub fn run() {
                 pending_nwc_requests: std::sync::Mutex::new(Vec::new()),
             });
             
+            app.manage(commands::bark::BarkState::new());
+            
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = crate::nwc::spawn_nwc_listener(app_handle).await {
@@ -81,6 +83,13 @@ pub fn run() {
             crate::nwc::get_pending_nwc_requests,
             crate::nwc::approve_nwc_request,
             crate::nwc::reject_nwc_request,
+            commands::bark::init_bark_wallet,
+            commands::bark::bark_get_boarding_address,
+            commands::bark::bark_sync_vutxos,
+            commands::bark::bark_send_onchain,
+            commands::bark::bark_get_mnemonic,
+            commands::bark::bark_get_balance,
+            commands::bark::bark_pay_lightning_invoice,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
