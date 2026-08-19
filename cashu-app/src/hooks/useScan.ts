@@ -33,7 +33,7 @@ export const useScan = () => {
     }
     
     const parsed = parseBitcoinInput(trimmed);
-    if (parsed.type === 'lightning' || parsed.type === 'onchain' || parsed.type === 'lnurl' || parsed.type === 'lnurl-pay') {
+    if (parsed.type === 'lightning' || parsed.type === 'lnurl' || parsed.type === 'lnurl-pay') {
       navigate('/', { state: { lnbcInvoice: parsed.addressOrInvoice } });
       return;
     }
