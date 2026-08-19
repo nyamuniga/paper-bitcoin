@@ -1,7 +1,7 @@
 export interface ParsedBitcoinInput {
-  type: 'lightning' | 'onchain' | 'lnurl-pay' | 'lnurl' | 'invalid';
+  type: 'lightning' | 'lnurl-pay' | 'lnurl' | 'invalid';
   addressOrInvoice: string;
-  amountSats: number | null; // Extracted amount if present (from BIP21 or lightning)
+  amountSats: number | null; // Extracted amount if present (from lightning)
 }
 
 /**
@@ -10,8 +10,6 @@ export interface ParsedBitcoinInput {
  * 1. Lightning Addresses (user@domain.tld)
  * 2. LNURL strings (LNURL1... or lightning:LNURL1...)
  * 3. Lightning invoices (lnbc...)
- * 4. On-chain addresses (Legacy 1..., P2SH 3..., Segwit/Taproot bc1...)
- * 5. BIP21 URIs (bitcoin:...?amount=...)
  */
 export const parseBitcoinInput = (input: string): ParsedBitcoinInput => {
   const cleanInput = input.trim();
@@ -43,44 +41,6 @@ export const parseBitcoinInput = (input: string): ParsedBitcoinInput => {
       type: 'lightning',
       addressOrInvoice: invoice,
       amountSats: getInvoiceAmountSats(invoice)
-    };
-  }
-
-  // 4. Check for BIP21 URI
-  const bip21Match = cleanInput.match(/^bitcoin:([13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{8,87})/i);
-  if (bip21Match) {
-    const address = bip21Match[1];
-    let amountSats = null;
-    
-    // Parse query params for amount (amount in BTC -> Sats)
-    try {
-      const url = new URL(cleanInput);
-      const btcAmount = url.searchParams.get('amount');
-      if (btcAmount) {
-        amountSats = Math.floor(parseFloat(btcAmount) * 100_000_000);
-      }
-    } catch (e) {
-      // Fallback manual parse
-      const amountMatch = cleanInput.match(/[?&]amount=([0-9.]+)/i);
-      if (amountMatch) {
-        amountSats = Math.floor(parseFloat(amountMatch[1]) * 100_000_000);
-      }
-    }
-
-    return {
-      type: 'onchain',
-      addressOrInvoice: address,
-      amountSats
-    };
-  }
-
-  // 5. Check for raw on-chain address
-  const rawOnchainMatch = cleanInput.match(/^([13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{8,87})$/i);
-  if (rawOnchainMatch) {
-    return {
-      type: 'onchain',
-      addressOrInvoice: rawOnchainMatch[1],
-      amountSats: null
     };
   }
 
