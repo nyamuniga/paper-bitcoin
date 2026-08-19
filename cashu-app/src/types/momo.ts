@@ -22,6 +22,10 @@ export enum AppPhase {
   PAYOUT_FAILED = "PAYOUT_FAILED",
   RETRYABLE_ERROR = "RETRYABLE_ERROR", 
   EXPIRED = "EXPIRED", 
+  // Ark Protocol Phases
+  AWAITING_ASP_BOARDING = "AWAITING_ASP_BOARDING",
+  LIFTING_VUTXO = "LIFTING_VUTXO",
+  EXECUTING_ASP_PAYOUT = "EXECUTING_ASP_PAYOUT",
 }
 
 export enum MomoStatus {
@@ -40,7 +44,7 @@ export enum FulfillmentStep {
   COMPLETED = "COMPLETED",
 }
 
-export type TransactionDirection = "RWF_TO_SATS" | "SATS_TO_RWF" | "LNURL_SEND" | "NOSTR_RECEIVE";
+export type TransactionDirection = "RWF_TO_SATS" | "SATS_TO_RWF" | "LNURL_SEND" | "NOSTR_RECEIVE" | "ONCHAIN_SEND" | "ONCHAIN_RECEIVE";
 export type TransactionStatus = "PENDING" | "COMPLETED" | "FAILED" | "EXPIRED";
 
 export interface TransactionDetails {
@@ -63,4 +67,8 @@ export interface TransactionDetails {
   currentPhase?: AppPhase; 
   currentTab?: "ecash" | "lightning" | "receive"; 
   mintUrl?: string;
+  // Ark Protocol fields
+  boardingAddress?: string;
+  vUtxoId?: string;
+  aspTxId?: string;
 }

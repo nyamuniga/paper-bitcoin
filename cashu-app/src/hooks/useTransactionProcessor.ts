@@ -8,6 +8,7 @@ import {
   executeSendPayment, 
   initiateAndVerifyPayout,
 } from '../services/flowServices';
+import { syncBarkVutxos, getBarkBalance, payLightningInvoiceBark } from '../services/barkService';
 
 const POLLING_INTERVAL = 2000;
 
@@ -42,6 +43,18 @@ export const TransactionProcessor = () => {
       executeSendPayment();
     } else if (phase === AppPhase.INITIATING_PAYOUT || phase === AppPhase.VERIFYING_PAYOUT) {
       initiateAndVerifyPayout(stopPolling, momoPollingRef, momoTimeoutRef);
+    } else if (phase === AppPhase.AWAITING_ASP_BOARDING) {
+      // Poll Ark ASP for onboarding VTXOs
+      if (!momoPollingRef.current) {
+        momoPollingRef.current = setInterval(async () => {
+          try {
+            await syncBarkVutxos();
+            // In a full implementation, we'd check if the VTXO is confirmed and transition the phase
+          } catch (e) {
+            console.error("Error syncing Bark VTXOs", e);
+          }
+        }, POLLING_INTERVAL);
+      }
     } else if (phase === AppPhase.READY_TO_CLAIM) {
       refreshWallet();
     }
@@ -102,6 +115,60 @@ export const TransactionProcessor = () => {
     return () => {
       isMounted = false;
       if (backendPollingRef.current) clearTimeout(backendPollingRef.current);
+    };
+  }, []);
+
+  // 3. Auto-sweep Bark VUTXOs
+  useEffect(() => {
+    let isMounted = true;
+    let isSweeping = false;
+
+    const sweepBark = async () => {
+      if (!isMounted || isSweeping) return;
+      isSweeping = true;
+
+      try {
+        await syncBarkVutxos();
+        const balance = await getBarkBalance();
+        
+        // Only sweep if balance > 50 sats to account for potential routing fees
+        if (balance > 50) {
+          const sweepAmount = balance - 50; // Leave 50 sats for Ark fees
+          
+          // Determine the target mint
+          const mints = Object.keys(useWalletStore.getState().mintBalances);
+          if (mints.length === 0) {
+            console.warn("No mints available to sweep Bark funds into.");
+            return;
+          }
+          const targetMint = mints[0];
+          
+          // Request invoice from mint
+          const res: any = await invoke('receive_lightning', { mintUrl: targetMint, amount: sweepAmount });
+          const invoice = res.invoice as string;
+          
+          if (invoice) {
+            // Pay it with Bark
+            await payLightningInvoiceBark(invoice);
+            console.log(`Successfully swept ${sweepAmount} sats from Bark to Cashu`);
+            // Trigger backend check to fetch the eCash immediately
+            await invoke('check_transaction_status', { txId: res.quote_id });
+            await refreshWallet();
+          }
+        }
+      } catch (e) {
+        console.error("Auto-sweep failed:", e);
+      } finally {
+        isSweeping = false;
+      }
+    };
+
+    sweepBark();
+    const intervalId = setInterval(sweepBark, 30000); // Check every 30 seconds
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
     };
   }, []);
 
