@@ -90,6 +90,8 @@ pub fn run() {
             commands::bark::bark_get_mnemonic,
             commands::bark::bark_get_balance,
             commands::bark::bark_pay_lightning_invoice,
+            commands::bark::bark_estimate_onchain_send,
+            commands::bark::bark_execute_onchain_send,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

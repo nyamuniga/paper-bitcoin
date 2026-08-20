@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Loader2, Zap, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
-import { initBarkWallet } from '../../services/barkService';
+import { initBarkWallet, OnchainSendEstimate } from '../../services/barkService';
 
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
@@ -26,7 +26,7 @@ interface BitcoinModalProps {
 }
 
 type Tab = 'send' | 'receive';
-type SendStep = 'input' | 'amount';
+type SendStep = 'input' | 'amount' | 'confirm';
 type ReceiveMode = 'lightning' | 'onchain';
 
 export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialInvoice = '', onClose }) => {
@@ -44,6 +44,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const [lnurlSendAmount, setLnurlSendAmount] = useState('');
   const [isFetchingLnurl, setIsFetchingLnurl] = useState(false);
   const [sendStep, setSendStep] = useState<SendStep>('input');
+  const [onchainEstimate, setOnchainEstimate] = useState<OnchainSendEstimate | null>(null);
 
   // Receive state
   const [receiveMode, setReceiveMode] = useState<ReceiveMode>('lightning');
@@ -62,7 +63,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const availableBalance = mintBalances[mintUrl] || 0;
 
   const { transactions } = useHistory();
-  const { paying, requesting, payInvoice, receiveLightning, receiveOnChain, sendOnChain } = useBitcoin(mintUrl);
+  const { paying, requesting, payInvoice, receiveLightning, receiveOnChain, estimateOnChain, executeOnChain } = useBitcoin(mintUrl);
 
 
   const currentTx = quoteId ? transactions.find(t => t.id === quoteId) : null;
@@ -108,8 +109,11 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
     }
 
     if (parsedInput.type === 'onchain' && parsedInput.addressOrInvoice) {
-      const success = await sendOnChain(parsedInput.addressOrInvoice, amt);
-      if (success) onClose();
+      const estimate = await estimateOnChain(parsedInput.addressOrInvoice, amt);
+      if (estimate) {
+        setOnchainEstimate(estimate);
+        setSendStep('confirm');
+      }
       return;
     }
 
@@ -128,6 +132,12 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
       }
       return;
     }
+  };
+
+  const handleConfirmOnchain = async () => {
+    if (!onchainEstimate || !parsedInput.addressOrInvoice) return;
+    const success = await executeOnChain(onchainEstimate, parsedInput.addressOrInvoice);
+    if (success) onClose();
   };
 
   const parsedReceiveAmount = parseInt(receiveAmount) || 0;
@@ -354,12 +364,64 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   />
                   <button
                     onClick={handleNextFromAmount}
-                    disabled={!parseInt(lnurlSendAmount) || parseInt(lnurlSendAmount) > availableBalance}
-                    className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(!parseInt(lnurlSendAmount) || parseInt(lnurlSendAmount) > availableBalance) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                    disabled={!parseInt(lnurlSendAmount) || parseInt(lnurlSendAmount) > availableBalance || requesting || isFetchingLnurl}
+                    className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(!parseInt(lnurlSendAmount) || parseInt(lnurlSendAmount) > availableBalance || requesting || isFetchingLnurl) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                       }`}
                   >
-                    {isFetchingLnurl ? <Loader2 className="animate-spin w-6 h-6" /> : parsedInput.type === 'onchain' ? 'Send via ASP' : 'Pay Lightning'}
+                    {isFetchingLnurl || requesting ? <Loader2 className="animate-spin w-6 h-6" /> : parsedInput.type === 'onchain' ? 'Send via ASP' : 'Pay Lightning'}
                   </button>
+                </div>
+              )}
+
+              {sendStep === 'confirm' && onchainEstimate && (
+                <div className="flex-1 overflow-y-auto flex flex-col pt-4 animate-fade-in">
+                  <div className="flex items-center justify-between mb-6">
+                    <button onClick={() => setSendStep('amount')} className="text-on-surface-variant hover:text-on-surface text-sm font-bold">← Back</button>
+                    <p className="text-label-caps font-label-caps text-on-surface-variant">CONFIRM SEND</p>
+                  </div>
+                  <div className="flex-1 flex flex-col justify-start items-center px-4 mx-auto w-full">
+                    <div className="text-center mb-8 w-full">
+                      <div className="text-on-surface-variant text-[14px] mb-2 font-medium">Sending to</div>
+                      <div className="text-on-surface text-[14px] break-all w-full mx-auto font-mono bg-surface-container-high p-3 rounded-lg border border-outline-variant/30">
+                        {parsedInput.addressOrInvoice}
+                      </div>
+                    </div>
+                    
+                    <div className="w-full bg-surface-container rounded-[24px] p-6 mb-8 flex flex-col gap-4 border border-outline-variant/20">
+                      <div className="flex justify-between items-center">
+                        <span className="text-on-surface-variant font-medium text-[15px]">Target Amount</span>
+                        <span className="text-on-surface font-bold text-[15px]">{onchainEstimate.amount.toLocaleString()} sats</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-on-surface-variant font-medium text-[15px]">Ark Batching Fee</span>
+                        <span className="text-on-surface font-bold text-[15px]">{onchainEstimate.ark_fee.toLocaleString()} sats</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-on-surface-variant font-medium text-[15px]">Lightning Routing</span>
+                        <span className="text-on-surface font-bold text-[15px]">{onchainEstimate.cashu_fee.toLocaleString()} sats</span>
+                      </div>
+                      <div className="h-[1px] bg-outline-variant/50 w-full my-1"></div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-on-surface-variant font-medium text-[16px]">Total Deducted</span>
+                        <span className="text-on-surface font-bold text-[18px]">{(onchainEstimate.total_cost).toLocaleString()} sats</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleConfirmOnchain}
+                      disabled={paying}
+                      className="w-full bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary py-4 rounded-full font-bold text-[16px] tracking-wide transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] shadow-lg"
+                    >
+                      {paying ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>Sending via Ark...</span>
+                        </>
+                      ) : (
+                        <span>Confirm & Send</span>
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
