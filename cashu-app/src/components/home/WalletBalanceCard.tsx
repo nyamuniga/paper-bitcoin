@@ -99,13 +99,13 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               {mintUrls.map((mint, index) => (
                 <button
                   key={mint}
-                  onClick={() => { 
-                    setSelectedMint(mint); 
-                    localStorage.setItem('preferred_mint_url', mint); 
+                  onClick={() => {
+                    setSelectedMint(mint);
+                    localStorage.setItem('preferred_mint_url', mint);
                     invoke('set_app_default_mint', { mintUrl: mint }).catch(console.error);
-                    setShowMintDropdown(false); 
+                    setShowMintDropdown(false);
                   }}
-                  className={`flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left ${index > 0 ? 'border-t border-outline-variant' : ''}`}
+                  className={`flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left`}
                 >
                   <div className="flex items-center gap-2 min-w-0 pr-2">
                     <MintIcon mintUrl={mint} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />

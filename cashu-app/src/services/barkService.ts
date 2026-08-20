@@ -57,3 +57,29 @@ export const payLightningInvoiceBark = async (invoice: string): Promise<string> 
     throw error;
   }
 };
+
+export interface OnchainSendEstimate {
+  amount: number;
+  ark_fee: number;
+  cashu_fee: number;
+  total_cost: number;
+  bridging_invoice: string;
+}
+
+export const estimateOnChainSendBark = async (address: string, amountSats: number, mintUrl: string): Promise<OnchainSendEstimate> => {
+  try {
+    return await invoke<OnchainSendEstimate>('bark_estimate_onchain_send', { address, amountSats, mintUrl });
+  } catch (error) {
+    console.error("Failed to estimate on-chain send via Bark:", error);
+    throw error;
+  }
+};
+
+export const executeOnChainSendBark = async (bridgingInvoice: string, address: string, amountSats: number, mintUrl: string): Promise<string> => {
+  try {
+    return await invoke<string>('bark_execute_onchain_send', { bridgingInvoice, address, amountSats, mintUrl });
+  } catch (error) {
+    console.error("Failed to execute on-chain send via Bark:", error);
+    throw error;
+  }
+};
