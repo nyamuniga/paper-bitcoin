@@ -96,7 +96,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
 
           {showMintDropdown && (
             <div className="absolute top-full mt-2 w-64 bg-surface-container-highest/95 backdrop-blur-xl rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-outline-variant overflow-hidden flex flex-col animate-fade-in z-50 max-h-[300px] overflow-y-auto">
-              {mintUrls.map((mint, index) => (
+              {mintUrls.map((mint) => (
                 <button
                   key={mint}
                   onClick={() => {
