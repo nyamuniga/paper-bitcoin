@@ -2,8 +2,23 @@ pub mod nwc;
 mod commands;
 mod error;
 
+static RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
+
+fn init_runtime() {
+    let rt = RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .thread_stack_size(4 * 1024 * 1024) // 4 MB stack per worker thread
+            .enable_all()
+            .build()
+            .expect("Failed to initialize Tokio runtime")
+    });
+    tauri::async_runtime::set(rt.handle().clone());
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_runtime();
+
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .setup(|app| {
