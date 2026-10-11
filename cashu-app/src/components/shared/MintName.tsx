@@ -9,9 +9,10 @@ interface MintNameProps {
 
 export const MintName: React.FC<MintNameProps> = ({ mintUrl, className }) => {
   const { info } = useMintInfo(mintUrl || '');
+  const name = info?.name?.trim();
   return (
     <span className={className}>
-      {info?.name || (mintUrl ? formatMintUrl(mintUrl) : 'Unknown Mint')}
+      {name || (mintUrl ? formatMintUrl(mintUrl) : 'Unknown Mint')}
     </span>
   );
 };

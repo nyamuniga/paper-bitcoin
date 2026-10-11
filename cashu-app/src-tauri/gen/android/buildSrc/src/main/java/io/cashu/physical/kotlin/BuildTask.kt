@@ -14,18 +14,39 @@ open class BuildTask : DefaultTask() {
     @Input
     var release: Boolean? = null
 
+    private fun resolveExecutable(baseName: String): String {
+        if (Os.isFamily(Os.FAMILY_WINDOWS)) {
+            return baseName
+        }
+        val userHome = System.getProperty("user.home") ?: ""
+        val candidatePaths = listOf(
+            "/opt/homebrew/bin/$baseName",
+            "/usr/local/bin/$baseName",
+            "$userHome/.cargo/bin/$baseName",
+            "$userHome/.bun/bin/$baseName"
+        )
+        for (path in candidatePaths) {
+            val f = File(path)
+            if (f.canExecute()) {
+                return f.absolutePath
+            }
+        }
+        return baseName
+    }
+
     @TaskAction
     fun assemble() {
-        val executable = """npm""";
+        val baseExecutable = """npm"""
+        val executable = resolveExecutable(baseExecutable)
         try {
             runTauriCli(executable)
         } catch (e: Exception) {
             if (Os.isFamily(Os.FAMILY_WINDOWS)) {
                 // Try different Windows-specific extensions
                 val fallbacks = listOf(
-                    "$executable.exe",
-                    "$executable.cmd",
-                    "$executable.bat",
+                    "$baseExecutable.exe",
+                    "$baseExecutable.cmd",
+                    "$baseExecutable.bat",
                 )
                 
                 var lastException: Exception = e
@@ -39,7 +60,7 @@ open class BuildTask : DefaultTask() {
                 }
                 throw lastException
             } else {
-                throw e;
+                throw e
             }
         }
     }
@@ -48,7 +69,7 @@ open class BuildTask : DefaultTask() {
         val rootDirRel = rootDirRel ?: throw GradleException("rootDirRel cannot be null")
         val target = target ?: throw GradleException("target cannot be null")
         val release = release ?: throw GradleException("release cannot be null")
-        val args = listOf("run", "--", "tauri", "android", "android-studio-script");
+        val args = listOf("run", "--", "tauri", "android", "android-studio-script")
 
         project.exec {
             workingDir(File(project.projectDir, rootDirRel))
@@ -63,6 +84,20 @@ open class BuildTask : DefaultTask() {
                 args("--release")
             }
             args(listOf("--target", target))
+
+            val userHome = System.getProperty("user.home") ?: ""
+            val currentEnvPath = System.getenv("PATH") ?: ""
+            val extraPaths = listOf(
+                "/opt/homebrew/bin",
+                "/usr/local/bin",
+                "$userHome/.cargo/bin",
+                "$userHome/.bun/bin"
+            )
+            val combinedPath = (extraPaths + currentEnvPath.split(File.pathSeparator))
+                .distinct()
+                .filter { it.isNotEmpty() && File(it).exists() }
+                .joinToString(File.pathSeparator)
+            environment("PATH", combinedPath)
         }.assertNormalExitValue()
     }
 }
