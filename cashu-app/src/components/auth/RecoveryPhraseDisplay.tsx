@@ -13,24 +13,26 @@ export const RecoveryPhraseDisplay: React.FC<RecoveryPhraseDisplayProps> = ({ mn
 
   return (
     <div className="flex h-screen flex-col items-center justify-center p-6 bg-background overflow-y-auto py-12">
-      <div className="w-full max-w-sm bg-surface-container-high border border-outline-variant rounded-3xl p-8 shadow-2xl my-auto">
-        <div className="flex justify-center mb-6 text-primary">
-          <KeyRound size={48} strokeWidth={1.5} />
+      <div className="w-full max-w-sm bg-surface-container/90 backdrop-blur-xl border border-primary/25 rounded-3xl p-8 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] my-auto relative">
+        <div className="flex justify-center mb-5 text-primary">
+          <div className="w-16 h-16 rounded-full bg-[#0e2e20] border border-primary/40 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(229,168,59,0.2)]">
+            <KeyRound size={32} strokeWidth={1.75} />
+          </div>
         </div>
-        <h1 className="text-3xl font-bold mb-2 text-center text-red-500">Recovery Phrases</h1>
-        <p className="text-on-surface-variant text-center text-sm mb-6">
-          Write down these words and keep them somewhere safe. You will need them to recover your funds if you lose your device or forget your passphrase.
+        <h1 className="font-display-hero text-2xl font-semibold mb-2 text-center text-primary">Recovery Phrases</h1>
+        <p className="text-on-surface-variant text-center text-sm mb-6 leading-relaxed">
+          Write down these words and keep them somewhere safe. You will need them to recover your funds if you lose your device.
         </p>
         
-        <div className="text-sm font-bold text-on-surface mb-2">Cashu Wallet (24 words)</div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 text-sm font-mono text-center mb-6 break-words text-white select-all">
+        <div className="text-xs font-semibold uppercase tracking-wider text-primary mb-2 font-mono">Cashu Wallet (24 words)</div>
+        <div className="bg-[#07100c] border border-outline-variant/50 rounded-xl p-4 text-sm font-mono text-center mb-5 break-words text-[#f7f4eb] select-all leading-relaxed shadow-inner">
           {mnemonic}
         </div>
 
         {barkMnemonic && (
           <>
-            <div className="text-sm font-bold text-on-surface mb-2">Bitcoin Wallet (12 words)</div>
-            <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 text-sm font-mono text-center mb-6 break-words text-white select-all">
+            <div className="text-xs font-semibold uppercase tracking-wider text-primary mb-2 font-mono">Bitcoin Wallet (12 words)</div>
+            <div className="bg-[#07100c] border border-outline-variant/50 rounded-xl p-4 text-sm font-mono text-center mb-6 break-words text-[#f7f4eb] select-all leading-relaxed shadow-inner">
               {barkMnemonic}
             </div>
           </>
@@ -41,7 +43,7 @@ export const RecoveryPhraseDisplay: React.FC<RecoveryPhraseDisplayProps> = ({ mn
             onSaved();
             await refreshWallet();
           }}
-          className="w-full bg-primary hover:bg-primary/90 text-background font-bold py-3 rounded-xl transition-colors mt-2"
+          className="btn-primary w-full py-3.5 rounded-xl font-display-hero text-[15px] font-semibold active:scale-[0.98] transition-all mt-2 cursor-pointer"
         >
           I have saved them securely
         </button>

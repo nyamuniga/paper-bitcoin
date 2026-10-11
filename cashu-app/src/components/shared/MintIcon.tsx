@@ -16,10 +16,18 @@ export const MintIcon: React.FC<MintIconProps> = ({
   const { info } = useMintInfo(mintUrl || '');
   const [imageError, setImageError] = useState(false);
 
+  const fallbackText = () => {
+    if (!mintUrl) return '?';
+    if (info?.name) {
+      return info.name.trim().slice(0, 2).toUpperCase();
+    }
+    return formatMintUrl(mintUrl).charAt(0).toUpperCase();
+  };
+
   const fallback = (
     <div className={`${className} flex items-center justify-center flex-shrink-0`}>
       <span className={textClassName}>
-        {mintUrl ? formatMintUrl(mintUrl).charAt(0).toUpperCase() : '?'}
+        {fallbackText()}
       </span>
     </div>
   );

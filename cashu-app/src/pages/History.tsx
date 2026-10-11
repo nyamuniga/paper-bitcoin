@@ -102,7 +102,7 @@ export default function History() {
           No transactions yet.
         </div>
       ) : (
-        <div className="space-y-card-gap">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {mergedTransactions.map((tx) => (
             <TransactionCard 
               key={tx.id} 

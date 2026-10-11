@@ -71,7 +71,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
           placeholder="Enter your 24-word recovery phrase..."
           value={mnemonic}
           onChange={e => setMnemonic(e.target.value)}
-          className="w-full bg-background border border-outline-variant rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors min-h-[100px] resize-none text-sm"
+          className="w-full bg-[#101c16] border border-outline-variant rounded-xl px-4 py-3.5 text-on-surface focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-colors min-h-[100px] resize-none text-sm font-mono"
           autoFocus
         />
         <input
@@ -79,19 +79,19 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
           placeholder="Choose a new local passphrase"
           value={passphrase}
           onChange={e => setPassphrase(e.target.value)}
-          className="w-full bg-background border border-outline-variant rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors"
+          className="w-full bg-[#101c16] border border-outline-variant rounded-xl px-4 py-3.5 text-on-surface focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-colors font-mono"
         />
         <div className="flex items-center gap-2 px-1">
-          <input type="checkbox" id="remember-restore" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="rounded bg-background border-outline-variant text-primary focus:ring-primary h-4 w-4" />
-          <label htmlFor="remember-restore" className="text-sm text-on-surface-variant">Remember me on this device</label>
+          <input type="checkbox" id="remember-restore" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="rounded bg-[#101c16] border-outline-variant text-primary focus:ring-primary h-4 w-4" />
+          <label htmlFor="remember-restore" className="text-sm text-on-surface-variant cursor-pointer">Remember me on this device</label>
         </div>
         <button
           type="submit"
-          className="w-full bg-primary hover:bg-primary/90 text-background font-bold py-3 rounded-xl transition-colors flex justify-center items-center h-12"
+          className="btn-primary w-full py-3.5 rounded-xl font-display-hero text-[15px] font-semibold active:scale-[0.98] transition-all flex justify-center items-center h-12 cursor-pointer"
         >
           Next
         </button>
-        <button type="button" onClick={onCancel} className="text-sm text-on-surface-variant hover:text-primary transition-colors mt-2">
+        <button type="button" onClick={onCancel} className="text-sm text-on-surface-variant hover:text-primary transition-colors mt-2 cursor-pointer">
           Cancel
         </button>
       </form>
@@ -132,7 +132,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
               value={newMint}
               onChange={(e) => setNewMint(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="w-full bg-background border border-outline-variant rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors text-sm placeholder:text-on-surface-variant h-[54px]"
+              className="w-full bg-[#101c16] border border-outline-variant rounded-xl px-4 py-3 text-on-surface focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-colors text-sm placeholder:text-on-surface-variant/50 h-[54px] font-mono"
               placeholder="https://mint.example.com"
               autoCapitalize="none"
               autoCorrect="off"
@@ -143,7 +143,7 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
             type="button"
             onClick={handleAddMint}
             disabled={!newMint.trim()}
-            className="w-12 h-[54px] rounded-xl bg-primary/15 hover:bg-primary/25 text-primary flex items-center justify-center transition-colors border border-primary/20 disabled:opacity-40"
+            className="w-12 h-[54px] rounded-xl bg-[#0e2e20] hover:bg-[#173628] text-primary flex items-center justify-center transition-colors border border-primary/30 disabled:opacity-40 cursor-pointer"
           >
             <Plus size={20} />
           </button>
@@ -155,14 +155,14 @@ export const RestoreWalletForm: React.FC<RestoreWalletFormProps> = ({ onCancel, 
           type="button"
           onClick={() => setStep(1)}
           disabled={loading}
-          className="flex-1 bg-surface-container-high hover:bg-surface-container text-white font-bold py-3 rounded-xl transition-colors h-12"
+          className="btn-secondary flex-1 py-3.5 rounded-xl font-display-hero text-[15px] font-medium transition-all h-12 cursor-pointer"
         >
           Back
         </button>
         <button
           type="submit"
           disabled={loading}
-          className="flex-1 bg-primary hover:bg-primary/90 text-background font-bold py-3 rounded-xl transition-colors flex justify-center items-center h-12 disabled:opacity-50"
+          className="btn-primary flex-1 py-3.5 rounded-xl font-display-hero text-[15px] font-semibold transition-all flex justify-center items-center h-12 disabled:opacity-50 cursor-pointer"
         >
           {loading ? <RefreshCw className="animate-spin" size={20} /> : 'Restore Wallet'}
         </button>
