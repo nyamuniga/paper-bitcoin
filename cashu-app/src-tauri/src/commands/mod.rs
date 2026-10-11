@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod bark;
 pub mod history;
 pub mod issue;
 pub mod pay;

@@ -1,5 +1,5 @@
 export interface ParsedBitcoinInput {
-  type: 'lightning' | 'lnurl-pay' | 'lnurl' | 'invalid';
+  type: 'lightning' | 'lnurl-pay' | 'lnurl' | 'onchain' | 'invalid';
   addressOrInvoice: string;
   amountSats: number | null; // Extracted amount if present (from lightning)
 }
@@ -41,6 +41,17 @@ export const parseBitcoinInput = (input: string): ParsedBitcoinInput => {
       type: 'lightning',
       addressOrInvoice: invoice,
       amountSats: getInvoiceAmountSats(invoice)
+    };
+  }
+
+  // 4. Check for On-Chain Bitcoin address
+  const onChainMatch = cleanInput.match(/^(bitcoin:)?([13mn2][a-km-zA-HJ-NP-Z1-9]{25,34}|(bc1|tb1|bcrt1)[a-z0-9]{11,87})$/i);
+  if (onChainMatch) {
+    const addr = onChainMatch[2];
+    return {
+      type: 'onchain',
+      addressOrInvoice: addr,
+      amountSats: null
     };
   }
 

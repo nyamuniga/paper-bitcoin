@@ -1,4 +1,4 @@
-import { Lock, KeyRound, Plus, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { LoginForm } from '../components/auth/LoginForm';
 import { CreateWalletForm } from '../components/auth/CreateWalletForm';
 import { RestoreWalletForm } from '../components/auth/RestoreWalletForm';
@@ -18,6 +18,8 @@ export const Auth = () => {
     setShowConfirmReset,
     generatedMnemonic,
     setGeneratedMnemonic,
+    generatedBarkMnemonic,
+    setGeneratedBarkMnemonic,
     triggerError,
     unlockWallet,
     createWallet,
@@ -34,7 +36,11 @@ export const Auth = () => {
     return (
       <RecoveryPhraseDisplay
         mnemonic={generatedMnemonic}
-        onSaved={() => setGeneratedMnemonic('')}
+        barkMnemonic={generatedBarkMnemonic}
+        onSaved={() => {
+          setGeneratedMnemonic('');
+          setGeneratedBarkMnemonic('');
+        }}
       />
     );
   }
@@ -54,20 +60,26 @@ export const Auth = () => {
   }
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center p-6 bg-background">
-      <div className={`w-full max-w-sm bg-surface-container-high/90 backdrop-blur-xl border border-outline-variant rounded-3xl p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_32px_rgba(0,0,0,0.4)] transition-transform duration-300 ${shake ? 'animate-shake' : ''}`}>
+    <div className="flex h-screen flex-col items-center justify-center p-6 bg-background relative overflow-hidden">
+      <div className="absolute inset-0 texture-overlay opacity-30 pointer-events-none"></div>
+      <div className={`w-full max-w-sm bg-surface-container/90 backdrop-blur-xl border border-primary/25 rounded-3xl p-8 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] transition-transform duration-300 relative z-10 ${shake ? 'animate-shake' : ''}`}>
 
-        <div className="flex justify-center mb-6 text-primary">
-          {mode === 'login' && <Lock size={48} strokeWidth={1.5} />}
-          {mode === 'create' && <Plus size={48} strokeWidth={1.5} />}
-          {mode === 'restore' && <KeyRound size={48} strokeWidth={1.5} />}
+        <div className="flex flex-col items-center justify-center mb-5">
+          <img
+            src="/logo.png"
+            alt="BitNotes Emblem"
+            className="w-20 h-20 rounded-full border-2 border-primary/45 shadow-[0_0_24px_rgba(229,168,59,0.25)] object-cover mb-2.5 hover:scale-105 transition-transform"
+          />
+          <span className="font-mono text-[10px] font-semibold text-primary uppercase tracking-widest status-pill px-2.5 py-0.5 rounded-full">
+            Sovereign Ecash Vault
+          </span>
         </div>
 
-        <h1 className="text-3xl font-bold mb-2 text-center">
+        <h1 className="font-display-hero text-2xl font-semibold mb-1.5 text-center text-on-surface">
           {mode === 'login' ? 'Welcome Back' : mode === 'create' ? 'Create Wallet' : 'Restore Wallet'}
         </h1>
 
-        <p className="text-on-surface-variant text-center text-sm mb-8">
+        <p className="text-on-surface-variant text-center text-sm mb-7 font-normal">
           {mode === 'login' ? 'Enter your passphrase to unlock your wallet' :
             mode === 'create' ? 'Secure your new wallet with a strong passphrase' :
               'Enter your recovery phrase and set a new local passphrase'}
