@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { QrCode, ArrowDownLeft, ArrowUpRight, Coins, Zap, FileText, ChevronDown, Phone, Check } from 'lucide-react';
+import { QrCode, ArrowDownLeft, ArrowUpRight, Coins, Zap, FileText, ChevronDown, Phone, Check, Eye, EyeOff } from 'lucide-react';
 import { ActionMenuModal } from './ActionMenuModal';
 import { EcashModal } from './EcashModal';
 import { BitcoinModal } from './BitcoinModal';
@@ -29,6 +29,15 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
   const mintUrls = Object.keys(mintBalances || {});
   const [selectedMint, setSelectedMint] = useState<string | null>(() => localStorage.getItem('preferred_mint_url'));
   const [currentRate, setCurrentRate] = useState<number | null>(null);
+  const [hideBalance, setHideBalance] = useState<boolean>(() => localStorage.getItem('hide_balance') === 'true');
+
+  const toggleHideBalance = () => {
+    setHideBalance((prev) => {
+      const next = !prev;
+      localStorage.setItem('hide_balance', String(next));
+      return next;
+    });
+  };
 
   const activeMint = (selectedMint && mintUrls.includes(selectedMint)) ? selectedMint : (mintUrls.length > 0 ? mintUrls[0] : null);
 
@@ -68,89 +77,104 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
   return (
     <section className="flex flex-col gap-4 md:gap-5 relative z-50">
       {/* Balance display */}
-      <div className="relative p-6 md:p-10 flex flex-col items-center justify-center min-h-[140px] md:min-h-[200px] z-10">
-        {/* Background layer */}
-        <div className="absolute inset-0 bg-surface-container-high/80 backdrop-blur-xl rounded-2xl overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_16px_rgba(0,0,0,0.3)] border border-outline-variant -z-10">
-          <div className="absolute inset-0 texture-overlay opacity-30"></div>
-        </div>
-
+      <div className="relative p-5 sm:p-6 md:p-8 flex flex-col items-center justify-center min-h-[150px] sm:min-h-[160px] md:min-h-[190px] z-10 bg-[#0c1b14] rounded-[24px] sm:rounded-[28px] border border-[#142d20] shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
         {showMintDropdown && (
           <div className="fixed inset-0 z-10" onClick={() => setShowMintDropdown(false)}></div>
         )}
 
-        <div className="relative z-20 flex flex-col items-center">
+        <div className="relative z-20 flex flex-col items-center max-w-full">
           <button
             onClick={() => setShowMintDropdown(!showMintDropdown)}
-            className="flex items-center gap-2 bg-surface-container/60 hover:bg-surface-container px-3 py-1.5 rounded-full transition-colors mb-2 border border-outline-variant shadow-sm"
+            className="flex items-center gap-2 bg-[#12261d] hover:bg-[#162f24] px-3 sm:px-3.5 py-1.5 rounded-full transition-all mb-3 border border-[#1e3c2e] shadow-sm active:scale-95 max-w-[calc(100vw-64px)] sm:max-w-none"
           >
             {activeMint ? (
               <>
-                <MintIcon mintUrl={activeMint} className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 flex-shrink-0" textClassName="text-primary text-[9px] font-bold" />
-                <MintName mintUrl={activeMint} className="text-label-caps font-label-caps text-on-surface-variant truncate max-w-[120px]" />
+                <MintIcon mintUrl={activeMint} className="w-5 h-5 rounded-full bg-[#183626] border border-[#2b563e] flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[9px] font-bold" />
+                <MintName
+                  mintUrl={activeMint}
+                  className="font-mono text-[10px] sm:text-[11px] font-bold text-[#8b9e94] tracking-wider uppercase truncate max-w-[120px] sm:max-w-[150px]"
+                />
               </>
             ) : (
-              <span className="text-label-caps font-label-caps text-on-surface-variant px-2">TOTAL BALANCE</span>
+              <span className="font-mono text-[10px] sm:text-[11px] font-bold text-primary px-1 tracking-wider uppercase">ALL MINTS</span>
             )}
-            <ChevronDown size={14} className="text-on-surface-variant flex-shrink-0" />
+            <ChevronDown size={14} className="text-[#8b9e94] flex-shrink-0" />
           </button>
 
           {showMintDropdown && (
-            <div className="absolute top-full mt-2 w-64 bg-surface-container-highest/95 backdrop-blur-xl rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-outline-variant overflow-hidden flex flex-col animate-fade-in z-50 max-h-[300px] overflow-y-auto">
-              {mintUrls.map((mint, index) => (
+            <div className="absolute top-full mt-2 w-64 max-w-[calc(100vw-48px)] bg-[#0c1b14] rounded-2xl shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] border border-[#1a3829] overflow-hidden flex flex-col animate-fade-in z-50 max-h-[300px] overflow-y-auto left-1/2 -translate-x-1/2">
+              {mintUrls.map((mint) => (
                 <button
                   key={mint}
-                  onClick={() => { 
-                    setSelectedMint(mint); 
-                    localStorage.setItem('preferred_mint_url', mint); 
+                  onClick={() => {
+                    setSelectedMint(mint);
+                    localStorage.setItem('preferred_mint_url', mint);
                     invoke('set_app_default_mint', { mintUrl: mint }).catch(console.error);
-                    setShowMintDropdown(false); 
+                    setShowMintDropdown(false);
                   }}
-                  className={`flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left ${index > 0 ? 'border-t border-outline-variant' : ''}`}
+                  className={`flex items-center justify-between p-3 sm:p-3.5 hover:bg-[#12261d] transition-colors text-left border-b border-[rgba(247,244,235,0.04)] last:border-b-0`}
                 >
-                  <div className="flex items-center gap-2 min-w-0 pr-2">
-                    <MintIcon mintUrl={mint} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
+                  <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                    <MintIcon mintUrl={mint} className="w-6 h-6 rounded-full bg-[#183626] border border-[#2b563e] flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
                     <MintName mintUrl={mint} className="text-body-sm font-body-sm text-on-surface truncate" />
                     {activeMint === mint && <Check size={14} className="text-primary flex-shrink-0" />}
                   </div>
-                  <span className="text-body-sm font-body-sm font-bold text-on-surface flex-shrink-0">₿{(mintBalances![mint] || 0).toLocaleString()}</span>
+                  <span className="font-mono text-body-sm font-semibold text-primary flex-shrink-0">
+                    {hideBalance ? '••••••' : `₿${(mintBalances![mint] || 0).toLocaleString()}`}
+                  </span>
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        <div className="relative z-10 flex flex-col items-center gap-1 mt-2">
-          <div className="flex items-baseline gap-2">
-            <span className="text-[48px] md:text-[64px] leading-none font-display-lg text-on-surface tracking-tight">₿{balance.toLocaleString()}</span>
+        <div className="relative z-10 flex flex-col items-center gap-1 max-w-full">
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2 max-w-full">
+            <span className="text-[#f2a93b] text-[28px] sm:text-[36px] md:text-[44px] font-extrabold leading-none select-none flex-shrink-0">₿</span>
+            <span
+              onClick={toggleHideBalance}
+              className="text-[#f7f4eb] text-[34px] sm:text-[46px] md:text-[54px] leading-none font-display-hero font-extrabold tracking-tight cursor-pointer select-none truncate"
+              title={hideBalance ? "Click to show balance" : "Click to hide balance"}
+            >
+              {hideBalance ? '••••••' : balance.toLocaleString()}
+            </span>
+            <button
+              onClick={toggleHideBalance}
+              className="text-[#627d70] hover:text-[#f7f4eb] p-1 sm:p-1.5 rounded-full hover:bg-[#12261d] transition-all active:scale-95 cursor-pointer ml-0.5 sm:ml-1 flex-shrink-0"
+              title={hideBalance ? "Show balance" : "Hide balance"}
+              aria-label={hideBalance ? "Show balance" : "Hide balance"}
+            >
+              {hideBalance ? <EyeOff size={18} className="sm:w-5 sm:h-5 stroke-[2.25]" /> : <Eye size={18} className="sm:w-5 sm:h-5 stroke-[2.25]" />}
+            </button>
           </div>
           {currentRate && (
-            <span className="text-body-xs font-body-xs text-on-surface-variant font-normal">
-              ≈ {(balance / currentRate).toLocaleString(undefined, { maximumFractionDigits: 0 })} RWF
+            <span className="text-[12px] sm:text-[13px] font-medium text-[#6f887b] mt-1 tracking-tight select-none truncate max-w-full">
+              {hideBalance ? '≈ •••••• RWF' : `≈ ${(balance / currentRate).toLocaleString(undefined, { maximumFractionDigits: 0 })} RWF`}
             </span>
           )}
         </div>
       </div>
 
       {/* Action buttons */}
-      <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
+      <div className="flex items-center gap-2 sm:gap-3">
         <button
           onClick={() => setShowReceive(true)}
-          className="flex items-center justify-center gap-2 py-3 px-2 rounded-2xl bg-surface-container-high/80 backdrop-blur-sm text-on-surface font-headline-lg-mobile text-[14px] md:text-[15px] border border-outline-variant hover:bg-surface-container-highest active:scale-[0.97] transition-all duration-200"
+          className="flex-1 h-[48px] sm:h-[54px] rounded-2xl bg-[#0c1b14] hover:bg-[#12261d] border border-[#183325] flex items-center justify-center gap-1.5 sm:gap-2 text-[#f7f4eb] font-display-hero text-[13px] sm:text-[15px] font-medium active:scale-95 transition-all duration-200 cursor-pointer"
         >
-          <ArrowDownLeft size={20} className="text-primary" />
+          <ArrowDownLeft size={16} className="sm:w-[18px] sm:h-[18px] text-[#f2a93b] stroke-[2.25] flex-shrink-0" />
           <span>Receive</span>
         </button>
         <Link
           to="/scan"
-          className="flex items-center justify-center w-14 h-14 rounded-full bg-primary text-on-primary shadow-[0_4px_20px_rgba(158,124,56,0.3)] hover:opacity-90 active:scale-[0.97] transition-all duration-200"
+          className="w-[50px] h-[50px] sm:w-[58px] sm:h-[58px] rounded-full bg-[#f2a93b] hover:bg-[#fbb94d] text-[#06110c] shadow-[0_0_24px_rgba(242,169,59,0.45)] flex items-center justify-center active:scale-95 transition-all duration-200 flex-shrink-0"
         >
-          <QrCode size={24} />
+          <QrCode size={20} className="sm:w-[23px] sm:h-[23px] stroke-[2.5]" />
         </Link>
         <button
           onClick={() => setShowSend(true)}
-          className="flex items-center justify-center gap-2 py-3 px-2 rounded-2xl bg-surface-container-high/80 backdrop-blur-sm text-on-surface font-headline-lg-mobile text-[14px] md:text-[15px] border border-outline-variant hover:bg-surface-container-highest active:scale-[0.97] transition-all duration-200"
+          className="flex-1 h-[48px] sm:h-[54px] rounded-2xl bg-[#0c1b14] hover:bg-[#12261d] border border-[#183325] flex items-center justify-center gap-1.5 sm:gap-2 text-[#f7f4eb] font-display-hero text-[13px] sm:text-[15px] font-medium active:scale-95 transition-all duration-200 cursor-pointer"
         >
-          <ArrowUpRight size={20} className="text-primary" />
+          <ArrowUpRight size={16} className="sm:w-[18px] sm:h-[18px] text-[#f2a93b] stroke-[2.25] flex-shrink-0" />
           <span>Send</span>
         </button>
       </div>

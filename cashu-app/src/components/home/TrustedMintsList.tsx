@@ -48,10 +48,10 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
             )}
           </div>
         </div>
-        <div className="flex flex-col gap-2 overflow-hidden px-1 -mx-1 py-1 -my-1">
+        <div className={showAll ? "grid grid-cols-1 md:grid-cols-2 gap-3 overflow-hidden px-1 -mx-1 py-1 -my-1" : "flex flex-col gap-2 overflow-hidden px-1 -mx-1 py-1 -my-1"}>
         <div 
           onClick={() => setShowAddMint(true)}
-          className="bg-surface-container-lowest rounded-2xl p-3.5 md:p-4 flex items-center justify-center gap-3 border border-dashed border-primary/50 relative group hover:bg-surface-container-low hover:border-primary/80 transition-all duration-300 cursor-pointer"
+          className={`bg-surface-container-lowest rounded-2xl p-3.5 md:p-4 flex items-center justify-center gap-3 border border-dashed border-primary/50 relative group hover:bg-surface-container-low hover:border-primary/80 transition-all duration-300 cursor-pointer ${showAll ? 'md:col-span-2' : ''}`}
         >
           <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
           <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 relative z-10 pointer-events-none group-hover:scale-105 transition-transform border border-primary/30">

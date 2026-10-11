@@ -13,22 +13,44 @@ export interface MintInfo {
   nuts?: any;
 }
 
-const mintInfoCache: Record<string, MintInfo | null> = {};
+const DEFAULT_CACHED_MINTS: Record<string, MintInfo> = {
+  'https://mint.28waves.com': {
+    name: '28MINT',
+    icon_url: 'https://res.cloudinary.com/dymfagnlu/image/upload/v1758210455/28_g3bhgv.png',
+  },
+};
+
+const getInitialCache = (): Record<string, MintInfo | null> => {
+  try {
+    const saved = localStorage.getItem('mint_info_cache');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        ...DEFAULT_CACHED_MINTS,
+        ...parsed,
+      };
+    }
+  } catch {}
+  return { ...DEFAULT_CACHED_MINTS };
+};
+
+const mintInfoCache: Record<string, MintInfo | null> = getInitialCache();
 
 export function useMintInfo(mintUrl: string | null) {
-  const [info, setInfo] = useState<MintInfo | null>(mintUrl ? mintInfoCache[mintUrl] || null : null);
-  const [loading, setLoading] = useState<boolean>(!mintInfoCache[mintUrl ?? '']);
+  const cleanUrl = mintUrl ? mintUrl.replace(/\/+$/, '') : null;
+  const [info, setInfo] = useState<MintInfo | null>(cleanUrl ? mintInfoCache[cleanUrl] || null : null);
+  const [loading, setLoading] = useState<boolean>(!cleanUrl || !mintInfoCache[cleanUrl]);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (!mintUrl) {
+    if (!cleanUrl) {
       setInfo(null);
       setLoading(false);
       return;
     }
 
-    if (mintInfoCache[mintUrl]) {
-      setInfo(mintInfoCache[mintUrl]);
+    if (mintInfoCache[cleanUrl]) {
+      setInfo(mintInfoCache[cleanUrl]);
       setLoading(false);
       return;
     }
@@ -38,7 +60,7 @@ export function useMintInfo(mintUrl: string | null) {
 
     const fetchInfo = async () => {
       try {
-        const urlObj = new URL(mintUrl);
+        const urlObj = new URL(cleanUrl);
         // Ensure path correctly points to /v1/info
         let fetchUrl = urlObj.origin;
         if (urlObj.pathname !== '/') {
@@ -50,7 +72,10 @@ export function useMintInfo(mintUrl: string | null) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         
-        mintInfoCache[mintUrl] = data;
+        mintInfoCache[cleanUrl] = data;
+        try {
+          localStorage.setItem('mint_info_cache', JSON.stringify(mintInfoCache));
+        } catch {}
         
         if (isMounted) {
           setInfo(data);
@@ -60,7 +85,7 @@ export function useMintInfo(mintUrl: string | null) {
         if (isMounted) {
           setError(err);
           // Set to null to indicate failed fetch
-          mintInfoCache[mintUrl] = null;
+          mintInfoCache[cleanUrl] = null;
         }
       } finally {
         if (isMounted) {
@@ -74,7 +99,7 @@ export function useMintInfo(mintUrl: string | null) {
     return () => {
       isMounted = false;
     };
-  }, [mintUrl]);
+  }, [cleanUrl]);
 
   return { info, loading, error };
 }

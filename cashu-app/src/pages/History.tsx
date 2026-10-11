@@ -6,6 +6,8 @@ import { useHistory } from '../hooks/useHistory';
 import { TransactionDetailsModal } from '../components/history/TransactionDetailsModal';
 import { useTransactionStore } from '../store/transactionStore';
 import { AppPhase } from '../types/momo';
+import { syncBarkVutxos } from '../services/barkService';
+
 
 import { useNavigate } from 'react-router-dom';
 
@@ -23,6 +25,8 @@ export default function History() {
     handleCheckTokenSpendStatus,
     handleRetryReceiveEcash
   } = useHistory();
+  
+  const [isSyncingBark, setIsSyncingBark] = useState(false);
 
   const momoHistory = useTransactionStore((state) => state.history);
 
@@ -72,10 +76,21 @@ export default function History() {
         subtitle="Recent and pending activity"
         rightAction={
           <button
-            onClick={fetchHistory}
-            className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface hover:bg-surface-bright transition-colors"
+            onClick={async () => {
+              setIsSyncingBark(true);
+              fetchHistory();
+              try {
+                await syncBarkVutxos();
+              } catch (e) {
+                console.error("Failed to sync Bitcoin wallet", e);
+              } finally {
+                setIsSyncingBark(false);
+              }
+            }}
+            disabled={isSyncingBark}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isSyncingBark ? 'bg-surface-container-highest text-on-surface-variant opacity-50 cursor-not-allowed' : 'bg-surface-container-high text-on-surface hover:bg-surface-bright'}`}
           >
-            <RefreshCw className="w-5 h-5" />
+            <RefreshCw className={`w-5 h-5 ${isSyncingBark ? 'animate-spin' : ''}`} />
           </button>
         }
       />
@@ -87,7 +102,7 @@ export default function History() {
           No transactions yet.
         </div>
       ) : (
-        <div className="space-y-card-gap">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {mergedTransactions.map((tx) => (
             <TransactionCard 
               key={tx.id} 

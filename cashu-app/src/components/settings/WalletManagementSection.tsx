@@ -88,8 +88,8 @@ export const WalletManagementSection = () => {
               </div>
               <div className="text-left min-w-0">
                 <div className="font-bold text-on-surface text-sm">Theme Mode</div>
-                <div className="text-xs text-on-surface-variant">
-                  {theme === 'dark' ? 'Obsidian Gold' : 'Cream Gold'}
+                <div className="text-xs text-on-surface-variant font-medium">
+                  {theme === 'dark' ? 'Sovereign Ochre & Forest' : 'Bone Cream & Forest'}
                 </div>
               </div>
             </div>
