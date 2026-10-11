@@ -298,7 +298,7 @@ fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32]> {
     Ok(key)
 }
 
-fn encrypt_wallet(plaintext: &[u8], passphrase: &str) -> Result<EncryptedWallet> {
+pub fn encrypt_wallet(plaintext: &[u8], passphrase: &str) -> Result<EncryptedWallet> {
     use aes_gcm::{Aes256Gcm, KeyInit};
     use aes_gcm::aead::Aead;
     use rand::RngCore;
@@ -324,7 +324,7 @@ fn encrypt_wallet(plaintext: &[u8], passphrase: &str) -> Result<EncryptedWallet>
     })
 }
 
-fn decrypt_wallet(enc: &EncryptedWallet, passphrase: &str) -> Result<Vec<u8>> {
+pub fn decrypt_wallet(enc: &EncryptedWallet, passphrase: &str) -> Result<Vec<u8>> {
     use aes_gcm::{Aes256Gcm, KeyInit};
     use aes_gcm::aead::Aead;
 

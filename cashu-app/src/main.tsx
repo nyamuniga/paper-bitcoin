@@ -26,33 +26,33 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
             borderRadius: '16px',
             fontSize: '13px',
             fontWeight: '500',
-            fontFamily: 'Poppins, sans-serif',
+            fontFamily: "'Manrope', sans-serif",
             backdropFilter: 'blur(12px)',
             maxWidth: '90vw',
           },
           success: {
             duration: 3000,
             iconTheme: {
-              primary: '#9e7c38',
-              secondary: '#ffffff',
+              primary: '#e5a83b',
+              secondary: '#0d1713',
             },
             style: {
-              border: '1px solid rgba(158, 124, 56, 0.45)',
+              border: '1px solid rgba(229, 168, 59, 0.45)',
             },
           },
           error: {
             duration: 4000,
             iconTheme: {
-              primary: '#ba1a1a',
+              primary: '#d65d4e',
               secondary: '#ffffff',
             },
             style: {
-              border: '1px solid rgba(186, 26, 26, 0.45)',
+              border: '1px solid rgba(214, 93, 78, 0.45)',
             },
           },
           loading: {
             iconTheme: {
-              primary: '#9e7c38',
+              primary: '#e5a83b',
               secondary: 'var(--color-surface-container-high)',
             },
           },

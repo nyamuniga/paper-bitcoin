@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ArrowDown, ArrowUp, FileText, CheckCircle, AlertCircle, XCircle, Copy, Check } from 'lucide-react';
+import { X, ArrowDownLeft, ArrowUpRight, FileText, CheckCircle, AlertCircle, XCircle, Copy, Check } from 'lucide-react';
 import { Transaction } from './TransactionCard';
 import { toast } from 'react-hot-toast';
 import QRCode from 'react-qr-code';
@@ -81,11 +81,12 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
         <div className="p-6 flex flex-col gap-6 relative z-10 overflow-y-auto">
           {/* Main info */}
           <div className="flex flex-col items-center text-center">
-            <div className="w-16 h-16 rounded-full flex items-center justify-center border mb-4 bg-primary/20 border-primary/20">
-              {isMint || isRedeem || isReceive ? <ArrowDown className="text-primary w-8 h-8" /> :
-               isIssue ? <FileText className="text-primary w-8 h-8" /> : 
-               isSend ? <ArrowUp className="text-primary w-8 h-8" /> :
-               <ArrowUp className="text-primary w-8 h-8" />}
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center border mb-4 ${
+              isMint || isRedeem || isReceive ? 'bg-[#0e291d] border-[#1c442f] text-[#34d399]' : 'bg-[#10241b] border-[#1b3829] text-[#627d70]'
+            }`}>
+              {isMint || isRedeem || isReceive ? <ArrowDownLeft className="w-8 h-8 stroke-[2.25]" /> :
+               isIssue ? <FileText className="w-8 h-8 stroke-[2]" /> : 
+               <ArrowUpRight className="w-8 h-8 stroke-[2.25]" />}
             </div>
             <h3 className="text-headline-md font-headline-md text-on-surface">{getTxLabel()}</h3>
             <p className="text-display-sm font-display-sm mt-2 text-primary">
@@ -172,7 +173,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 onClick={onRetryReceiveEcash}
                 className="mt-2 w-full py-2.5 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-label-lg transition-colors border border-primary/30 flex items-center justify-center gap-2"
               >
-                <ArrowDown className="w-4 h-4" />
+                <ArrowDownLeft className="w-4 h-4 stroke-[2.25]" />
                 Retry Claim
               </button>
             )}

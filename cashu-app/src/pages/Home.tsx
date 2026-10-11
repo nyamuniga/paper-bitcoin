@@ -203,7 +203,7 @@ export const Home = () => {
       </div>
 
       <main 
-        className="px-container-padding pt-4 md:pt-8 flex flex-col gap-6 pb-8 w-full transition-transform duration-200 ease-out"
+        className="px-4 sm:px-6 md:px-8 pt-2 md:pt-5 pb-12 w-full max-w-[480px] md:max-w-[1200px] mx-auto transition-transform duration-200 ease-out flex flex-col gap-4"
         style={{ transform: `translateY(${refreshing ? 50 : pullDistance}px)` }}
       >
         {pendingRequests.length > 0 && (
@@ -220,15 +220,21 @@ export const Home = () => {
                 <p className="text-sm text-on-surface-variant">You have {pendingRequests.length} zap{pendingRequests.length > 1 ? 's' : ''} awaiting approval</p>
               </div>
             </div>
-            <button className="bg-primary text-on-primary px-4 py-2 rounded-lg font-bold text-sm">
+            <button className="bg-primary text-on-primary px-4 py-2 rounded-lg font-bold text-sm cursor-pointer">
               Review
             </button>
           </div>
         )}
 
-        <WalletBalanceCard balance={balance} mintBalances={mintBalances} />
-        <LightningAddressCard />
-        <RecentTransactions />
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-start">
+          <div className="md:col-span-5 lg:col-span-5 flex flex-col gap-3.5 sm:gap-4">
+            <WalletBalanceCard balance={balance} mintBalances={mintBalances} />
+            <LightningAddressCard />
+          </div>
+          <div className="md:col-span-7 lg:col-span-7">
+            <RecentTransactions />
+          </div>
+        </div>
       </main>
 
       {showPendingNwcModal && <PendingNwcModal onClose={() => setShowPendingNwcModal(false)} />}

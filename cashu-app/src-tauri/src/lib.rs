@@ -2,8 +2,23 @@ pub mod nwc;
 mod commands;
 mod error;
 
+static RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
+
+fn init_runtime() {
+    let rt = RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .thread_stack_size(4 * 1024 * 1024) // 4 MB stack per worker thread
+            .enable_all()
+            .build()
+            .expect("Failed to initialize Tokio runtime")
+    });
+    tauri::async_runtime::set(rt.handle().clone());
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_runtime();
+
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .setup(|app| {
@@ -15,6 +30,8 @@ pub fn run() {
                 wallet_lock: tokio::sync::Mutex::new(()),
                 pending_nwc_requests: std::sync::Mutex::new(Vec::new()),
             });
+            
+            app.manage(commands::bark::BarkState::new());
             
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -81,6 +98,15 @@ pub fn run() {
             crate::nwc::get_pending_nwc_requests,
             crate::nwc::approve_nwc_request,
             crate::nwc::reject_nwc_request,
+            commands::bark::init_bark_wallet,
+            commands::bark::bark_get_boarding_address,
+            commands::bark::bark_sync_vutxos,
+            commands::bark::bark_send_onchain,
+            commands::bark::bark_get_mnemonic,
+            commands::bark::bark_get_balance,
+            commands::bark::bark_pay_lightning_invoice,
+            commands::bark::bark_estimate_onchain_send,
+            commands::bark::bark_execute_onchain_send,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

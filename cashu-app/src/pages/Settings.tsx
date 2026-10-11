@@ -29,11 +29,17 @@ export const Settings = () => {
     <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col gap-6">
       <PageHeader title="Settings" subtitle="Keys, connections & preferences" />
 
-      <RecoveryPhraseSection />
-      <NWCSection />
-      <NostrSection />
-      <LockedEcashSection />
-      <WalletManagementSection />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <div className="flex flex-col gap-6">
+          <RecoveryPhraseSection />
+          <WalletManagementSection />
+        </div>
+        <div className="flex flex-col gap-6">
+          <NWCSection />
+          <NostrSection />
+          <LockedEcashSection />
+        </div>
+      </div>
 
       {appInfo.name && appInfo.version && (
         <div className="text-center mt-8 pb-4">
