@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { toast } from 'react-hot-toast';
+import { getBarkBoardingAddress, estimateOnChainSendBark, executeOnChainSendBark, OnchainSendEstimate } from '../services/barkService';
 
 export const useBitcoin = (mintUrl?: string) => {
   const [paying, setPaying] = useState(false);
@@ -57,10 +58,73 @@ export const useBitcoin = (mintUrl?: string) => {
     }
   };
 
+  const receiveOnChain = async () => {
+    if (isRequestingRef.current) return null;
+    isRequestingRef.current = true;
+    setRequesting(true);
+    try {
+      const res = await getBarkBoardingAddress();
+      return { boardingAddress: res.address };
+    } catch (e: any) {
+      toast.error(`Failed to get boarding address: ${e.message || e}`);
+      return null;
+    } finally {
+      setRequesting(false);
+      isRequestingRef.current = false;
+    }
+  };
+
+  const estimateOnChain = async (address: string, amount: number, overrideMintUrl?: string): Promise<OnchainSendEstimate | null> => {
+    if (isRequestingRef.current) return null;
+    const targetMint = overrideMintUrl || mintUrl;
+    if (!targetMint) {
+      toast.error('No mint specified for on-chain send');
+      return null;
+    }
+
+    isRequestingRef.current = true;
+    setRequesting(true);
+    try {
+      return await estimateOnChainSendBark(address, amount, targetMint);
+    } catch (e: any) {
+      toast.error(`Estimation failed: ${e.message || e}`);
+      return null;
+    } finally {
+      setRequesting(false);
+      isRequestingRef.current = false;
+    }
+  };
+
+  const executeOnChain = async (estimate: OnchainSendEstimate, address: string, overrideMintUrl?: string) => {
+    if (isPayingRef.current) return null;
+    const targetMint = overrideMintUrl || mintUrl;
+    if (!targetMint) {
+      toast.error('No mint specified for on-chain send');
+      return null;
+    }
+
+    isPayingRef.current = true;
+    setPaying(true);
+    try {
+      const txid = await executeOnChainSendBark(estimate.bridging_invoice, address, estimate.amount, targetMint);
+      await refreshWallet();
+      return { txid };
+    } catch (e: any) {
+      toast.error(`On-Chain send failed: ${e.message || e}`);
+      return null;
+    } finally {
+      setPaying(false);
+      isPayingRef.current = false;
+    }
+  };
+
   return {
     paying,
     requesting,
     payInvoice,
     receiveLightning,
+    receiveOnChain,
+    estimateOnChain,
+    executeOnChain,
   };
 };

@@ -1,7 +1,6 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use ecash_core::{
     dhke::{point_from_hex, BlindingSession},
-    types::Proof,
     derivation::TokenDerivation,
 };
 use crate::{
@@ -9,7 +8,6 @@ use crate::{
     client::MintClient,
 };
 use std::path::PathBuf;
-use std::str::FromStr;
 
 pub async fn restore_from_mints(
     state: &mut WalletState,

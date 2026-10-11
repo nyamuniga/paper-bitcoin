@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowDown, ArrowUp, FileText, ChevronRight } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, FileText, ChevronRight } from 'lucide-react';
 import { useHistory } from '../../hooks/useHistory';
 import { Transaction } from '../history/TransactionCard';
 import { TransactionDetailsModal } from '../history/TransactionDetailsModal';
@@ -45,28 +45,28 @@ export const RecentTransactions: React.FC = () => {
   };
 
   const getTxIcon = (tx: Transaction) => {
-    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
-      return <ArrowDown className="text-primary w-4 h-4" />;
-    }
-    if ('Send' in tx.tx_type) {
-      return <ArrowUp className="text-primary w-4 h-4" />;
+    const isReceive = 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
+    if (isReceive) {
+      return <ArrowDownLeft className="w-4 h-4 text-[#34d399] stroke-[2.5]" />;
     }
     if ('Issue' in tx.tx_type) {
-      return <FileText className="text-primary w-4 h-4" />;
+      return <FileText className="w-4 h-4 text-[#627d70] stroke-[2]" />;
     }
-    return <ArrowUp className="text-primary w-4 h-4" />;
+    return <ArrowUpRight className="w-4 h-4 text-[#627d70] stroke-[2.25]" />;
   };
 
-  const getTxIconBg = (_tx: Transaction) => {
-    return 'bg-primary/20 border-primary/20';
+  const getTxIconBg = (tx: Transaction) => {
+    const isInflow = 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
+    if (isInflow) return 'bg-[#0e291d] border-[#1c442f]';
+    return 'bg-[#10241b] border-[#1b3829]';
   };
 
   const getTxAmountColor = (_tx: Transaction) => {
-    return 'text-primary';
+    return 'text-[#f2a93b] font-bold';
   };
 
   const getTxSign = (tx: Transaction) => {
-    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) return '+';
+    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS') return '+';
     if ('Issue' in tx.tx_type) return '';
     return '-';
   };
@@ -82,6 +82,7 @@ export const RecentTransactions: React.FC = () => {
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return '1d ago';
     if (diffDays < 7) return `${diffDays}d ago`;
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
@@ -92,61 +93,63 @@ export const RecentTransactions: React.FC = () => {
     });
   };
 
-
-
   return (
     <section className="flex flex-col gap-2">
-      <div className="bg-surface-container-high/80 backdrop-blur-xl rounded-2xl overflow-hidden border border-outline-variant relative shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)]">
-        <div className="absolute inset-0 texture-overlay opacity-20"></div>
-
-        {/* Header moved inside the box */}
-        <div className="flex justify-between items-center p-4 relative z-10">
-          <h2 className="text-label-caps font-label-caps text-on-surface-variant tracking-widest">RECENT ACTIVITY</h2>
+      <div className="bg-[#0c1b14] rounded-[28px] overflow-hidden border border-[#142d20] relative shadow-[0_8px_32px_rgba(0,0,0,0.5)] p-5">
+        {/* Header */}
+        <div className="flex justify-between items-center pb-3.5 relative z-10 border-b border-[rgba(247,244,235,0.03)]">
+          <h2 className="text-[10px] font-mono font-bold text-[#627d70] tracking-widest uppercase">
+            RECENT ACTIVITY
+          </h2>
           {(loading || recentTxs.length > 0) && (
-            <Link to="/history" className="text-label-caps font-label-caps text-primary hover:opacity-80 transition-opacity flex items-center gap-1">
+            <Link
+              to="/history"
+              className="text-[#f2a93b] font-display-hero text-[11px] font-bold tracking-wider hover:opacity-85 transition-opacity flex items-center gap-0.5"
+            >
               VIEW ALL
-              <ChevronRight size={14} />
+              <ChevronRight size={13} className="stroke-[2.5]" />
             </Link>
           )}
         </div>
 
         {loading ? (
-          <div className="text-center text-on-surface-variant py-6 text-body-md font-body-md relative z-10">
+          <div className="text-center text-[#627d70] py-8 text-body-md relative z-10 font-sans">
             Loading transactions...
           </div>
         ) : transactions.length === 0 ? (
-          <div className="text-center text-on-surface-variant py-6 text-body-md font-body-md relative z-10">
+          <div className="text-center text-[#627d70] py-8 text-body-md relative z-10 font-sans">
             No recent activity
           </div>
         ) : (
-          <div className="relative z-10">
+          <div className="relative z-10 divide-y divide-[rgba(247,244,235,0.03)]">
             {recentTxs.map((tx) => {
               const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type;
               return (
                 <div
                   key={tx.id}
                   onClick={() => handleRowClick(tx)}
-                  className={`flex items-center gap-3 p-3.5 md:p-4 relative z-10 hover:bg-surface-bright/50 transition-colors ${isClickable ? 'cursor-pointer active:scale-[0.99]' : ''}`}
+                  className={`flex items-center gap-3.5 py-3.5 hover:bg-[#12261d]/50 transition-colors ${isClickable ? 'cursor-pointer active:scale-[0.99]' : ''}`}
                 >
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center border flex-shrink-0 ${getTxIconBg(tx)}`}>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center border flex-shrink-0 shadow-sm ${getTxIconBg(tx)}`}>
                     {getTxIcon(tx)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-body-md font-body-md font-medium text-on-surface text-[14px]">{getTxLabel(tx)}</p>
-                    {/* Mobile: relative time / Desktop: full date */}
-                    <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] md:hidden">{formatTime(tx.timestamp)}</p>
-                    <p className="text-label-caps font-label-caps text-on-surface-variant text-[10px] hidden md:block">{formatFullDate(tx.timestamp)}</p>
+                    <p className="font-display-hero text-[14px] md:text-[15px] font-semibold text-[#f7f4eb] truncate">{getTxLabel(tx)}</p>
+                    <p className="text-[12px] text-[#627d70] font-sans mt-0.5 md:hidden">{formatTime(tx.timestamp)}</p>
+                    <p className="text-[12px] text-[#627d70] font-sans mt-0.5 hidden md:block">{formatFullDate(tx.timestamp)}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <span className={`text-body-md font-body-md font-semibold ${getTxAmountColor(tx)} text-[14px]`}>
-                      {getTxSign(tx)}₿{tx.amount}
+                    <span className={`font-mono text-[14px] md:text-[15px] ${getTxAmountColor(tx)}`}>
+                      {getTxSign(tx)}₿{tx.amount.toLocaleString()}
                     </span>
                     {tx.status === 'Pending' && (
-                      <span className="block text-[10px] text-primary font-label-caps">Pending</span>
+                      <span className="block mt-1 px-2 py-0.5 rounded-full bg-[#182c1a] border border-[#2a452d] text-[#f2a93b] text-[10px] font-mono font-medium">
+                        Pending
+                      </span>
                     )}
                   </div>
                 </div>
-              )
+              );
             })}
           </div>
         )}

@@ -20,38 +20,38 @@ export const ActionMenuModal: React.FC<ActionMenuModalProps> = ({ title, options
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm transition-opacity" onClick={onClose}>
       <div 
         onClick={e => e.stopPropagation()}
-        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-[480px] border-t border-x sm:border border-outline-variant shadow-[0_-4px_32px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col relative animate-slide-up sm:animate-fade-in pb-8 sm:pb-4"
+        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-[480px] border-t border-x sm:border border-[#142d20] shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative animate-slide-up sm:animate-fade-in pb-8 sm:pb-4"
       >
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
         
         {/* Drag Handle */}
         <div className="w-full flex justify-center pt-3 pb-1 relative z-10 sm:hidden">
-          <div className="w-12 h-1.5 bg-outline-variant/30 rounded-full"></div>
+          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
         </div>
         
         {/* Header */}
-        <div className="flex justify-between items-center px-6 py-4 relative z-10">
-          <h2 className="text-headline-sm font-headline-sm text-on-surface">{title}</h2>
+        <div className="flex justify-between items-center px-6 py-4 relative z-10 border-b border-[rgba(247,244,235,0.04)]">
+          <h2 className="font-display-hero text-headline-sm font-semibold text-on-surface">{title}</h2>
           <button 
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-bright text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/80 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors border border-outline-variant/30"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Options */}
-        <div className="p-4 flex flex-col gap-2 relative z-10">
+        <div className="p-4 flex flex-col gap-2.5 relative z-10">
           {options.map((opt, i) => (
             <button
               key={i}
               onClick={() => { opt.onClick(); onClose(); }}
-              className="flex items-center gap-4 p-4 hover:bg-surface-bright/50 transition-colors rounded-2xl border border-transparent hover:border-outline-variant text-left w-full group"
+              className="flex items-center gap-4 p-3.5 bg-surface-container/50 hover:bg-surface-container rounded-2xl border border-outline-variant hover:border-primary/40 text-left w-full group transition-all duration-200 active:scale-[0.98]"
             >
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${opt.colorClass || 'bg-surface-container-highest text-on-surface'} group-hover:scale-110 transition-transform duration-200`}>
+              <div className="w-12 h-12 rounded-full flex items-center justify-center bg-[#0e2e20] text-primary border border-primary/30 group-hover:scale-105 group-hover:border-primary/60 transition-all duration-200 flex-shrink-0 shadow-sm">
                 {opt.icon}
               </div>
-              <span className="text-body-lg font-body-lg text-on-surface font-semibold">{opt.label}</span>
+              <span className="font-display-hero text-[15px] text-on-surface font-semibold tracking-tight">{opt.label}</span>
             </button>
           ))}
         </div>

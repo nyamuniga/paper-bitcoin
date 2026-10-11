@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, XCircle, Download, FileText, ArrowDown, ArrowUp } from 'lucide-react';
+import { AlertCircle, CheckCircle, XCircle, Download, FileText, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 
 export interface Transaction {
   id: string;
@@ -31,29 +31,32 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
   const isReceive = isReceiveEcash || isReceiveLightning;
   const quoteId = isMint ? tx.tx_type.Mint.quote_id : (isMelt ? tx.tx_type.Melt.quote_id : '');
 
+  const isInflow = isMint || isRedeem || isReceive || tx.momo_direction === 'RWF_TO_SATS';
+
   return (
     <div 
       onClick={onClick}
-      className={`obsidian-card rounded-xl p-5 border group ${isMint && tx.status === 'Success' ? 'border-emerald-900/30' : 'border-surface-container-high/50'} ${onClick ? 'cursor-pointer active:scale-[0.99] transition-transform' : ''}`}
+      className={`obsidian-card rounded-2xl p-5 border group ${isInflow && tx.status === 'Success' ? 'border-primary/20' : 'border-outline-variant'} ${onClick ? 'cursor-pointer active:scale-[0.99] transition-transform' : ''}`}
     >
-      {isMint && tx.status === 'Success' && (
+      {isInflow && tx.status === 'Success' && (
         <>
-          <div className="absolute inset-0 bg-emerald-900/5 mix-blend-screen pointer-events-none"></div>
-          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+          <div className="absolute inset-0 bg-[#0e2e20]/15 mix-blend-screen pointer-events-none"></div>
+          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
         </>
       )}
       <div className="noise-overlay"></div>
       <div className="relative z-10">
         <div className="flex justify-between items-start mb-4">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center border bg-primary/20 border-primary/20">
-              {isMint || isReceive ? <ArrowDown className="text-primary w-4 h-4" /> : 
-               isIssue ? <FileText className="text-primary w-4 h-4" /> : 
-               isRedeem ? <ArrowDown className="text-primary w-4 h-4" /> :
-               <ArrowUp className="text-primary w-4 h-4" />}
+          <div className="flex items-center gap-3.5">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm flex-shrink-0 ${
+              isInflow ? 'bg-[#0e291d] border-[#1c442f] text-[#34d399]' : 'bg-[#10241b] border-[#1b3829] text-[#627d70]'
+            }`}>
+              {isInflow ? <ArrowDownLeft className="w-4 h-4 stroke-[2.5]" /> : 
+               isIssue ? <FileText className="w-4 h-4 stroke-[2]" /> : 
+               <ArrowUpRight className="w-4 h-4 stroke-[2.25]" />}
             </div>
             <div>
-              <h3 className="text-body-md font-body-md font-semibold text-on-surface">
+              <h3 className="font-display-hero text-body-md font-semibold text-on-surface">
                 {tx.momo_direction === 'RWF_TO_SATS' ? 'Received RWF' :
                  tx.momo_direction === 'SATS_TO_RWF' ? 'Sent RWF' :
                  isMint ? 'Received Lightning' : 
@@ -64,36 +67,36 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
                  isSend ? 'Sent eCash' : 
                  isMelt ? 'Sent Lightning' : 'Transaction'}
               </h3>
-              <p className="text-label-caps font-label-caps text-on-surface-variant mt-1 max-w-[200px] truncate" title={tx.mint_url}>
+              <p className="font-mono text-label-code text-on-surface-variant mt-0.5 max-w-[200px] truncate" title={tx.mint_url}>
                 {tx.mint_url || 'Local Wallet'}
               </p>
             </div>
           </div>
           <div className="text-right">
-            <span className="text-body-md font-body-md font-bold block text-primary">
-              {isMint || isRedeem || isReceive ? '+' : isIssue ? '' : '-'}₿{tx.amount}
+            <span className={`font-mono text-body-md block ${isInflow ? 'text-primary font-bold' : 'text-on-surface font-semibold'}`}>
+              {isInflow ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
             </span>
-            {tx.fee > 0 && <span className="text-label-caps font-label-caps text-on-surface-variant mt-1 block">Fee: ₿{tx.fee}</span>}
+            {tx.fee > 0 && <span className="font-mono text-label-tag text-on-surface-variant mt-1 block">Fee: ₿{tx.fee}</span>}
           </div>
         </div>
 
-        <div className={`divider-dashed my-3 ${isMint && tx.status === 'Success' ? 'border-emerald-900/50' : ''}`}></div>
+        <div className={`divider-dashed my-3 ${isInflow && tx.status === 'Success' ? 'border-primary/20' : ''}`}></div>
 
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-label-caps font-label-caps">
           <div className={`flex items-center gap-2 w-full md:w-auto justify-between md:justify-start ${
             tx.status === 'Pending' ? 'text-primary' :
-            tx.status === 'Success' ? 'text-emerald-400' :
-            tx.status === 'FailedMintError' ? 'text-rose-500' :
+            tx.status === 'Success' ? 'text-secondary' :
+            tx.status === 'FailedMintError' ? 'text-error' :
             'text-on-surface-variant'
           }`}>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {tx.status === 'Pending' && <AlertCircle className="w-4 h-4" />}
               {tx.status === 'Success' && <CheckCircle className="w-4 h-4" />}
               {tx.status === 'Failed' && <XCircle className="w-4 h-4" />}
               {tx.status === 'FailedMintError' && <AlertCircle className="w-4 h-4" />}
-              <span>{tx.status === 'FailedMintError' ? 'Mint Error' : tx.status}</span>
+              <span className="font-semibold tracking-wider">{tx.status === 'FailedMintError' ? 'Mint Error' : tx.status}</span>
             </div>
-            <span className="text-on-surface-variant md:hidden">
+            <span className="font-mono text-on-surface-variant md:hidden">
               {new Date(tx.timestamp * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
             </span>
           </div>
