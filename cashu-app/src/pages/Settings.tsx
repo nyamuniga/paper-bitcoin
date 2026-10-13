@@ -32,12 +32,12 @@ export const Settings = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <div className="flex flex-col gap-6">
           <RecoveryPhraseSection />
-          <WalletManagementSection />
+          <NWCSection />
         </div>
         <div className="flex flex-col gap-6">
-          <NWCSection />
           <NostrSection />
           <LockedEcashSection />
+          <WalletManagementSection />
         </div>
       </div>
 

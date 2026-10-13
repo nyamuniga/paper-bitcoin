@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ArrowDownLeft, ArrowUpRight, FileText, CheckCircle, AlertCircle, XCircle, Copy, Check } from 'lucide-react';
 import { Transaction } from './TransactionCard';
 import { toast } from 'react-hot-toast';
@@ -61,9 +62,15 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <div className="bg-surface-container-high rounded-2xl w-full max-w-md border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative max-h-[90vh]">
+  return createPortal(
+    <div 
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="bg-surface-container-high rounded-2xl w-full max-w-md border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative max-h-[90vh]"
+      >
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
         
         {/* Header */}
@@ -221,6 +228,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
