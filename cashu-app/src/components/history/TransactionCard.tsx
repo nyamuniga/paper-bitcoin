@@ -46,8 +46,8 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
       )}
       <div className="noise-overlay"></div>
       <div className="relative z-10">
-        <div className="flex justify-between items-start mb-4">
-          <div className="flex items-center gap-3.5">
+        <div className="flex justify-between items-center mb-4 gap-3">
+          <div className="flex items-center gap-3.5 min-w-0">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm flex-shrink-0 ${
               isInflow ? 'bg-[#0e291d] border-[#1c442f] text-[#34d399]' : 'bg-[#10241b] border-[#1b3829] text-[#627d70]'
             }`}>
@@ -55,8 +55,8 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
                isIssue ? <FileText className="w-4 h-4 stroke-[2]" /> : 
                <ArrowUpRight className="w-4 h-4 stroke-[2.25]" />}
             </div>
-            <div>
-              <h3 className="font-display-hero text-body-md font-semibold text-on-surface">
+            <div className="min-w-0">
+              <h3 className="font-display-hero text-body-md font-semibold text-on-surface truncate">
                 {tx.momo_direction === 'RWF_TO_SATS' ? 'Received RWF' :
                  tx.momo_direction === 'SATS_TO_RWF' ? 'Sent RWF' :
                  isMint ? 'Received Lightning' : 
@@ -67,16 +67,13 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
                  isSend ? 'Sent eCash' : 
                  isMelt ? 'Sent Lightning' : 'Transaction'}
               </h3>
-              <p className="font-mono text-label-code text-on-surface-variant mt-0.5 max-w-[200px] truncate" title={tx.mint_url}>
-                {tx.mint_url || 'Local Wallet'}
-              </p>
             </div>
           </div>
-          <div className="text-right">
+          <div className="text-right flex-shrink-0">
             <span className={`font-mono text-body-md block ${isInflow ? 'text-primary font-bold' : 'text-on-surface font-semibold'}`}>
               {isInflow ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
             </span>
-            {tx.fee > 0 && <span className="font-mono text-label-tag text-on-surface-variant mt-1 block">Fee: ₿{tx.fee}</span>}
+            {tx.fee > 0 && <span className="font-mono text-label-tag text-on-surface-variant mt-0.5 block">Fee: ₿{tx.fee}</span>}
           </div>
         </div>
 

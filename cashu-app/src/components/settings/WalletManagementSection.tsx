@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Lock, Trash2, AlertTriangle, ChevronRight, ChevronDown, Wallet, Moon, Sun } from 'lucide-react';
+import { Lock, Trash2, AlertTriangle, ChevronRight, ChevronDown, Wallet } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 import { useAuth } from '../../hooks/useAuth';
-import { useThemeStore } from '../../store/themeStore';
 
 export const WalletManagementSection = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -13,7 +12,6 @@ export const WalletManagementSection = () => {
   const { lockWallet, resetWallet } = useAuth();
   const [isCleaning, setIsCleaning] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const { theme, setTheme } = useThemeStore();
 
   const handleLock = async () => {
     const success = await lockWallet();
@@ -68,8 +66,8 @@ export const WalletManagementSection = () => {
             <Wallet size={20} />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-body-md font-body-md font-bold text-on-surface mb-0.5">Wallet & Theme</h2>
-            <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">Preferences, lock & reset</p>
+            <h2 className="text-body-md font-body-md font-bold text-on-surface mb-0.5">Wallet Management</h2>
+            <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">Clean, lock & reset</p>
           </div>
         </div>
 
@@ -80,47 +78,6 @@ export const WalletManagementSection = () => {
 
       {isExpanded && (
         <div className="px-6 pb-6 pt-2 border-t border-outline-variant flex flex-col gap-4">
-          {/* Theme Mode Toggle */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 bg-surface-container-highest rounded-xl border border-outline-variant transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 text-primary rounded-lg shrink-0">
-                {theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-              </div>
-              <div className="text-left min-w-0">
-                <div className="font-bold text-on-surface text-sm">Theme Mode</div>
-                <div className="text-xs text-on-surface-variant font-medium">
-                  {theme === 'dark' ? 'Sovereign Ochre & Forest' : 'Bone Cream & Forest'}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 sm:flex items-center bg-surface-container-low p-1 rounded-lg border border-outline-variant w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={() => setTheme('dark')}
-                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  theme === 'dark'
-                    ? 'bg-primary text-on-primary shadow-sm'
-                    : 'text-on-surface-variant hover:text-on-surface'
-                }`}
-              >
-                <Moon size={14} />
-                <span>Dark</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTheme('light')}
-                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  theme === 'light'
-                    ? 'bg-primary text-on-primary shadow-sm'
-                    : 'text-on-surface-variant hover:text-on-surface'
-                }`}
-              >
-                <Sun size={14} />
-                <span>Light</span>
-              </button>
-            </div>
-          </div>
 
           <button
             onClick={handleLock}
