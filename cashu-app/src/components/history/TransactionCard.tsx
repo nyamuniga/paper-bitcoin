@@ -33,6 +33,14 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
 
   const isInflow = isMint || isRedeem || isReceive || tx.momo_direction === 'RWF_TO_SATS';
 
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp * 1000).toLocaleDateString([], {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
   return (
     <div 
       onClick={onClick}
@@ -94,7 +102,7 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
               <span className="font-semibold tracking-wider">{tx.status === 'FailedMintError' ? 'Mint Error' : tx.status}</span>
             </div>
             <span className="font-mono text-on-surface-variant md:hidden">
-              {new Date(tx.timestamp * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+              {formatDate(tx.timestamp)}
             </span>
           </div>
 
@@ -128,8 +136,8 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
             </div>
           )}
 
-          <span className="text-on-surface-variant hidden md:block">
-            {new Date(tx.timestamp * 1000).toLocaleString()}
+          <span className="font-mono text-on-surface-variant hidden md:block">
+            {formatDate(tx.timestamp)}
           </span>
         </div>
       </div>
