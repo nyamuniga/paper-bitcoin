@@ -1,4 +1,5 @@
 import './polyfills';
+import './nativeSetup';
 import './store/themeStore';
 import React from "react";
 import ReactDOM from "react-dom/client";
