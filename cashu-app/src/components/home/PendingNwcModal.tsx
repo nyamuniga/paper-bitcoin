@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Check, XCircle, Zap, Loader2, Clock } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNwcStore, PendingNwcRequest } from '../../store/nwcStore';
@@ -54,9 +55,15 @@ export const PendingNwcModal: React.FC<PendingNwcModalProps> = ({ onClose }) => 
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <div className="bg-surface-container-high rounded-2xl w-full max-w-md p-6 relative max-h-[80vh] flex flex-col">
+  return createPortal(
+    <div 
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="bg-surface-container-high rounded-2xl w-full max-w-md p-6 relative max-h-[80vh] flex flex-col"
+      >
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface transition-colors"
@@ -120,6 +127,7 @@ export const PendingNwcModal: React.FC<PendingNwcModalProps> = ({ onClose }) => 
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
