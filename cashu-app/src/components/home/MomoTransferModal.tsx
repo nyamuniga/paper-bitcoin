@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Phone, PhoneOutgoing, PhoneIncoming, ChevronDown } from 'lucide-react';
 import { AppPhase } from '../../types/momo';
 import { calculateQuote, calculateSendQuote, fetchCurrentRate, fetchProxyBlinkBalance } from '../../services/flowServices';
+import { MOMO_WITHDRAWAL_FIXED_FEE, ECASH_LIGHTNING_FEE, SPREAD } from '../../constants.local';
 import { useWalletStore } from '../../store/wallet';
 import { useTransactionStore } from '../../store/transactionStore';
 import { MintIcon } from '../shared/MintIcon';
@@ -77,20 +78,35 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   let amountError = '';
   let phoneError = '';
 
+  const lightningFeeRwf = currentRate ? Math.ceil(ECASH_LIGHTNING_FEE / currentRate) : 10;
+  const totalNetworkFeeRwf = MOMO_WITHDRAWAL_FIXED_FEE + lightningFeeRwf;
+
+  const maxWithdrawableRwf = (activeTab === 'send' && currentRate && availableBalance > ECASH_LIGHTNING_FEE)
+    ? (() => {
+        const usableBalance = availableBalance - ECASH_LIGHTNING_FEE;
+        let maxRwf = Math.max(0, Math.floor(((usableBalance / currentRate) - MOMO_WITHDRAWAL_FIXED_FEE) / (1 + SPREAD)));
+        while (maxRwf > 0) {
+          const testNeeded = maxRwf + MOMO_WITHDRAWAL_FIXED_FEE + Math.ceil(maxRwf * SPREAD);
+          if (Math.ceil(testNeeded * currentRate) + ECASH_LIGHTNING_FEE <= availableBalance) break;
+          maxRwf--;
+        }
+        return maxRwf;
+      })()
+    : 0;
+
   if (amount) {
     if (isNaN(amountNum) || amountNum < 100) {
       amountError = 'Minimum amount is 100 RWF.';
     } else if (amountNum > 200000) {
       amountError = 'Maximum amount is 200,000 RWF.';
     } else if (activeTab === 'send' && currentRate) {
-      const feeRwf = Math.ceil(amountNum * 0.03);
-      const totalRwf = amountNum + feeRwf;
-      const estimatedSats = Math.floor(totalRwf * currentRate);
+      const totalRwf = amountNum + MOMO_WITHDRAWAL_FIXED_FEE + Math.ceil(amountNum * SPREAD);
+      const estimatedSats = Math.ceil(totalRwf * currentRate) + ECASH_LIGHTNING_FEE;
       if (estimatedSats > availableBalance) {
-        amountError = `Insufficient balance. Estimated cost: ~${estimatedSats.toLocaleString()} sats.`;
+        amountError = 'INSUFFICIENT_BALANCE';
       }
     } else if (activeTab === 'receive' && currentRate && proxyBalance !== null) {
-      const estimatedSats = Math.floor(amountNum * currentRate);
+      const estimatedSats = Math.floor(amountNum * (1 - SPREAD) * currentRate);
       if (estimatedSats > proxyBalance) {
         amountError = `Gateway has insufficient liquidity to process this amount right now. Please try a smaller amount.`;
       }
@@ -372,6 +388,20 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       onChange={e => setAmount(e.target.value)}
                     />
                     {amountError && <p className="text-error text-label-sm mt-2 ml-2">{amountError}</p>}
+                    {!amountError && amountNum >= 100 && currentRate && (
+                      <div className="mt-2.5 p-3 rounded-xl bg-surface-container-highest/60 border border-outline-variant/15 flex flex-col gap-1 text-xs text-on-surface-variant">
+                        <div className="flex justify-between items-center">
+                          <span>Deposit fee:</span>
+                          <span className="font-semibold text-emerald-400">0 RWF (Free)</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-1 border-t border-outline-variant/10 text-on-surface">
+                          <span>You will receive:</span>
+                          <span className="font-bold text-primary">
+                            ~{Math.floor(amountNum * (1 - SPREAD) * currentRate).toLocaleString()} sats
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={handleReceiveFromMomo}
@@ -504,7 +534,18 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                     {phoneError && <p className="text-error text-label-sm mt-2 ml-2">{phoneError}</p>}
                   </div>
                   <div>
-                    <label className="text-label-md text-on-surface-variant block mb-2">Amount to Send (RWF)</label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-label-md text-on-surface-variant">Amount to Send (RWF)</label>
+                      {maxWithdrawableRwf >= 100 && (
+                        <button
+                          type="button"
+                          onClick={() => setAmount(String(maxWithdrawableRwf))}
+                          className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors uppercase tracking-wider px-2 py-0.5 rounded-md bg-primary/10 hover:bg-primary/20 cursor-pointer"
+                        >
+                          Max: {maxWithdrawableRwf.toLocaleString()} RWF
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="number"
                       spellCheck={false}
@@ -513,7 +554,50 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       value={amount}
                       onChange={e => setAmount(e.target.value)}
                     />
-                    {amountError && <p className="text-error text-label-sm mt-2 ml-2">{amountError}</p>}
+                    {amountError === 'INSUFFICIENT_BALANCE' && currentRate && (
+                      <div className="mt-2.5 p-3 rounded-xl bg-error/10 border border-error/20 flex flex-col gap-1.5 text-xs">
+                        <div className="text-error font-medium">
+                          Need ~{(Math.ceil((amountNum + MOMO_WITHDRAWAL_FIXED_FEE + Math.ceil(amountNum * SPREAD)) * currentRate) + ECASH_LIGHTNING_FEE).toLocaleString()} sats (includes ~{totalNetworkFeeRwf.toLocaleString()} RWF network fee).
+                        </div>
+                        {maxWithdrawableRwf >= 100 ? (
+                          <div className="text-on-surface-variant flex items-center justify-between pt-1 border-t border-error/15">
+                            <span>Max you can withdraw:</span>
+                            <button
+                              type="button"
+                              onClick={() => setAmount(String(maxWithdrawableRwf))}
+                              className="font-bold text-primary hover:underline cursor-pointer"
+                            >
+                              Set to {maxWithdrawableRwf.toLocaleString()} RWF →
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-on-surface-variant text-[11px]">
+                            Balance too low to cover ~{totalNetworkFeeRwf.toLocaleString()} RWF network fee.
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {amountError && amountError !== 'INSUFFICIENT_BALANCE' && (
+                      <p className="text-error text-label-sm mt-2 ml-2">{amountError}</p>
+                    )}
+                    {!amountError && amountNum >= 100 && currentRate && (
+                      <div className="mt-2.5 p-3 rounded-xl bg-surface-container-highest/60 border border-outline-variant/15 flex flex-col gap-1 text-xs text-on-surface-variant">
+                        <div className="flex justify-between items-center">
+                          <span>Recipient receives:</span>
+                          <span className="font-semibold text-on-surface">{amountNum.toLocaleString()} RWF</span>
+                        </div>
+                        <div className="flex justify-between items-center text-on-surface-variant/80">
+                          <span>Network fee:</span>
+                          <span>~{totalNetworkFeeRwf.toLocaleString()} RWF</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-1 border-t border-outline-variant/10 text-on-surface">
+                          <span>Total from wallet:</span>
+                          <span className="font-bold text-primary">
+                            ~{(Math.ceil((amountNum + MOMO_WITHDRAWAL_FIXED_FEE + Math.ceil(amountNum * SPREAD)) * currentRate) + ECASH_LIGHTNING_FEE).toLocaleString()} sats
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={handleSendToMomo}
