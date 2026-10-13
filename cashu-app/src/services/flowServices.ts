@@ -21,10 +21,10 @@ import {
   EXCHANGE_RATE_API_URL,
   SATS_PER_BTC,
   SPREAD,
+  MOMO_WITHDRAWAL_FIXED_FEE,
   RWF_USD_PEG,
   POLLING_INTERVAL_MS,
   POLLING_TIMEOUT_MS,
-  TX_FEE_PERCENTAGE,
   MOMO_API_BASE_URL
 } from "../constants.local";
 import { useTransactionStore } from "../store/transactionStore";
@@ -37,8 +37,7 @@ export const fetchCurrentRate = async (): Promise<number> => {
   const btcPriceInUsdRaw = data?.USD?.last;
   if (!btcPriceInUsdRaw) throw new Error("Could not retrieve a valid USD/BTC exchange rate.");
 
-  const btcPriceInUsd = btcPriceInUsdRaw * (1 + SPREAD);
-  const btcPriceInRwf = btcPriceInUsd * RWF_USD_PEG;
+  const btcPriceInRwf = btcPriceInUsdRaw * RWF_USD_PEG;
   return SATS_PER_BTC / btcPriceInRwf;
 };
 
@@ -104,12 +103,13 @@ export const calculateQuote = async (
   try {
     const rwfToSatsRate = await fetchCurrentRate();
 
-    const feeRwf = Math.ceil(amount * TX_FEE_PERCENTAGE);
-    const totalRwfToPay = amount + feeRwf;
+    const feeRwf = 0;
+    const totalRwfToPay = amount;
 
     store.updateTransactionPhase(AppPhase.INITIATING_PAYMENT);
 
-    const netSats = Math.floor(amount * rwfToSatsRate);
+    // Apply 5% spread: give 5% fewer sats (absorbs 2.3% MTN fee and yields 2.7% profit)
+    const netSats = Math.floor(amount * (1 - SPREAD) * rwfToSatsRate);
 
     let invoice = "";
     let quoteId = "";
@@ -136,7 +136,7 @@ export const calculateQuote = async (
       rwfAmount: totalRwfToPay,
       satsAmount: netSats,
       fee: feeRwf,
-      rate: rwfToSatsRate,
+      rate: rwfToSatsRate * (1 - SPREAD),
       invoice: invoice,
       momoReferenceId: momoResponse.referenceId,
       mintQuoteId: quoteId,
@@ -318,10 +318,11 @@ export const calculateSendQuote = async (
   try {
     const rwfToSatsRate = await fetchCurrentRate();
 
-    const feeRwf = Math.ceil(amount * 0.03);
-    const totalRwfNeeded = amount + feeRwf;
+    const feeRwf = 0;
+    // Total RWF equivalent in sats to charge user: covers amount + 120 RWF MTN payout fee + 5% spread margin
+    const totalRwfNeeded = amount + MOMO_WITHDRAWAL_FIXED_FEE + Math.ceil(amount * SPREAD);
 
-    const netSats = Math.floor(totalRwfNeeded * rwfToSatsRate);
+    const netSats = Math.ceil(totalRwfNeeded * rwfToSatsRate);
 
     const { paymentRequest, paymentHash } = await createLightningInvoice(netSats);
 

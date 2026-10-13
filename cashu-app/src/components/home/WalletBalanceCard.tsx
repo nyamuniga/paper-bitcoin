@@ -9,6 +9,7 @@ import { MomoTransferModal } from './MomoTransferModal';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
 import { fetchCurrentRate } from '../../services/flowServices';
+import { SPREAD } from '../../constants.local';
 
 
 interface WalletBalanceCardProps {
@@ -149,7 +150,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
           </div>
           {currentRate && (
             <span className="text-[12px] sm:text-[13px] font-medium text-[#6f887b] mt-1 tracking-tight select-none truncate max-w-full">
-              {hideBalance ? '≈ •••••• RWF' : `≈ ${(balance / currentRate).toLocaleString(undefined, { maximumFractionDigits: 0 })} RWF`}
+              {hideBalance ? '≈ •••••• RWF' : `≈ ${(balance / (currentRate * (1 - SPREAD))).toLocaleString(undefined, { maximumFractionDigits: 0 })} RWF`}
             </span>
           )}
         </div>
