@@ -52,7 +52,7 @@ export const useEcash = (mintUrl?: string) => {
     isSendingRef.current = true;
     setSending(true);
     try {
-      const result: {token: string, tx_id: string} = await invoke('send_ecash', { 
+      const result: { token: string; token_v3?: string; token_v4?: string; tx_id: string } = await invoke('send_ecash', { 
         mintUrl: targetMint, 
         amount,
         pubkey 

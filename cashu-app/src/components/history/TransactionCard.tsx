@@ -122,11 +122,23 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
                 <button onClick={(e) => { e.stopPropagation(); onCheckIssue(tx.id); }} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors border border-primary/30 text-label-caps font-label-caps">
                   Check Status & Resume
                 </button>
+              ) : isReceiveEcash ? (
+                <button onClick={(e) => { e.stopPropagation(); onCheckMelt(tx.id); }} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors border border-primary/30 text-label-caps font-label-caps">
+                  Check Status & Claim
+                </button>
               ) : (
                 <button onClick={(e) => { e.stopPropagation(); onCheckMelt(tx.id); }} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors border border-primary/30 text-label-caps font-label-caps">
                   Check Status & Refund
                 </button>
               )}
+            </div>
+          )}
+
+          {tx.status === 'Failed' && isReceiveEcash && (
+            <div className="flex gap-2 w-full md:w-auto">
+              <button onClick={(e) => { e.stopPropagation(); onCheckMelt(tx.id); }} className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors border border-primary/30 text-label-caps font-label-caps">
+                Retry Claim
+              </button>
             </div>
           )}
 

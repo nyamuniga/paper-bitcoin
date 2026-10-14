@@ -56,6 +56,7 @@ pub fn run() {
             commands::wallet::get_seed_hex,
             commands::wallet::get_custom_nostr_key,
             commands::wallet::set_custom_nostr_key,
+            commands::wallet::set_default_nostr_key,
             commands::wallet::get_balance,
             commands::wallet::get_recovery_words,
             commands::wallet::add_mint,

@@ -161,7 +161,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 className="mt-2 w-full py-2.5 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-label-lg transition-colors border border-primary/30 flex items-center justify-center gap-2"
               >
                 <CheckCircle className="w-4 h-4" />
-                Check Status & Recover
+                {isReceiveEcash ? 'Check Status & Claim' : 'Check Status & Recover'}
               </button>
             )}
 
