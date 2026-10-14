@@ -67,12 +67,14 @@ function setupClaimLoop(npub: string, relays: string[]) {
         console.log('[useNostr] Claim succeeded, receiving token...', claimResult.count);
         const toastId = toast.loading(`Claiming ${claimResult.count} token${claimResult.count > 1 ? 's' : ''}...`);
         try {
-          await invoke('receive_ecash', { tokenString: claimResult.token });
+          await invoke('receive_ecash', { tokenString: claimResult.token, nostrKey: globalPrivateKey });
           lastClaimedToken = claimResult.token;
           await refreshWallet();
           toast.success(`⚡ Received ${claimResult.count} token${claimResult.count > 1 ? 's' : ''} via Lightning Address!`, { id: toastId });
           setLastClaimTimestamp(Date.now());
         } catch (err) {
+          console.error('[useNostr] Error claiming token:', err);
+          await refreshWallet();
           toast.error("Failed to claim token. Check history to retry.", { id: toastId });
           throw err;
         }
@@ -198,6 +200,7 @@ export const useNostr = () => {
           // Get the seed hex from the Rust backend
           const seedHex = await invoke<string>('get_seed_hex');
           keypair = deriveNostrKeypair(seedHex);
+          await invoke('set_default_nostr_key', { key: keypair.privateKey }).catch(console.warn);
         }
 
         privateKeyRef.current = keypair.privateKey;

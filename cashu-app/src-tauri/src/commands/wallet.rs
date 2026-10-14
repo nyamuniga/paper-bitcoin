@@ -97,6 +97,27 @@ pub async fn set_custom_nostr_key(key: Option<String>, state: State<'_, AppState
 }
 
 #[tauri::command]
+pub async fn set_default_nostr_key(key: String, state: State<'_, AppState>) -> CommandResult<bool> {
+    let _lock = state.wallet_lock.lock().await;
+    let path = state.wallet_path.clone();
+
+    let passphrase = {
+        let pass_lock = state.passphrase.lock().unwrap();
+        pass_lock
+            .clone()
+            .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
+    };
+
+    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    if w_state.default_nostr_key.as_deref() != Some(&key) {
+        w_state.default_nostr_key = Some(key);
+        w_state.save_encrypted(&path, &passphrase)?;
+    }
+
+    Ok(true)
+}
+
+#[tauri::command]
 pub async fn get_balance(state: State<'_, AppState>) -> CommandResult<u64> {
     let path = state.wallet_path.clone();
     if !path.exists() {

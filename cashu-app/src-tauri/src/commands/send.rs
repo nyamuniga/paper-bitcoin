@@ -29,6 +29,8 @@ fn select_exact_proofs(proofs: &[Proof], target_amount: u64) -> Option<Vec<Proof
 #[derive(serde::Serialize)]
 pub struct SendEcashResult {
     pub token: String,
+    pub token_v3: String,
+    pub token_v4: String,
     pub tx_id: String,
 }
 
@@ -167,43 +169,14 @@ pub async fn send_ecash(
         };
     }
 
-    // Build the CBOR Token strictly (NUT-00 V4 format)
-    use ciborium::Value;
-    use std::collections::HashMap;
+    let token_v3 = ecash_wallet::encode_token_v3(&mint_url, &final_send_proofs, Some("sat"))
+        .map_err(|e| crate::error::CommandError(format!("Failed to encode token v3: {}", e)))?;
 
-    let mut proofs_by_id: HashMap<String, Vec<&ecash_core::types::Proof>> = HashMap::new();
-    for p in &final_send_proofs {
-        proofs_by_id.entry(p.id.clone()).or_default().push(p);
-    }
+    let token_v4 = ecash_wallet::encode_token_v4(&mint_url, &final_send_proofs, Some("sat"))
+        .map_err(|e| crate::error::CommandError(format!("Failed to encode token v4: {}", e)))?;
 
-    let mut token_entries = Vec::new();
-    for (id, proofs) in proofs_by_id {
-        let proofs_cbor = proofs.into_iter().map(|p| {
-            Value::Map(vec![
-                (Value::Text("a".to_string()), Value::Integer(p.amount.into())),
-                (Value::Text("s".to_string()), Value::Text(p.secret.clone())),
-                (Value::Text("c".to_string()), Value::Bytes(hex::decode(&p.c).unwrap_or_default())),
-            ])
-        }).collect::<Vec<_>>();
-        
-        token_entries.push(Value::Map(vec![
-            (Value::Text("i".to_string()), Value::Bytes(hex::decode(&id).unwrap_or_default())),
-            (Value::Text("p".to_string()), Value::Array(proofs_cbor)),
-        ]));
-    }
-
-    let token_cbor = Value::Map(vec![
-        (Value::Text("m".to_string()), Value::Text(mint_url.clone())),
-        (Value::Text("t".to_string()), Value::Array(token_entries)),
-    ]);
-
-    use base64::Engine;
-    let mut cbor_bytes = Vec::new();
-    ciborium::into_writer(&token_cbor, &mut cbor_bytes).unwrap();
-    let encoded = format!(
-        "cashuB{}",
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&cbor_bytes)
-    );
+    // Use token_v3 (cashuA) as the primary/default token string as it is supported universally
+    let encoded = token_v3.clone();
 
     // Update transaction to Success
     let tx_id_for_success = if let Some(tx) = w_state.transactions.iter_mut().find(|t| {
@@ -247,12 +220,18 @@ pub async fn send_ecash(
 
     Ok(SendEcashResult {
         token: encoded,
+        token_v3,
+        token_v4,
         tx_id: tx_id_for_success,
     })
 }
 
 #[tauri::command]
-pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> CommandResult<u64> {
+pub async fn receive_ecash(
+    token_string: String,
+    nostr_key: Option<String>,
+    state: State<'_, AppState>,
+) -> CommandResult<u64> {
     let path = state.wallet_path.clone();
 
     let passphrase = {
@@ -265,6 +244,12 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
     let _lock = state.wallet_lock.lock().await;
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
 
+    if let Some(ref key) = nostr_key {
+        if w_state.default_nostr_key.as_ref() != Some(key) {
+            w_state.default_nostr_key = Some(key.clone());
+        }
+    }
+
     // Idempotency check: if we already successfully received this exact token, return early
     for tx in &w_state.transactions {
         if tx.status == TransactionStatus::Success {
@@ -276,179 +261,8 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
         }
     }
 
-    let mut input_proofs: Vec<Proof> = Vec::new();
-    let mut total_amount: u64 = 0;
-    let mint_url;
-
-    if token_string.starts_with("cashuA") {
-        let token_body = token_string.strip_prefix("cashuA").unwrap();
-        use base64::Engine;
-        let json_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .decode(token_body)
-            .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(token_body))
-            .or_else(|_| base64::engine::general_purpose::STANDARD.decode(token_body))
-            .map_err(|e| anyhow::anyhow!("Base64 decode error: {}", e))?;
-
-        let token_json: serde_json::Value = serde_json::from_slice(&json_bytes)
-            .map_err(|e| anyhow::anyhow!("JSON parse error: {}", e))?;
-
-        let token_array = token_json
-            .get("token")
-            .and_then(|t| t.as_array())
-            .ok_or_else(|| anyhow::anyhow!("Invalid token format: missing 'token' array"))?;
-
-        if token_array.is_empty() {
-            return Err(crate::error::CommandError(
-                "Token contains no entries".to_string(),
-            ));
-        }
-
-        let entry = &token_array[0];
-        mint_url = entry
-            .get("mint")
-            .and_then(|m| m.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Token missing mint URL"))?
-            .to_string();
-
-        let proofs_json = entry
-            .get("proofs")
-            .and_then(|p| p.as_array())
-            .ok_or_else(|| anyhow::anyhow!("Token missing proofs"))?;
-
-        for pj in proofs_json {
-            let amount = pj
-                .get("amount")
-                .and_then(|a| a.as_u64())
-                .ok_or_else(|| anyhow::anyhow!("Proof missing amount"))?;
-            let id = pj
-                .get("id")
-                .and_then(|i| i.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Proof missing id"))?
-                .to_string();
-            let secret = pj
-                .get("secret")
-                .and_then(|s| s.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Proof missing secret"))?
-                .to_string();
-            let c = pj
-                .get("C")
-                .and_then(|c| c.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Proof missing C"))?
-                .to_string();
-
-            input_proofs.push(Proof {
-                amount,
-                id,
-                secret,
-                c,
-                c_prime: None,
-                b_prime: None,
-                witness: None,
-                dleq: None,
-                derivation_index: 0,
-            });
-            total_amount += amount;
-        }
-    } else if token_string.starts_with("cashuB") {
-        let token_body = token_string.strip_prefix("cashuB").unwrap();
-        use base64::Engine;
-        let cbor_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .decode(token_body)
-            .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(token_body))
-            .or_else(|_| base64::engine::general_purpose::STANDARD.decode(token_body))
-            .map_err(|e| anyhow::anyhow!("Base64 decode error: {}", e))?;
-
-        let cbor_val: ciborium::Value = ciborium::from_reader(&cbor_bytes[..])
-            .map_err(|e| anyhow::anyhow!("CBOR parse error: {}", e))?;
-
-        let cbor_map = cbor_val
-            .as_map()
-            .ok_or_else(|| anyhow::anyhow!("CBOR token is not a map"))?;
-
-        fn get_val<'a>(
-            map: &'a Vec<(ciborium::Value, ciborium::Value)>,
-            key: &str,
-        ) -> Option<&'a ciborium::Value> {
-            map.iter()
-                .find(|(k, _)| k.as_text() == Some(key))
-                .map(|(_, v)| v)
-        }
-
-        let bytes_to_hex =
-            |v: &ciborium::Value| -> Option<String> { v.as_bytes().map(|b| hex::encode(b)) };
-
-        mint_url = get_val(cbor_map, "m")
-            .and_then(|v| v.as_text())
-            .ok_or_else(|| anyhow::anyhow!("Token missing mint URL"))?
-            .to_string();
-
-        let tokens = get_val(cbor_map, "t")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| anyhow::anyhow!("Token missing 't' array"))?;
-
-        if tokens.is_empty() {
-            return Err(crate::error::CommandError(
-                "Token contains no entries".to_string(),
-            ));
-        }
-
-        for t in tokens {
-            let t_map = t
-                .as_map()
-                .ok_or_else(|| anyhow::anyhow!("Token entry is not a map"))?;
-            let keyset_id = get_val(t_map, "i")
-                .and_then(bytes_to_hex)
-                .ok_or_else(|| anyhow::anyhow!("Token missing keyset id"))?;
-
-            let proofs = get_val(t_map, "p")
-                .and_then(|v| v.as_array())
-                .ok_or_else(|| anyhow::anyhow!("Token missing proofs"))?;
-
-            for p in proofs {
-                let p_map = p
-                    .as_map()
-                    .ok_or_else(|| anyhow::anyhow!("Proof is not a map"))?;
-
-                let amount_int = get_val(p_map, "a")
-                    .and_then(|v| v.as_integer())
-                    .ok_or_else(|| anyhow::anyhow!("Proof missing amount"))?;
-                let amount: u64 = amount_int.try_into().unwrap_or(0);
-
-                let secret = get_val(p_map, "s")
-                    .and_then(|v| bytes_to_hex(v).or_else(|| v.as_text().map(|s| s.to_string())))
-                    .ok_or_else(|| anyhow::anyhow!("Proof missing secret"))?;
-
-                let c = get_val(p_map, "c")
-                    .and_then(bytes_to_hex)
-                    .ok_or_else(|| anyhow::anyhow!("Proof missing C"))?;
-
-                input_proofs.push(Proof {
-                    amount,
-                    id: keyset_id.clone(),
-                    secret,
-                    c,
-                    c_prime: None,
-                    b_prime: None,
-                    witness: None,
-                    dleq: None,
-                    derivation_index: 0,
-                });
-                total_amount += amount;
-            }
-        }
-    } else {
-        return Err(crate::error::CommandError(
-            "Invalid token: must start with cashuA or cashuB".to_string(),
-        ));
-    }
-
-    let mint_url = ecash_wallet::state::normalize_mint_url(&mint_url);
-
-    if total_amount == 0 {
-        return Err(crate::error::CommandError(
-            "Token has zero value".to_string(),
-        ));
-    }
+    let (mint_url, input_proofs, total_amount) = ecash_wallet::decode_token_string(&token_string)
+        .map_err(|e| crate::error::CommandError(format!("Failed to parse token: {}", e)))?;
 
     // Record pending transaction before swap
     let tx_id = format!(
@@ -507,17 +321,19 @@ pub async fn receive_ecash(token_string: String, state: State<'_, AppState>) -> 
                     &mut w_state, &path, &passphrase, vec![mint_url.clone()], None
                 ).await;
 
+                let total_restored = restore_result.unwrap_or(0);
                 if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
-                    match restore_result {
-                        Ok(_) => {
-                            tx.status = TransactionStatus::Success;
-                            w_state.save_encrypted(&path, &passphrase).ok();
-                            return Ok(total_amount);
-                        }
-                        Err(restore_err) => {
-                            println!("[receive_ecash] Restore also failed: {}", restore_err);
-                            tx.status = TransactionStatus::Pending;
-                        }
+                    if total_restored > 0 {
+                        tx.status = TransactionStatus::Success;
+                        w_state.save_encrypted(&path, &passphrase).ok();
+                        return Ok(total_restored);
+                    } else {
+                        println!("[receive_ecash] Restore recovered 0 proofs");
+                        tx.status = TransactionStatus::Failed;
+                        w_state.save_encrypted(&path, &passphrase).ok();
+                        return Err(crate::error::CommandError(
+                            "Tokens are already spent and could not be recovered".to_string(),
+                        ));
                     }
                 }
                 w_state.save_encrypted(&path, &passphrase).ok();

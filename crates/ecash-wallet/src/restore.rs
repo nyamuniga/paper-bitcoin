@@ -19,8 +19,8 @@ pub async fn restore_from_mints(
     let mut total_restored = 0;
     let mut max_used_index = -1_i64;
     
-    // We scan up to 100 derivation indices. In a real wallet, we'd dynamically stop after a gap.
-    let scan_limit = 100;
+    // We scan up to max(100, derivation_index + 50) derivation indices to ensure newly minted/swapped proofs are checked.
+    let scan_limit = std::cmp::max(100_u64, state.derivation_index + 50);
     
     for raw_url in mint_urls {
         let mint_url = crate::state::normalize_mint_url(&raw_url);
