@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
+import { getGlobalNostrPrivateKey } from './useNostr';
 import { toast } from 'react-hot-toast';
 
 export const useEcash = (mintUrl?: string) => {
@@ -74,7 +75,11 @@ export const useEcash = (mintUrl?: string) => {
     isReceivingRef.current = true;
     setReceiving(true);
     try {
-      const amount = await invoke<number>('receive_ecash', { tokenString: token });
+      const nostrKey = getGlobalNostrPrivateKey();
+      const amount = await invoke<number>('receive_ecash', { 
+        tokenString: token,
+        nostrKey: nostrKey || undefined,
+      });
       await refreshWallet();
       toast.success(`Received ₿${amount.toLocaleString()} sats!`);
       return amount;
