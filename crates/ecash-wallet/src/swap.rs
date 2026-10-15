@@ -45,9 +45,17 @@ pub async fn swap_proofs(
             obj.remove("dleq");
 
             // Handle P2PK locked tokens
-            if p.secret.starts_with("[\"P2PK\"") {
-                if let Some(ref privkey_hex) = state.custom_nostr_key {
+            let is_p2pk = if let Ok(val) = serde_json::from_str::<serde_json::Value>(&p.secret) {
+                val.as_array().and_then(|a| a.get(0)).and_then(|k| k.as_str()) == Some("P2PK")
+            } else {
+                p.secret.contains("\"P2PK\"")
+            };
+
+            if is_p2pk {
+                let nostr_key = state.get_nostr_privkey();
+                if let Some(privkey_hex) = nostr_key {
                     use k256::schnorr::signature::Signer;
+                    use k256::sha2::{Sha256, Digest};
 
                     let privkey_bytes = hex::decode(privkey_hex)
                         .map_err(|e| anyhow::anyhow!("Invalid hex in nostr private key: {}", e))?;
@@ -55,7 +63,8 @@ pub async fn swap_proofs(
                     let signing_key = k256::schnorr::SigningKey::from_bytes(privkey_bytes.as_slice())
                         .map_err(|_| anyhow::anyhow!("Invalid nostr private key bytes"))?;
 
-                    let sig: k256::schnorr::Signature = signing_key.sign(p.secret.as_bytes());
+                    let msg_hash = Sha256::digest(p.secret.as_bytes());
+                    let sig: k256::schnorr::Signature = signing_key.sign(&msg_hash);
                     
                     let witness_obj = serde_json::json!({
                         "signatures": [hex::encode(sig.to_bytes())]
@@ -63,7 +72,7 @@ pub async fn swap_proofs(
                     
                     obj.insert("witness".to_string(), serde_json::Value::String(witness_obj.to_string()));
                 } else {
-                    return Err(anyhow::anyhow!("Cannot spend P2PK locked ecash: No custom Nostr key configured. Go to Settings > Nostr to configure it."));
+                    return Err(anyhow::anyhow!("Cannot spend P2PK locked ecash: No Nostr private key configured. Go to Settings > Nostr to configure it."));
                 }
             }
         }

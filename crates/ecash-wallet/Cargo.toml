@@ -26,3 +26,4 @@ argon2  = "0.5"
 futures = "0.3.32"
 k256.workspace = true
 base64.workspace = true
+ciborium = "0.2.2"

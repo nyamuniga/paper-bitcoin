@@ -23,11 +23,13 @@ pub mod mint;
 pub mod history;
 pub mod restore;
 pub mod direct;
+pub mod token;
 
 pub use state::*;
 pub use invoice::*;
 pub use mint::*;
 pub use melt::*;
+pub use token::*;
 pub use history::*;
 pub use swap::*;
 pub use client::estimate_routing_fee_from_info;
