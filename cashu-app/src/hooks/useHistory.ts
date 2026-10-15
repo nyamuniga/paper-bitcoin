@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../store/wallet';
+import { getGlobalNostrPrivateKey } from './useNostr';
 import { Transaction } from '../components/history/TransactionCard';
 
 export const useHistory = () => {
@@ -129,7 +130,11 @@ export const useHistory = () => {
   const handleRetryReceiveEcash = async (txId: string, tokenString: string) => {
     try {
       toast.loading('Retrying claim...', { id: txId });
-      await invoke('receive_ecash', { tokenString });
+      const nostrKey = getGlobalNostrPrivateKey();
+      await invoke('receive_ecash', { 
+        tokenString,
+        nostrKey: nostrKey || undefined,
+      });
       toast.success('Successfully claimed eCash!', { id: txId });
       fetchHistory();
       await refreshWallet();

@@ -55,7 +55,6 @@ pub async fn swap_proofs(
                 let nostr_key = state.get_nostr_privkey();
                 if let Some(privkey_hex) = nostr_key {
                     use k256::schnorr::signature::Signer;
-                    use k256::sha2::{Sha256, Digest};
 
                     let privkey_bytes = hex::decode(privkey_hex)
                         .map_err(|e| anyhow::anyhow!("Invalid hex in nostr private key: {}", e))?;
@@ -63,13 +62,128 @@ pub async fn swap_proofs(
                     let signing_key = k256::schnorr::SigningKey::from_bytes(privkey_bytes.as_slice())
                         .map_err(|_| anyhow::anyhow!("Invalid nostr private key bytes"))?;
 
-                    let msg_hash = Sha256::digest(p.secret.as_bytes());
-                    let sig: k256::schnorr::Signature = signing_key.sign(&msg_hash);
-                    
+                    let my_xonly = hex::encode(signing_key.verifying_key().to_bytes()).to_lowercase();
+
+                    // Parse the P2PK spending condition to inspect authorized keys and threshold
+                    let mut authorized_pks = Vec::new();
+                    let mut refund_pks = Vec::new();
+                    let mut n_sigs = 1;
+                    let mut locktime: Option<u64> = None;
+
+                    let normalize_xonly = |pk: &str| -> String {
+                        let s = pk.trim().to_lowercase();
+                        if s.len() == 66 && (s.starts_with("02") || s.starts_with("03")) {
+                            s[2..].to_string()
+                        } else {
+                            s
+                        }
+                    };
+
+                    if let Ok(sec_val) = serde_json::from_str::<serde_json::Value>(&p.secret) {
+                        if let Some(payload) = sec_val.as_array().and_then(|a| a.get(1)) {
+                            if let Some(data_pk) = payload.get("data").and_then(|d| d.as_str()) {
+                                authorized_pks.push(normalize_xonly(data_pk));
+                            }
+
+                            if let Some(tags) = payload.get("tags").and_then(|t| t.as_array()) {
+                                for tag in tags {
+                                    if let Some(tag_arr) = tag.as_array() {
+                                        if let Some(tag_name) = tag_arr.get(0).and_then(|n| n.as_str()) {
+                                            if tag_name == "pubkeys" {
+                                                for pk_val in &tag_arr[1..] {
+                                                    if let Some(pk_str) = pk_val.as_str() {
+                                                        authorized_pks.push(normalize_xonly(pk_str));
+                                                    }
+                                                }
+                                            } else if tag_name == "refund" {
+                                                for pk_val in &tag_arr[1..] {
+                                                    if let Some(pk_str) = pk_val.as_str() {
+                                                        refund_pks.push(normalize_xonly(pk_str));
+                                                    }
+                                                }
+                                            } else if tag_name == "n_sigs" {
+                                                if let Some(n_val) = tag_arr.get(1) {
+                                                    if let Some(n_int) = n_val.as_u64() {
+                                                        n_sigs = n_int as usize;
+                                                    } else if let Some(n_str) = n_val.as_str() {
+                                                        n_sigs = n_str.parse::<usize>().unwrap_or(1);
+                                                    }
+                                                }
+                                            } else if tag_name == "locktime" {
+                                                if let Some(lt_val) = tag_arr.get(1) {
+                                                    if let Some(lt_int) = lt_val.as_u64() {
+                                                        locktime = Some(lt_int);
+                                                    } else if let Some(lt_str) = lt_val.as_str() {
+                                                        locktime = lt_str.parse::<u64>().ok();
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Check if current time has passed locktime
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    let locktime_passed = locktime.map(|lt| now > lt).unwrap_or(false);
+
+                    let is_authorized = authorized_pks.contains(&my_xonly)
+                        || (locktime_passed && refund_pks.contains(&my_xonly));
+
+                    if !authorized_pks.is_empty() && !is_authorized {
+                        return Err(anyhow::anyhow!(
+                            "Cannot unlock P2PK ecash: Token is locked to public key(s) {:?}, but your wallet Nostr public key is {}",
+                            authorized_pks,
+                            my_xonly
+                        ));
+                    }
+
+                    let sig: k256::schnorr::Signature = signing_key.sign(p.secret.as_bytes());
+                    let sig_hex = hex::encode(sig.to_bytes());
+
+                    // Preserve existing signatures from witness if present, and append our signature
+                    let mut signatures = Vec::new();
+                    if let Some(ref existing_witness) = p.witness {
+                        if let Some(s) = existing_witness.as_str() {
+                            if let Ok(w_val) = serde_json::from_str::<serde_json::Value>(s) {
+                                if let Some(arr) = w_val.get("signatures").and_then(|a| a.as_array()) {
+                                    for item in arr {
+                                        if let Some(sig_str) = item.as_str() {
+                                            signatures.push(sig_str.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        } else if let Some(arr) = existing_witness.get("signatures").and_then(|a| a.as_array()) {
+                            for item in arr {
+                                if let Some(sig_str) = item.as_str() {
+                                    signatures.push(sig_str.to_string());
+                                }
+                            }
+                        }
+                    }
+
+                    if !signatures.contains(&sig_hex) {
+                        signatures.push(sig_hex);
+                    }
+
+                    if signatures.len() < n_sigs {
+                        return Err(anyhow::anyhow!(
+                            "Cannot unlock ecash: Token requires {} signatures (multisig threshold), but only {} signature(s) are available. Co-signers must sign before redeeming.",
+                            n_sigs,
+                            signatures.len()
+                        ));
+                    }
+
                     let witness_obj = serde_json::json!({
-                        "signatures": [hex::encode(sig.to_bytes())]
+                        "signatures": signatures
                     });
-                    
+
                     obj.insert("witness".to_string(), serde_json::Value::String(witness_obj.to_string()));
                 } else {
                     return Err(anyhow::anyhow!("Cannot spend P2PK locked ecash: No Nostr private key configured. Go to Settings > Nostr to configure it."));

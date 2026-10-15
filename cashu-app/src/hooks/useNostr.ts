@@ -291,7 +291,10 @@ export const useNostr = () => {
         }
 
         console.log('[useNostr claimNow] Claim succeeded, receiving token...', claimResult.count);
-        await invoke('receive_ecash', { tokenString: claimResult.token });
+        await invoke('receive_ecash', { 
+          tokenString: claimResult.token,
+          nostrKey: globalPrivateKey || undefined,
+        });
         lastClaimedToken = claimResult.token;
         await refreshWallet();
         toast.success(`⚡ Claimed ${claimResult.count} payment${claimResult.count > 1 ? 's' : ''}!`);
@@ -358,3 +361,6 @@ export const useNostr = () => {
     claimUsername,
   };
 };
+
+export const getGlobalNostrPrivateKey = () => globalPrivateKey;
+
