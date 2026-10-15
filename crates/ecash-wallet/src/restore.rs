@@ -35,7 +35,12 @@ pub async fn restore_from_mints(
             }
         };
 
-        let mut target_amounts: Vec<u64> = keyset.keys.keys().cloned().collect();
+        let mut target_amounts: Vec<u64> = keyset
+            .keys
+            .keys()
+            .filter(|&&amt| amt <= 67_108_864)
+            .cloned()
+            .collect();
         target_amounts.sort_unstable();
 
         let mut output_json = Vec::new();
@@ -52,7 +57,7 @@ pub async fn restore_from_mints(
             let b_hex = sess.b_prime_hex();
 
             // We don't know which amount this index was originally used for.
-            // So we request a restore for ALL standard amounts for this B_.
+            // So we request a restore for standard amounts for this B_.
             for &amt in &target_amounts {
                 output_json.push(serde_json::json!({
                     "amount": amt,
@@ -89,13 +94,18 @@ pub async fn restore_from_mints(
                         match client.restore_tokens(chunk.clone()).await {
                             Ok((o, s)) => return Some((o, s)),
                             Err(e) => {
+                                let err_lower = e.to_string().to_lowercase();
+                                if err_lower.contains("404") || err_lower.contains("not found") || err_lower.contains("unsupported") {
+                                    println!("Mint {} does not support /v1/restore (NUT-13)", mint_url);
+                                    return None;
+                                }
                                 retries -= 1;
                                 if retries == 0 {
                                     println!("Restore failed for chunk on {} after 3 retries: {}", mint_url, e);
                                     return None;
                                 }
                                 println!("Restore chunk failed on {}, retrying... ({})", mint_url, e);
-                                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                             }
                         }
                     }
@@ -111,6 +121,9 @@ pub async fn restore_from_mints(
         }
 
         if sig_arr.is_empty() {
+            if let Some(tx) = &progress_tx {
+                tx.send(format!("No tokens found on {}", mint_url)).ok();
+            }
             println!("No tokens found on {}", mint_url);
             continue;
         }
@@ -148,8 +161,9 @@ pub async fn restore_from_mints(
         }
 
         if restored_proofs.is_empty() {
-            // Fallback: If B_ was missing and sizes don't match, we can't reliably map.
-            // But let's assume the mint implements it reasonably.
+            if let Some(tx) = &progress_tx {
+                tx.send(format!("No tokens found on {}", mint_url)).ok();
+            }
             println!("Failed to parse signatures or no matching B_ found.");
             continue;
         }
@@ -177,11 +191,8 @@ pub async fn restore_from_mints(
             }
             println!("Restored {} unspent proofs from {}", unspent.len(), mint_url);
             state.proofs.entry(mint_url.clone()).or_default().extend(unspent);
-            if max_used_index >= 0 {
-                state.derivation_index = (max_used_index + 1) as u64;
-                if !state.mints.contains(&mint_url) {
-                    state.mints.push(mint_url.clone());
-                }
+            if !state.mints.contains(&mint_url) {
+                state.mints.push(mint_url.clone());
             }
         } else {
             if let Some(tx) = &progress_tx {
@@ -199,19 +210,35 @@ pub async fn restore_from_mints(
     Ok(total_restored)
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CleanWalletResult {
+    pub removed_sats: u64,
+    pub restored_sats: u64,
+    pub derivation_index: u64,
+    pub cleaned_txs: usize,
+}
+
 /// Scans all proofs currently in the wallet and asks the mint for their state.
 /// Removes any proofs that the mint reports as "SPENT".
+/// Synchronizes and advances the derivation index to eliminate any output collisions.
 pub async fn clean_wallet_proofs(
     state: &mut WalletState,
     wallet_path: &PathBuf,
     passphrase: &str,
-) -> Result<u64> {
+    progress_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+) -> Result<CleanWalletResult> {
     let mut total_removed = 0;
     
-    // We need to iterate over all mints and their proofs
+    // 1. We need to iterate over all mints and their proofs to remove SPENT proofs
+    if let Some(tx) = &progress_tx {
+        tx.send("Checking wallet proof states with mints...".to_string()).ok();
+    }
     for (mint_url, proofs) in state.proofs.clone().into_iter() {
         if proofs.is_empty() { continue; }
         
+        if let Some(tx) = &progress_tx {
+            tx.send(format!("Checking {} local proof(s) on {}", proofs.len(), mint_url)).ok();
+        }
         let client = MintClient::new(&mint_url);
         
         // Collect Ys
@@ -243,24 +270,75 @@ pub async fn clean_wallet_proofs(
         
         // Remove spent proofs from state
         if !spent_secrets.is_empty() {
+            let mut removed_for_mint = 0;
             if let Some(mint_proofs) = state.proofs.get_mut(&mint_url) {
                 mint_proofs.retain(|p| {
                     if spent_secrets.contains(&p.secret) {
                         total_removed += p.amount;
+                        removed_for_mint += p.amount;
                         false
                     } else {
                         true
                     }
                 });
             }
+            if let Some(tx) = &progress_tx {
+                tx.send(format!("Removed {} spent proofs ({} sats) on {}", spent_secrets.len(), removed_for_mint, mint_url)).ok();
+            }
         }
     }
-    
-    // Run restore_from_mints to patch derivation_index and recover any missing unspent proofs
-    let mint_urls = state.mints.clone();
-    let _ = restore_from_mints(state, wallet_path, passphrase, mint_urls, None).await;
 
-    // Deduplicate proofs (since restore_from_mints might have added ones we already had)
+    // 2. Clean up stuck Pending Send transactions where swap failed or aborted
+    let mut cleaned_txs = 0;
+    for tx in state.transactions.iter_mut() {
+        if tx.status == ecash_core::types::TransactionStatus::Pending {
+            match &tx.tx_type {
+                ecash_core::types::TransactionType::Send(send_data) => {
+                    // If token_string is empty, the swap never completed
+                    if send_data.token_string.is_empty() {
+                        tx.status = ecash_core::types::TransactionStatus::Failed;
+                        cleaned_txs += 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if cleaned_txs > 0 {
+        if let Some(tx) = &progress_tx {
+            tx.send(format!("Cleared {} stuck pending send transaction(s)", cleaned_txs)).ok();
+        }
+    }
+
+    // 3. Find the maximum derivation_index across all existing proofs in the wallet
+    let max_proof_idx = state
+        .proofs
+        .values()
+        .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
+        .max()
+        .unwrap_or(0);
+    
+    if max_proof_idx > 0 && state.derivation_index <= max_proof_idx {
+        state.derivation_index = max_proof_idx + 1;
+    }
+    
+    // 4. Run restore_from_mints to patch derivation_index and recover any missing unspent proofs
+    let mint_urls = state.mints.clone();
+    if let Some(tx) = &progress_tx {
+        tx.send(format!("Scanning {} known mint(s) to recover tokens...", mint_urls.len())).ok();
+    }
+    let total_restored = restore_from_mints(state, wallet_path, passphrase, mint_urls, progress_tx.clone()).await.unwrap_or(0);
+
+    // 5. Advance derivation index with a safety buffer (+25)
+    // This leaps past any previously signed outputs at or near the current counter,
+    // ensuring subsequent transactions will NEVER collide with "outputs already signed".
+    let base_idx = std::cmp::max(state.derivation_index, max_proof_idx + 1);
+    state.derivation_index = base_idx + 25;
+    if let Some(tx) = &progress_tx {
+        tx.send(format!("Derivation index advanced to {} (+25 safety buffer)", state.derivation_index)).ok();
+    }
+
+    // 6. Deduplicate proofs (since restore_from_mints might have added ones we already had)
     for (_, proofs) in state.proofs.iter_mut() {
         let mut seen = std::collections::HashSet::new();
         proofs.retain(|p| {
@@ -273,8 +351,17 @@ pub async fn clean_wallet_proofs(
         });
     }
     
-    // Save to disk with the fixed derivation index and clean proofs
+    // 7. Save to disk with the fixed derivation index and clean proofs
     state.save_encrypted(wallet_path, passphrase)?;
     
-    Ok(total_removed)
+    if let Some(tx) = &progress_tx {
+        tx.send(format!("Wallet cleaned successfully! (+{} sats restored, -{} sats spent purged)", total_restored, total_removed)).ok();
+    }
+
+    Ok(CleanWalletResult {
+        removed_sats: total_removed,
+        restored_sats: total_restored,
+        derivation_index: state.derivation_index,
+        cleaned_txs,
+    })
 }

@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 import { useEcash } from '../../hooks/useEcash';
-import QRCode from 'react-qr-code';
+import { SafeQRCode } from '../shared/SafeQRCode';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
 import { useUrDecoder } from '../../hooks/useUrDecoder';
@@ -345,8 +345,8 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                       </div>
                     ) : (
                       <>
-                        <div className="bg-white p-4 rounded-xl shadow-lg relative">
-                          <QRCode value={currentFrame || token} size={200} />
+                        <div className="bg-white p-4 rounded-xl shadow-lg relative min-w-[232px] min-h-[232px] flex items-center justify-center">
+                          <SafeQRCode value={currentFrame || (token && token.length < 1500 ? token : '')} size={200} />
                           {isAnimated && (
                             <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-label-caps">
                               {currentFrameIndex + 1}/{totalFrames}
