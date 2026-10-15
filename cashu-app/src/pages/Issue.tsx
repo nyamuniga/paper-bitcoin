@@ -23,6 +23,7 @@ export const Issue = () => {
     setFundMethod,
     loading,
     invoicePayload,
+    cancelInvoice,
     issuedNote,
     error,
     setError,
@@ -59,6 +60,7 @@ export const Issue = () => {
         error={error}
         onError={setError}
         debugLogs={debugLogs}
+        onCancel={cancelInvoice}
       />
     );
   }

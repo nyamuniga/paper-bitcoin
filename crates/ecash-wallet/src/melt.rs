@@ -11,17 +11,10 @@ use crate::client::{MintClient, KeysetInfo};
 /// Generate standard blank output denominations to receive change.
 fn generate_change_denoms(max_change: u64) -> Vec<u64> {
     if max_change == 0 {
-        return Vec::new();
+        Vec::new()
+    } else {
+        ecash_core::types::split_into_powers_of_2(max_change)
     }
-    let mut denoms = Vec::new();
-    let mut current = 1;
-    let mut sum = 0;
-    while sum < max_change {
-        denoms.push(current);
-        sum += current;
-        current *= 2;
-    }
-    denoms
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -274,10 +267,6 @@ async fn redeem_note_mpp(
     let all_paid = results.iter().all(|r| matches!(r, Ok((true, _, _))));
 
     if !all_paid {
-        // Refund ALL proofs on any failure (atomic)
-        for req in &melt_requests {
-            state.proofs.entry(req.mint.clone()).or_default().extend(req.proofs.clone());
-        }
         if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == redeem_tx_id) {
             tx.status = TransactionStatus::Failed;
         }
@@ -292,7 +281,13 @@ async fn redeem_note_mpp(
     // ── Step 7: Process change from all mints ──────────────────────────────
     let mut all_change_proofs = Vec::new();
     for (req, res) in melt_requests.into_iter().zip(results.into_iter()) {
-        let (_paid, _preimage, change_sigs) = res?;
+        let (_paid, _preimage, change_sigs) = match res {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("Mint {} melt leg error: {}", req.mint, e);
+                continue;
+            }
+        };
         let client = MintClient::new(&req.mint);
         let mut keyset_cache = std::collections::HashMap::new();
         keyset_cache.insert(req.keyset.id.clone(), req.keyset.clone());
@@ -362,13 +357,8 @@ async fn redeem_note_legacy(
     let hub_client = MintClient::new(hub_mint);
     let hub_keyset = hub_client.fetch_keyset().await?;
 
-    let qv: serde_json::Value = hub_client.http.post(format!("{}/v1/melt/quote/bolt11", hub_client.url))
-        .json(&serde_json::json!({ "request": external_invoice, "unit": "sat" })).send().await?.json().await?;
-    if let Some(err) = qv.get("error") { return Err(anyhow!("Melt quote error: {}", err)); }
-    if let Some(err) = qv.get("detail") { return Err(anyhow!("Melt quote error (detail): {}", err)); }
-    let required_amt = qv["amount"].as_u64().unwrap_or(0);
-    let fee_reserve = qv["fee_reserve"].as_u64().unwrap_or(0);
-    let total_required = required_amt + fee_reserve;
+    let (quote_id, fee_reserve, total_required) = hub_client.request_melt_quote(external_invoice).await?;
+    let required_amt = total_required.saturating_sub(fee_reserve);
     tracing::info!("Legacy flow: invoice requires {} sats ({} + {} fee reserve)", total_required, required_amt, fee_reserve);
 
     let mut deriv = TokenDerivation::from_hex(&state.seed_hex)?;
@@ -472,36 +462,100 @@ async fn redeem_note_legacy(
                     return Err::<_, anyhow::Error>(anyhow!("Failed to melt child mint to Hub"));
                 }
 
-                // Process change from child mint
+                // Process change from child mint defensively
                 let mut reclaimed_proofs = Vec::new();
                 let mut change_sessions = change_sessions;
                 for sig in change_sigs.iter() {
                     let amount = sig["amount"].as_u64().unwrap_or(0);
                     if amount == 0 { continue; }
                     let sig_id = sig["id"].as_str().unwrap_or(&entry_keyset_clone.id).to_string();
-                    let keyset = entry_client.fetch_keyset_by_id(&sig_id).await?;
-                    let c_prime = point_from_hex(sig["C_"].as_str().unwrap())?;
-                    let mint_pk = point_from_hex(keyset.keys.get(&amount).unwrap())?;
+                    let keyset = match entry_client.fetch_keyset_by_id(&sig_id).await {
+                        Ok(ks) => ks,
+                        Err(e) => {
+                            tracing::warn!("Failed to fetch keyset {} for child change sig: {}", sig_id, e);
+                            continue;
+                        }
+                    };
+                    let c_prime_str = match sig["C_"].as_str() {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    let c_prime = match point_from_hex(c_prime_str) {
+                        Ok(c) => c,
+                        Err(_) => continue,
+                    };
+                    let mint_pk_str = match keyset.keys.get(&amount) {
+                        Some(pk) => pk,
+                        None => continue,
+                    };
+                    let mint_pk = match point_from_hex(mint_pk_str) {
+                        Ok(pk) => pk,
+                        Err(_) => continue,
+                    };
                     let dleq = parse_dleq(sig);
-                    let (_, sess, index) = match_and_remove_session(&mut change_sessions, amount, &mint_pk, &c_prime, dleq.as_ref())?;
+                    let (_, sess, index) = match match_and_remove_session(&mut change_sessions, amount, &mint_pk, &c_prime, dleq.as_ref()) {
+                        Ok(s) => s,
+                        Err(_) => continue,
+                    };
                     let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq);
                     proof.derivation_index = index;
                     reclaimed_proofs.push(proof);
                 }
 
-                // Now mint tokens on the Hub using the mint quote
-                let hub_sigs = hub_client.mint_tokens(&qid_clone, hub_change_outputs).await?;
+                // Now mint tokens on the Hub using the mint quote (retry with backoff if settlement is processing)
+                let mut hub_sigs = None;
+                for _ in 0..6 {
+                    match hub_client.mint_tokens(&qid_clone, hub_change_outputs.clone()).await {
+                        Ok(sigs) => {
+                            hub_sigs = Some(sigs);
+                            break;
+                        }
+                        Err(e) => {
+                            let err_msg = e.to_string();
+                            if err_msg.contains("not paid") || err_msg.contains("UNPAID") || err_msg.contains("pending") {
+                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            } else {
+                                return Err(e);
+                            }
+                        }
+                    }
+                }
+                let hub_sigs = hub_sigs.ok_or_else(|| anyhow!("Hub mint failed to issue proofs for quote {}", qid_clone))?;
+
                 let mut new_hub_proofs = Vec::new();
                 let mut hub_sessions = hub_change_sessions;
                 for sig in hub_sigs.iter() {
                     let amount = sig["amount"].as_u64().unwrap_or(0);
                     if amount == 0 { continue; }
                     let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset_clone.id).to_string();
-                    let keyset = hub_client.fetch_keyset_by_id(&sig_id).await?;
-                    let c_prime = point_from_hex(sig["C_"].as_str().unwrap())?;
-                    let mint_pk = point_from_hex(keyset.keys.get(&amount).unwrap())?;
+                    let keyset = match hub_client.fetch_keyset_by_id(&sig_id).await {
+                        Ok(ks) => ks,
+                        Err(e) => {
+                            tracing::warn!("Failed to fetch keyset {} for hub minted proof: {}", sig_id, e);
+                            continue;
+                        }
+                    };
+                    let c_prime_str = match sig["C_"].as_str() {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    let c_prime = match point_from_hex(c_prime_str) {
+                        Ok(c) => c,
+                        Err(_) => continue,
+                    };
+                    let mint_pk_str = match keyset.keys.get(&amount) {
+                        Some(pk) => pk,
+                        None => continue,
+                    };
+                    let mint_pk = match point_from_hex(mint_pk_str) {
+                        Ok(pk) => pk,
+                        Err(_) => continue,
+                    };
                     let dleq = parse_dleq(sig);
-                    let (_, sess, index) = match_and_remove_session(&mut hub_sessions, amount, &mint_pk, &c_prime, dleq.as_ref())?;
+                    let (_, sess, index) = match match_and_remove_session(&mut hub_sessions, amount, &mint_pk, &c_prime, dleq.as_ref()) {
+                        Ok(s) => s,
+                        Err(_) => continue,
+                    };
                     let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq);
                     proof.derivation_index = index;
                     new_hub_proofs.push(proof);
@@ -542,12 +596,37 @@ async fn redeem_note_legacy(
     tracing::info!("Consolidated Hub proofs: {} sats", total_hub_sats);
 
     if total_hub_sats < total_required {
-        return Err(anyhow!("Insufficient consolidated funds: have {}, need {}", total_hub_sats, total_required));
+        return Err(anyhow!("Insufficient funds on note: have {} sats, need {} sats ({} + {} fee reserve)", total_hub_sats, total_required, required_amt, fee_reserve));
     }
 
-    // Prepare change outputs for the final melt (ask for max possible change, assuming fee = 0)
-    let max_change = total_hub_sats.saturating_sub(required_amt);
-    let change_denoms = generate_change_denoms(max_change);
+    // If hub_proofs total exceeds total_required, swap first so the excess change
+    // is safely deposited directly into the user's wallet via NUT-03 swap!
+    // That way, we only pass EXACTLY total_required to the melt endpoint.
+    let melt_proofs = if total_hub_sats > total_required {
+        let change_amount = total_hub_sats - total_required;
+        let desired_amounts = ecash_core::types::split_into_powers_of_2(total_required);
+        let change_amounts = ecash_core::types::split_into_powers_of_2(change_amount);
+
+        crate::swap::swap_proofs(
+            state,
+            wallet_path,
+            passphrase,
+            hub_mint,
+            hub_proofs,
+            desired_amounts,
+            change_amounts,
+            None,
+        ).await?
+    } else {
+        hub_proofs
+    };
+
+    // Prepare change outputs for the final melt to receive fee reserve returns (NUT-08)
+    let change_denoms = if fee_reserve > 0 {
+        ecash_core::types::split_into_powers_of_2(fee_reserve)
+    } else {
+        Vec::new()
+    };
     let mut sessions = Vec::new();
     let mut outputs = Vec::new();
     for &d in &change_denoms {
@@ -571,8 +650,8 @@ async fn redeem_note_legacy(
     let pending_tx = Transaction {
         id: tx_id.clone(),
         tx_type: TransactionType::Melt(MeltTransactionData {
-            quote_id: "".to_string(), // we'll get it from the melt call
-            proofs: hub_proofs.clone(),
+            quote_id: quote_id.clone(),
+            proofs: melt_proofs.clone(),
         }),
         amount: required_amt,
         fee: fee_reserve,
@@ -583,11 +662,8 @@ async fn redeem_note_legacy(
     state.transactions.push(pending_tx);
     state.save_encrypted(wallet_path, passphrase).ok();
 
-    // Now get a melt quote for the final invoice
-    let (final_quote_id, _final_fee_reserve, _) = hub_client.request_melt_quote(external_invoice).await?;
-    
     // Send the final melt
-    let melt_result = hub_client.melt_tokens(&hub_proofs, external_invoice, Some(&final_quote_id), Some(outputs)).await;
+    let melt_result = hub_client.melt_tokens(&melt_proofs, external_invoice, Some(&quote_id), Some(outputs)).await;
 
     let (paid, _preimage, change_sigs) = match melt_result {
         Ok(res) => res,
@@ -600,8 +676,8 @@ async fn redeem_note_legacy(
                 state.save_encrypted(wallet_path, passphrase).ok();
                 return Err(anyhow!("Mint rejected the proofs as invalid/corrupt. The transaction was marked as FailedMintError."));
             }
-            // Re-insert proofs on other errors
-            state.proofs.entry(hub_mint.clone()).or_default().extend(hub_proofs);
+            // Re-insert melt_proofs on other errors so funds aren't lost
+            state.proofs.entry(hub_mint.clone()).or_default().extend(melt_proofs);
             if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
                 tx.status = TransactionStatus::Failed;
             }
@@ -610,7 +686,7 @@ async fn redeem_note_legacy(
         }
     };
 
-    // Unblind final change
+    // Unblind final change defensively
     let mut keyset_cache: std::collections::HashMap<String, KeysetInfo> = std::collections::HashMap::new();
     keyset_cache.insert(hub_keyset.id.clone(), hub_keyset.clone());
 
@@ -623,15 +699,42 @@ async fn redeem_note_legacy(
         let keyset = if let Some(ks) = keyset_cache.get(&sig_id) {
             ks.clone()
         } else {
-            let ks = hub_client.fetch_keyset_by_id(&sig_id).await?;
-            keyset_cache.insert(sig_id.clone(), ks.clone());
-            ks
+            match hub_client.fetch_keyset_by_id(&sig_id).await {
+                Ok(ks) => {
+                    keyset_cache.insert(sig_id.clone(), ks.clone());
+                    ks
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to fetch keyset {} for change sig: {}", sig_id, e);
+                    continue;
+                }
+            }
         };
 
-        let c_prime = point_from_hex(sig["C_"].as_str().unwrap())?;
-        let mint_pk = point_from_hex(keyset.keys.get(&amount).unwrap())?;
+        let c_prime_str = match sig["C_"].as_str() {
+            Some(c) => c,
+            None => continue,
+        };
+        let c_prime = match point_from_hex(c_prime_str) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let mint_pk_str = match keyset.keys.get(&amount) {
+            Some(pk) => pk,
+            None => continue,
+        };
+        let mint_pk = match point_from_hex(mint_pk_str) {
+            Ok(pk) => pk,
+            Err(_) => continue,
+        };
         let dleq = parse_dleq(sig);
-        let (_, sess, index) = match_and_remove_session(&mut sessions, amount, &mint_pk, &c_prime, dleq.as_ref())?;
+        let (_, sess, index) = match match_and_remove_session(&mut sessions, amount, &mint_pk, &c_prime, dleq.as_ref()) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("Failed to match session for change signature: {}", e);
+                continue;
+            }
+        };
         let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq);
         proof.derivation_index = index;
         new_proofs.push(proof);
@@ -639,26 +742,22 @@ async fn redeem_note_legacy(
 
     // Update wallet state
     if paid {
-        // Remove consumed proofs (they are already removed from the wallet)
         if !new_proofs.is_empty() {
             state.proofs.entry(hub_mint.clone()).or_default().extend(new_proofs);
         }
         if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
             tx.status = TransactionStatus::Success;
         }
+        if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == redeem_tx_id) {
+            tx.status = TransactionStatus::Success;
+        }
     } else {
-        // Refund proofs
-        state.proofs.entry(hub_mint.clone()).or_default().extend(hub_proofs);
+        // Refund proofs to wallet
+        state.proofs.entry(hub_mint.clone()).or_default().extend(melt_proofs);
         if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
             tx.status = TransactionStatus::Failed;
         }
-    }
-
-    // Mark the redeem transaction as success/failure
-    if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == redeem_tx_id) {
-        if paid {
-            tx.status = TransactionStatus::Success;
-        } else {
+        if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == redeem_tx_id) {
             tx.status = TransactionStatus::Failed;
         }
     }
@@ -666,7 +765,7 @@ async fn redeem_note_legacy(
     state.save_encrypted(wallet_path, passphrase).ok();
 
     if !paid {
-        return Err(anyhow!("Lightning Network payment failed. Your funds have been refunded."));
+        return Err(anyhow!("Lightning Network payment failed. Your funds have been refunded to your wallet."));
     }
 
     Ok(required_amt)
@@ -709,21 +808,23 @@ pub async fn redeem_note(
         return Err(anyhow!("Empty token"));
     }
 
-    // Check if ALL mints support NUT-15
-    let mut all_support_nut15 = true;
-    for entry in &token.token {
-        let client = MintClient::new(&entry.mint);
-        match client.supports_nut15().await {
-            Ok(true) => continue,
-            Ok(false) => {
-                tracing::warn!("Mint {} does NOT support NUT-15. Falling back to legacy consolidation.", entry.mint);
-                all_support_nut15 = false;
-                break;
-            }
-            Err(e) => {
-                tracing::warn!("Failed to check NUT-15 support for {}: {}. Falling back to legacy.", entry.mint, e);
-                all_support_nut15 = false;
-                break;
+    // Only consider NUT-15 MPP if there are MULTIPLE mints and all mints support it
+    let mut all_support_nut15 = token.token.len() > 1;
+    if all_support_nut15 {
+        for entry in &token.token {
+            let client = MintClient::new(&entry.mint);
+            match client.supports_nut15().await {
+                Ok(true) => continue,
+                Ok(false) => {
+                    tracing::warn!("Mint {} does NOT support NUT-15. Falling back to consolidation.", entry.mint);
+                    all_support_nut15 = false;
+                    break;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to check NUT-15 support for {}: {}. Falling back to consolidation.", entry.mint, e);
+                    all_support_nut15 = false;
+                    break;
+                }
             }
         }
     }
@@ -732,16 +833,21 @@ pub async fn redeem_note(
         tracing::info!("All mints support NUT-15. Using Multi-Path Payment (MPP).");
         redeem_note_mpp(state, wallet_path, passphrase, &token, external_invoice, &redeem_tx_id).await
     } else {
-        tracing::info!("Using legacy consolidation flow (hub + child melts).");
+        tracing::info!("Using direct / legacy consolidation flow.");
         redeem_note_legacy(state, wallet_path, passphrase, &token, external_invoice, &redeem_tx_id).await
     };
 
-    // If result is Err, we need to mark the transaction as Failed if not already done.
+    // If result is Err, mark the transaction as Failed if not already done.
     if result.is_err() {
         if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == redeem_tx_id) {
             if tx.status != TransactionStatus::Failed {
                 tx.status = TransactionStatus::Failed;
             }
+        }
+        state.save_encrypted(wallet_path, passphrase).ok();
+    } else {
+        if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == redeem_tx_id) {
+            tx.status = TransactionStatus::Success;
         }
         state.save_encrypted(wallet_path, passphrase).ok();
     }
@@ -801,19 +907,78 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let hub_client = MintClient::new(&hub_mint);
     let hub_keyset = hub_client.fetch_keyset().await?;
 
-    let hub_proofs = state.proofs.get(&hub_mint)
+    let total_needed = required_amt + fee_reserve;
+
+    // 1. Coin selection: Only select proofs needed to cover required_amt + fee_reserve
+    let all_mint_proofs = state.proofs.get(&hub_mint)
         .ok_or_else(|| anyhow!("No proofs for mint {}", hub_mint))?
         .clone();
 
-    if hub_proofs.is_empty() {
+    if all_mint_proofs.is_empty() {
         return Err(anyhow!("No proofs found for mint {}", hub_mint));
+    }
+
+    let mut sorted_proofs = all_mint_proofs.clone();
+    sorted_proofs.sort_by_key(|p| p.amount);
+
+    let mut selected_for_melt = Vec::new();
+    let mut selected_total = 0;
+    for p in &sorted_proofs {
+        selected_for_melt.push(p.clone());
+        selected_total += p.amount;
+        if selected_total >= total_needed {
+            break;
+        }
+    }
+
+    if selected_total < total_needed {
+        return Err(anyhow!("Insufficient balance on {}. Need {} sats, have {} sats", hub_mint, total_needed, selected_total));
+    }
+
+    // 2. If selected proofs exceed total_needed, swap first to exact amounts and change.
+    // This keeps the user's change safely in state.proofs, completely avoiding reliance
+    // on NUT-08 melt change for the entire surplus (as many mints do not support NUT-08).
+    let melt_proofs = if selected_total > total_needed {
+        let change_amount = selected_total - total_needed;
+        let desired_amounts = ecash_core::types::split_into_powers_of_2(total_needed);
+        let change_amounts = ecash_core::types::split_into_powers_of_2(change_amount);
+
+        crate::swap::swap_proofs(
+            state,
+            wallet_path,
+            passphrase,
+            &hub_mint,
+            selected_for_melt,
+            desired_amounts,
+            change_amounts,
+            None,
+        ).await?
+    } else {
+        // Exact match: only remove selected_for_melt from wallet state
+        let selected_secrets: std::collections::HashSet<String> =
+            selected_for_melt.iter().map(|p| p.secret.clone()).collect();
+        if let Some(mint_proofs) = state.proofs.get_mut(&hub_mint) {
+            mint_proofs.retain(|p| !selected_secrets.contains(&p.secret));
+        }
+        state.save_encrypted(wallet_path, passphrase)?;
+        selected_for_melt
+    };
+
+    let max_proof_idx = state
+        .proofs
+        .values()
+        .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
+        .max()
+        .unwrap_or(0);
+    if max_proof_idx > 0 && state.derivation_index <= max_proof_idx {
+        state.derivation_index = max_proof_idx + 1;
     }
 
     let mut deriv = TokenDerivation::from_hex(&state.seed_hex)?;
     deriv.index = state.derivation_index;
 
-    let total_hub_sats: u64 = hub_proofs.iter().map(|p| p.amount).sum();
-    let max_change = total_hub_sats.saturating_sub(required_amt);
+    // 3. Prepare change outputs strictly for unused fee_reserve (if any)
+    let max_change = fee_reserve;
     let change_denoms = generate_change_denoms(max_change);
 
     let mut sessions = Vec::new();
@@ -829,14 +994,12 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     state.derivation_index = deriv.index;
     state.save_encrypted(wallet_path, passphrase)?;
 
-    let _ = state.proofs.remove(&hub_mint);
-
     let tx_id = format!("tx_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
     let pending_tx = Transaction {
         id: tx_id.clone(),
         tx_type: TransactionType::Melt(MeltTransactionData {
             quote_id: quote_id.clone(),
-            proofs: hub_proofs.clone(),
+            proofs: melt_proofs.clone(),
         }),
         amount: required_amt,
         fee: fee_reserve,
@@ -847,16 +1010,30 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     state.transactions.push(pending_tx);
     state.save_encrypted(wallet_path, passphrase).ok();
 
-    let melt_result = hub_client.melt_tokens(&hub_proofs, invoice, Some(&quote_id), Some(outputs)).await;
+    let melt_result = hub_client.melt_tokens(
+        &melt_proofs,
+        invoice,
+        Some(&quote_id),
+        if outputs.is_empty() { None } else { Some(outputs) },
+    ).await;
 
     let (paid, preimage, change_sigs) = match melt_result {
         Ok(res) => res,
         Err(e) => {
-            let ys: Vec<String> = hub_proofs.iter().map(|p| {
+            let err_lower = e.to_string().to_lowercase();
+            if err_lower.contains("already signed")
+                || err_lower.contains("already been signed")
+                || err_lower.contains("outputs already")
+            {
+                tracing::warn!("Melt change collision detected. Advancing derivation index.");
+                state.derivation_index += 25;
+            }
+
+            let ys: Vec<String> = melt_proofs.iter().map(|p| {
                 ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()))
             }).collect();
             
-            let mut valid_proofs = hub_proofs.clone();
+            let mut valid_proofs = melt_proofs.clone();
             if let Ok(states) = hub_client.check_state(&ys).await {
                 valid_proofs.retain(|p| {
                     let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()));
@@ -868,20 +1045,9 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
                 });
             }
 
-            if valid_proofs.len() < hub_proofs.len() {
-                let removed = hub_proofs.len() - valid_proofs.len();
-                tracing::warn!("Removed {} spent or invalid proofs from wallet.", removed);
-                if !valid_proofs.is_empty() {
-                    state.proofs.entry(hub_mint.clone()).or_default().extend(valid_proofs);
-                }
-                if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
-                    tx.status = TransactionStatus::Failed;
-                }
-                state.save_encrypted(wallet_path, passphrase).ok();
-                return Err(anyhow!("Payment failed: {} proofs were spent or invalid and have been removed. Your balance has been updated. Please try again.", removed));
+            if !valid_proofs.is_empty() {
+                state.proofs.entry(hub_mint.clone()).or_default().extend(valid_proofs);
             }
-
-            state.proofs.entry(hub_mint.clone()).or_default().extend(hub_proofs);
             if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
                 tx.status = TransactionStatus::Failed;
             }
@@ -895,31 +1061,29 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
 
     let mut new_proofs = Vec::new();
     for sig in change_sigs.iter() {
-        let amount = sig["amount"].as_u64().ok_or_else(|| anyhow!("Missing amount in signature"))?;
-        let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id).to_string();
+        if let (Some(amount), Some(c_prime_str)) = (sig["amount"].as_u64(), sig["C_"].as_str()) {
+            let sig_id = sig["id"].as_str().unwrap_or(&hub_keyset.id).to_string();
 
-        let keyset = if let Some(ks) = keyset_cache.get(&sig_id) {
-            ks.clone()
-        } else {
-            let ks = hub_client.fetch_keyset_by_id(&sig_id).await?;
-            keyset_cache.insert(sig_id.clone(), ks.clone());
-            ks
-        };
+            let keyset = if let Some(ks) = keyset_cache.get(&sig_id) {
+                ks.clone()
+            } else if let Ok(ks) = hub_client.fetch_keyset_by_id(&sig_id).await {
+                keyset_cache.insert(sig_id.clone(), ks.clone());
+                ks
+            } else {
+                continue;
+            };
 
-        let c_prime_str = sig["C_"].as_str().ok_or_else(|| anyhow!("Missing C_ in signature"))?;
-        let c_prime = point_from_hex(c_prime_str).context("Invalid C_")?;
-        let mint_pk_str = keyset.keys.get(&amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", amount))?;
-        let mint_pk = point_from_hex(mint_pk_str).context("Invalid mint pk")?;
-        let dleq = parse_dleq(sig);
-
-        let (_, sess, index) = match_and_remove_session(&mut sessions, amount, &mint_pk, &c_prime, dleq.as_ref())?;
-
-        let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq);
-        proof.derivation_index = index;
-        if !verify_proof_offline(&proof, &keyset.keys) {
-            tracing::warn!("DLEQ verification FAILED for amount {} (keyset {}). Storing anyway.", amount, sig_id);
+            if let (Ok(c_prime), Some(mint_pk_str)) = (point_from_hex(c_prime_str), keyset.keys.get(&amount)) {
+                if let Ok(mint_pk) = point_from_hex(mint_pk_str) {
+                    let dleq = parse_dleq(sig);
+                    if let Ok((_, sess, index)) = match_and_remove_session(&mut sessions, amount, &mint_pk, &c_prime, dleq.as_ref()) {
+                        let mut proof = sess.unblind(&c_prime, &mint_pk, amount, &sig_id, dleq);
+                        proof.derivation_index = index;
+                        new_proofs.push(proof);
+                    }
+                }
+            }
         }
-        new_proofs.push(proof);
     }
 
     if paid {
@@ -927,7 +1091,7 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
             state.proofs.entry(hub_mint.clone()).or_default().extend(new_proofs);
         }
     } else {
-        state.proofs.entry(hub_mint.clone()).or_default().extend(hub_proofs);
+        state.proofs.entry(hub_mint.clone()).or_default().extend(melt_proofs);
     }
 
     if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {

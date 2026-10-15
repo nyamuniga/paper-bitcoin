@@ -106,6 +106,12 @@ export const useIssue = () => {
     setPollTrigger(p => p + 1);
   };
 
+  const cancelInvoice = () => {
+    setInvoicePayload(null);
+    setError('');
+    setDebugLogs([]);
+  };
+
   return {
     sats,
     setSats,
@@ -117,6 +123,8 @@ export const useIssue = () => {
     setFundMethod,
     loading,
     invoicePayload,
+    setInvoicePayload,
+    cancelInvoice,
     issuedNote,
     error,
     setError,
