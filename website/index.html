@@ -1969,8 +1969,8 @@
         </div>
     </footer>
 
-    <!-- Config + Dynamic Version Resolution -->
-    <script src="config.js"></script>
+    <!-- Config + Dynamic Version Resolution (cache-busted with version tag) -->
+    <script src="config.js?v=0.1.7"></script>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             if (window.ENV) {
