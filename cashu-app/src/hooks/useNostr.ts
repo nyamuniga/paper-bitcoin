@@ -358,3 +358,6 @@ export const useNostr = () => {
     claimUsername,
   };
 };
+
+export const getGlobalNostrPrivateKey = () => globalPrivateKey;
+

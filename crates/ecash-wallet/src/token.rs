@@ -152,6 +152,8 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
                 .ok_or_else(|| anyhow!("Proof missing C"))?
                 .to_string();
 
+            let witness = pj.get("witness").cloned();
+
             input_proofs.push(Proof {
                 amount,
                 id,
@@ -159,7 +161,7 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
                 c,
                 c_prime: None,
                 b_prime: None,
-                witness: None,
+                witness,
                 dleq: None,
                 derivation_index: 0,
             });
@@ -235,6 +237,14 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
                     .and_then(bytes_to_hex)
                     .ok_or_else(|| anyhow!("Proof missing C"))?;
 
+                let witness = get_val(p_map, "w").and_then(|w| {
+                    if let Some(s) = w.as_text() {
+                        Some(serde_json::Value::String(s.to_string()))
+                    } else {
+                        None
+                    }
+                });
+
                 input_proofs.push(Proof {
                     amount,
                     id: keyset_id.clone(),
@@ -242,7 +252,7 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
                     c,
                     c_prime: None,
                     b_prime: None,
-                    witness: None,
+                    witness,
                     dleq: None,
                     derivation_index: 0,
                 });
@@ -291,6 +301,30 @@ mod tests {
         let (mint4, _p4, amt4) = decode_token_string(&v4).unwrap();
         assert_eq!(mint4, "https://mint.example.com");
         assert_eq!(amt4, 21);
+    }
+
+    #[test]
+    fn test_bip340_schnorr_verification() {
+        use k256::schnorr::{SigningKey, VerifyingKey};
+        use k256::schnorr::signature::{Signer, Verifier};
+        use k256::sha2::{Sha256, Digest};
+
+        let key_bytes = [7u8; 32];
+        let signing_key = SigningKey::from_bytes(&key_bytes).unwrap();
+        let verifying_key: VerifyingKey = *signing_key.verifying_key();
+
+        let secret = "[\"P2PK\",{\"data\":\"02...\",\"nonce\":\"...\",\"tags\":[]}]";
+        let msg_hash = Sha256::digest(secret.as_bytes());
+
+        // Case 1: Sign the hash
+        let sig_of_hash: k256::schnorr::Signature = signing_key.sign(&msg_hash);
+        assert!(verifying_key.verify(&msg_hash, &sig_of_hash).is_ok());
+        assert!(verifying_key.verify(secret.as_bytes(), &sig_of_hash).is_err());
+
+        // Case 2: Sign the raw secret
+        let sig_of_raw: k256::schnorr::Signature = signing_key.sign(secret.as_bytes());
+        assert!(verifying_key.verify(secret.as_bytes(), &sig_of_raw).is_ok());
+        assert!(verifying_key.verify(&msg_hash, &sig_of_raw).is_err());
     }
 }
 
