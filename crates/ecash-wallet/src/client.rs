@@ -193,12 +193,52 @@ impl MintClient {
 
         check_api_error(&mv, "Melt")?;
 
-        let paid = mv["paid"].as_bool().unwrap_or(false);
-        let preimage = mv.get("payment_preimage").and_then(|p| p.as_str()).map(|s| s.to_string());
-        let change = mv.get("change")
+        let paid_bool = mv["paid"].as_bool().unwrap_or(false);
+        let state_str = mv["state"].as_str().unwrap_or("");
+        let is_paid_state = state_str.eq_ignore_ascii_case("paid");
+        let is_pending_state = state_str.eq_ignore_ascii_case("pending");
+        let mut preimage = mv.get("payment_preimage").and_then(|p| p.as_str()).map(|s| s.to_string());
+        let has_preimage = preimage.as_ref().map(|p| !p.is_empty()).unwrap_or(false);
+
+        let mut paid = paid_bool || is_paid_state || has_preimage;
+        let mut change = mv.get("change")
             .and_then(|c| c.as_array())
             .cloned()
             .unwrap_or_default();
+
+        // If the payment is not yet confirmed (e.g. mint returned PENDING or in-flight routing),
+        // poll the quote endpoint for up to 10 seconds to detect settlement.
+        if !paid && (is_pending_state || (!paid_bool && !has_preimage)) {
+            tracing::info!("Melt status is pending or unconfirmed. Polling quote {}...", qid);
+            for _ in 0..10 {
+                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                if let Ok(resp) = self.http.get(format!("{}/v1/melt/quote/bolt11/{}", self.url, qid)).send().await {
+                    if let Ok(qv) = resp.json::<serde_json::Value>().await {
+                        let q_state = qv["state"].as_str().unwrap_or("");
+                        let q_paid = qv["paid"].as_bool().unwrap_or(false);
+                        let q_preimage = qv.get("payment_preimage").and_then(|p| p.as_str()).map(|s| s.to_string());
+                        let q_has_preimage = q_preimage.as_ref().map(|p| !p.is_empty()).unwrap_or(false);
+
+                        if q_state.eq_ignore_ascii_case("paid") || q_paid || q_has_preimage {
+                            tracing::info!("Quote {} confirmed PAID via polling", qid);
+                            paid = true;
+                            if preimage.is_none() {
+                                preimage = q_preimage;
+                            }
+                            if change.is_empty() {
+                                if let Some(ch) = qv.get("change").and_then(|c| c.as_array()) {
+                                    change = ch.clone();
+                                }
+                            }
+                            break;
+                        } else if q_state.eq_ignore_ascii_case("failed") || q_state.eq_ignore_ascii_case("unpaid") {
+                            tracing::warn!("Quote {} resolved to state: {}", qid, q_state);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
             
         Ok((paid, preimage, change))
     }
@@ -298,7 +338,17 @@ impl MintClient {
     pub async fn supports_nut15(&self) -> Result<bool> {
         let info = self.fetch_info().await?;
         if let Some(nuts) = info.get("nuts").and_then(|n| n.as_object()) {
-            if nuts.contains_key("15") {
+            if let Some(nut15) = nuts.get("15") {
+                if nut15.get("disabled").and_then(|d| d.as_bool()) == Some(true) {
+                    return Ok(false);
+                }
+                if let Some(methods) = nut15.get("methods").and_then(|m| m.as_array()) {
+                    let has_bolt11 = methods.iter().any(|m| {
+                        m.get("method").and_then(|v| v.as_str()) == Some("bolt11")
+                            && m.get("unit").and_then(|v| v.as_str()) == Some("sat")
+                    });
+                    return Ok(has_bolt11);
+                }
                 return Ok(true);
             }
         }

@@ -210,7 +210,10 @@ pub async fn add_mint(mint_url: String, state: State<'_, AppState>) -> CommandRe
 }
 
 #[tauri::command]
-pub async fn clean_wallet(state: State<'_, AppState>) -> CommandResult<u64> {
+pub async fn clean_wallet(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<ecash_wallet::restore::CleanWalletResult> {
     let path = state.wallet_path.clone();
     if !path.exists() {
         return Err(CommandError("Wallet not initialized".to_string()));
@@ -223,10 +226,20 @@ pub async fn clean_wallet(state: State<'_, AppState>) -> CommandResult<u64> {
             .ok_or_else(|| CommandError("Wallet is locked".to_string()))?
     };
 
+    let _lock = state.wallet_lock.lock().await;
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
 
-    let removed =
-        ecash_wallet::restore::clean_wallet_proofs(&mut w_state, &path, &passphrase).await?;
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let app = app_handle.clone();
+    tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            use tauri::Emitter;
+            app.emit("clean-wallet-progress", msg).ok();
+        }
+    });
 
-    Ok(removed)
+    let res =
+        ecash_wallet::restore::clean_wallet_proofs(&mut w_state, &path, &passphrase, Some(tx)).await?;
+
+    Ok(res)
 }

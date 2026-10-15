@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, ArrowDownLeft, ArrowUpRight, FileText, CheckCircle, AlertCircle, XCircle, Copy, Check } from 'lucide-react';
 import { Transaction } from './TransactionCard';
 import { toast } from 'react-hot-toast';
-import QRCode from 'react-qr-code';
+import { SafeQRCode } from '../shared/SafeQRCode';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
 
 interface TransactionDetailsModalProps {
@@ -196,8 +196,8 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 
                 {/* QR Code */}
                 <div className="relative">
-                  <div className="bg-white p-4 rounded-xl shadow-lg relative">
-                    <QRCode value={currentFrame || tokenString || ''} size={180} />
+                  <div className="bg-white p-4 rounded-xl shadow-lg relative min-w-[212px] min-h-[212px] flex items-center justify-center">
+                    <SafeQRCode value={currentFrame || (tokenString && tokenString.length < 1500 ? tokenString : '')} size={180} />
                     {isAnimated && (
                       <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-label-caps">
                         {currentFrameIndex + 1}/{totalFrames}
