@@ -55,7 +55,6 @@ pub async fn swap_proofs(
                 let nostr_key = state.get_nostr_privkey();
                 if let Some(privkey_hex) = nostr_key {
                     use k256::schnorr::signature::Signer;
-                    use k256::sha2::{Sha256, Digest};
 
                     let privkey_bytes = hex::decode(privkey_hex)
                         .map_err(|e| anyhow::anyhow!("Invalid hex in nostr private key: {}", e))?;
@@ -144,8 +143,7 @@ pub async fn swap_proofs(
                         ));
                     }
 
-                    let msg_hash = Sha256::digest(p.secret.as_bytes());
-                    let sig: k256::schnorr::Signature = signing_key.sign(&msg_hash);
+                    let sig: k256::schnorr::Signature = signing_key.sign(p.secret.as_bytes());
                     let sig_hex = hex::encode(sig.to_bytes());
 
                     // Preserve existing signatures from witness if present, and append our signature
