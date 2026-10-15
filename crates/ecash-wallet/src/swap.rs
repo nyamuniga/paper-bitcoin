@@ -80,59 +80,97 @@ pub async fn swap_proofs(
         input_secrets.insert(p.secret.clone());
     }
 
-    // Set up blinding sessions for outputs
-    let mut deriv = TokenDerivation::from_hex(&state.seed_hex)?;
-    deriv.index = state.derivation_index;
+    // Ensure derivation_index is at least higher than any existing proof's derivation index
+    let max_proof_idx = state
+        .proofs
+        .values()
+        .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
+        .max()
+        .unwrap_or(0);
+    if max_proof_idx > 0 && state.derivation_index <= max_proof_idx {
+        state.derivation_index = max_proof_idx + 1;
+    }
 
-    let mut sessions = Vec::new();
-    let mut output_json = Vec::new();
+    let mut attempts = 0;
+    let (sigs, sessions) = loop {
+        attempts += 1;
 
-    // First do desired amounts
-    for &amt in &desired_amounts {
-        let index = deriv.index;
-        let mut secret = deriv.next_secret();
-        if let Some(ref pubkey) = target_pubkey {
-            let mut nonce = [0u8; 16];
-            rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce);
-            
-            let normalized_pubkey = if pubkey.len() == 64 {
-                format!("02{}", pubkey)
-            } else {
-                pubkey.clone()
-            };
+        // Set up blinding sessions for outputs
+        let mut deriv = TokenDerivation::from_hex(&state.seed_hex)?;
+        deriv.index = state.derivation_index;
 
-            secret = serde_json::json!([
-                "P2PK",
-                {
-                    "nonce": hex::encode(nonce),
-                    "data": normalized_pubkey,
-                    "tags": []
-                }
-            ]).to_string();
+        let mut current_sessions = Vec::new();
+        let mut output_json = Vec::new();
+
+        // First do desired amounts
+        for &amt in &desired_amounts {
+            let index = deriv.index;
+            let mut secret = deriv.next_secret();
+            if let Some(ref pubkey) = target_pubkey {
+                let mut nonce = [0u8; 16];
+                rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce);
+                
+                let normalized_pubkey = if pubkey.len() == 64 {
+                    format!("02{}", pubkey)
+                } else {
+                    pubkey.clone()
+                };
+
+                secret = serde_json::json!([
+                    "P2PK",
+                    {
+                        "nonce": hex::encode(nonce),
+                        "data": normalized_pubkey,
+                        "tags": []
+                    }
+                ]).to_string();
+            }
+            let sess = BlindingSession::new(&secret);
+            output_json.push(serde_json::json!({"amount": amt, "id": keyset.id, "B_": sess.b_prime_hex()}));
+            current_sessions.push((amt, sess, index, true)); // true = is_desired
         }
-        let sess = BlindingSession::new(&secret);
-        output_json.push(serde_json::json!({"amount": amt, "id": keyset.id, "B_": sess.b_prime_hex()}));
-        sessions.push((amt, sess, index, true)); // true = is_desired
-    }
 
-    // Then do change amounts
-    for &amt in &change_amounts {
-        let index = deriv.index;
-        let secret = deriv.next_secret();
-        let sess = BlindingSession::new(&secret);
-        output_json.push(serde_json::json!({"amount": amt, "id": keyset.id, "B_": sess.b_prime_hex()}));
-        sessions.push((amt, sess, index, false)); // false = is_change
-    }
+        // Then do change amounts
+        for &amt in &change_amounts {
+            let index = deriv.index;
+            let secret = deriv.next_secret();
+            let sess = BlindingSession::new(&secret);
+            output_json.push(serde_json::json!({"amount": amt, "id": keyset.id, "B_": sess.b_prime_hex()}));
+            current_sessions.push((amt, sess, index, false)); // false = is_change
+        }
 
-    // Save index before network call
-    state.derivation_index = deriv.index;
-    state.save_encrypted(wallet_path, passphrase)?;
+        // Save index before network call
+        state.derivation_index = deriv.index;
+        state.save_encrypted(wallet_path, passphrase)?;
 
-    // Call the mint
-    let sigs = client.swap_tokens(input_json, output_json).await?;
-    if sigs.len() != sessions.len() {
-        return Err(anyhow!("Mint returned {} signatures, expected {}", sigs.len(), sessions.len()));
-    }
+        // Call the mint
+        match client.swap_tokens(input_json.clone(), output_json).await {
+            Ok(sigs) => {
+                if sigs.len() != current_sessions.len() {
+                    return Err(anyhow!("Mint returned {} signatures, expected {}", sigs.len(), current_sessions.len()));
+                }
+                break (sigs, current_sessions);
+            }
+            Err(e) => {
+                let err_lower = e.to_string().to_lowercase();
+                if (err_lower.contains("already signed")
+                    || err_lower.contains("already been signed")
+                    || err_lower.contains("already exists")
+                    || err_lower.contains("outputs already"))
+                    && attempts < 10
+                {
+                    eprintln!(
+                        "Output collision detected on mint. Advancing derivation index by 25 and retrying (attempt {}/10)...",
+                        attempts
+                    );
+                    state.derivation_index += 25;
+                    state.save_encrypted(wallet_path, passphrase)?;
+                    continue;
+                }
+                return Err(e);
+            }
+        }
+    };
 
     // Unblind signatures
     let mut desired_proofs = Vec::new();

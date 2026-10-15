@@ -52,6 +52,16 @@ pub async fn receive_lightning(
 
     let desired_amounts = split_into_powers_of_2(amount);
 
+    let max_proof_idx = w_state
+        .proofs
+        .values()
+        .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
+        .max()
+        .unwrap_or(0);
+    if max_proof_idx > 0 && w_state.derivation_index <= max_proof_idx {
+        w_state.derivation_index = max_proof_idx + 1;
+    }
+
     let mut deriv = TokenDerivation::from_hex(&w_state.seed_hex)
         .map_err(|e| crate::error::CommandError(format!("Derivation error: {}", e)))?;
     deriv.index = w_state.derivation_index;
@@ -159,6 +169,16 @@ pub async fn batch_mint_external_quotes(
         for quote in mint_quotes {
             let desired_amounts = split_into_powers_of_2(quote.amount);
             
+            let max_proof_idx = w_state
+                .proofs
+                .values()
+                .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
+                .max()
+                .unwrap_or(0);
+            if max_proof_idx > 0 && w_state.derivation_index <= max_proof_idx {
+                w_state.derivation_index = max_proof_idx + 1;
+            }
+
             let mut deriv = match TokenDerivation::from_hex(&w_state.seed_hex) {
                 Ok(d) => d,
                 Err(_) => continue,
@@ -179,8 +199,6 @@ pub async fn batch_mint_external_quotes(
                 }));
                 sessions.push((amt, sess, index));
             }
-            
-            w_state.derivation_index = deriv.index;
             
             if let Ok(sig_res) = client.mint_tokens(&quote.quote_id, outputs.clone()).await {
                 let mut new_proofs = Vec::new();
@@ -207,6 +225,7 @@ pub async fn batch_mint_external_quotes(
                 }
 
                 if success {
+                    w_state.derivation_index = deriv.index;
                     w_state.proofs.entry(mint_url.clone()).or_default().extend(new_proofs);
                     
                     let tx = Transaction {

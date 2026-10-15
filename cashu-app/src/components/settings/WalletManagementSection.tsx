@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { Lock, Trash2, AlertTriangle, ChevronRight, ChevronDown, Wallet } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Lock, Trash2, AlertTriangle, ChevronRight, ChevronDown, Wallet, Terminal } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { listen } from '@tauri-apps/api/event';
 import { useWalletStore } from '../../store/wallet';
 import { useAuth } from '../../hooks/useAuth';
+import { CleanWalletModal, CleanWalletResult } from './CleanWalletModal';
 
 export const WalletManagementSection = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -12,6 +14,25 @@ export const WalletManagementSection = () => {
   const { lockWallet, resetWallet } = useAuth();
   const [isCleaning, setIsCleaning] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Live Clean Logs & Modal State
+  const [showCleanModal, setShowCleanModal] = useState(false);
+  const [cleanLogs, setCleanLogs] = useState<string[]>([]);
+  const [cleanResult, setCleanResult] = useState<CleanWalletResult | null>(null);
+  const [cleanError, setCleanError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let unlistenFn: (() => void) | null = null;
+    listen<string>('clean-wallet-progress', (event) => {
+      setCleanLogs((prev) => [...prev, event.payload]);
+    }).then((fn) => {
+      unlistenFn = fn;
+    });
+
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
+  }, []);
 
   const handleLock = async () => {
     const success = await lockWallet();
@@ -37,19 +58,40 @@ export const WalletManagementSection = () => {
   };
 
   const handleCleanWallet = async () => {
+    setShowCleanModal(true);
     setIsCleaning(true);
-    const toastId = toast.loading('Scanning for spent proofs...');
+    setCleanLogs([]);
+    setCleanResult(null);
+    setCleanError(null);
+
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const removedSats = await invoke<number>('clean_wallet');
+      const res: any = await invoke('clean_wallet');
       await refreshWallet();
-      if (removedSats > 0) {
-        toast.success(`Cleaned up ${removedSats} spent sats from wallet balance.`, { id: toastId });
+
+      const resultData: CleanWalletResult = {
+        removed_sats: typeof res === 'number' ? res : res?.removed_sats ?? 0,
+        restored_sats: res?.restored_sats ?? 0,
+        derivation_index: res?.derivation_index ?? 0,
+        cleaned_txs: res?.cleaned_txs ?? 0,
+      };
+      setCleanResult(resultData);
+
+      const details: string[] = [];
+      if (resultData.removed_sats > 0) details.push(`${resultData.removed_sats} spent sats removed`);
+      if (resultData.restored_sats > 0) details.push(`${resultData.restored_sats} sats restored`);
+      if (resultData.cleaned_txs > 0) details.push(`${resultData.cleaned_txs} stuck txs cleared`);
+      if (resultData.derivation_index !== undefined) details.push(`counter reset to ${resultData.derivation_index}`);
+
+      if (details.length > 0) {
+        toast.success(`Wallet cleaned: ${details.join(', ')}.`);
       } else {
-        toast.success('Wallet is already clean. No spent proofs found.', { id: toastId });
+        toast.success('Wallet is clean and counters are synchronized.');
       }
     } catch (e: any) {
-      toast.error(`Failed to clean wallet: ${e}`, { id: toastId });
+      const msg = String(e?.message || e);
+      setCleanError(msg);
+      toast.error(`Failed to clean wallet: ${msg}`);
     } finally {
       setIsCleaning(false);
     }
@@ -96,18 +138,35 @@ export const WalletManagementSection = () => {
 
           <button
             onClick={handleCleanWallet}
-            disabled={isCleaning}
-            className="flex items-center justify-between p-4 bg-surface-container-highest hover:bg-surface-bright rounded-xl border border-outline-variant transition-colors group cursor-pointer disabled:opacity-50"
+            className="flex items-center justify-between p-4 bg-surface-container-highest hover:bg-surface-bright rounded-xl border border-outline-variant transition-colors group cursor-pointer"
           >
             <div className="flex items-center gap-3">
               <div className="p-2 bg-primary/10 text-primary rounded-lg">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div className="text-left">
-                <div className="font-bold text-on-surface text-sm">Clean Wallet</div>
-                <div className="text-xs text-on-surface-variant">Purge spent proofs</div>
+                <div className="font-bold text-on-surface text-sm flex items-center gap-2">
+                  <span>Clean Wallet</span>
+                  {isCleaning && (
+                    <span className="flex items-center gap-1 text-[10px] font-mono font-bold bg-primary/20 text-primary px-2 py-0.5 rounded-full border border-primary/30 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      In Progress
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-on-surface-variant">
+                  {isCleaning
+                    ? 'Syncing mint proofs... Click to view live terminal'
+                    : 'Purge spent proofs & fix output collisions'}
+                </div>
               </div>
             </div>
+            {cleanLogs.length > 0 && (
+              <span className="text-[11px] font-mono text-primary flex items-center gap-1 bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/20">
+                <Terminal size={12} />
+                <span>Logs ({cleanLogs.length})</span>
+              </span>
+            )}
           </button>
 
           {!showDeleteConfirm ? (
@@ -156,6 +215,17 @@ export const WalletManagementSection = () => {
           )}
         </div>
       )}
+
+      {/* Real-time Clean & Restore Logs Modal */}
+      <CleanWalletModal
+        isOpen={showCleanModal}
+        onClose={() => setShowCleanModal(false)}
+        isCleaning={isCleaning}
+        logs={cleanLogs}
+        result={cleanResult}
+        error={cleanError}
+        onRunAgain={handleCleanWallet}
+      />
     </section>
   );
 };
