@@ -23,11 +23,17 @@ pub struct WalletState {
     pub transactions: Vec<Transaction>,
     #[serde(default)]
     pub custom_nostr_key: Option<String>,
+    #[serde(default)]
+    pub default_nostr_key: Option<String>,
 }
 
 impl WalletState {
+    pub fn get_nostr_privkey(&self) -> Option<&str> {
+        self.custom_nostr_key.as_deref().or(self.default_nostr_key.as_deref())
+    }
+
     pub fn new(seed_hex: String, mnemonic: Option<String>) -> Self {
-        Self { seed_hex, mnemonic, derivation_index: 0, proofs: HashMap::new(), mints: Vec::new(), trusted_keys: HashMap::new(), transactions: Vec::new(), custom_nostr_key: None }
+        Self { seed_hex, mnemonic, derivation_index: 0, proofs: HashMap::new(), mints: Vec::new(), trusted_keys: HashMap::new(), transactions: Vec::new(), custom_nostr_key: None, default_nostr_key: None }
     }
 
     pub fn default_path() -> PathBuf {

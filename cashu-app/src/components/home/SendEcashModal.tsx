@@ -20,6 +20,9 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
   const [amount, setAmount] = useState('');
   const [pubkey, setPubkey] = useState('');
   const [token, setToken] = useState<string | null>(null);
+  const [tokenV3, setTokenV3] = useState<string | null>(null);
+  const [tokenV4, setTokenV4] = useState<string | null>(null);
+  const [formatVersion, setFormatVersion] = useState<'v3' | 'v4'>('v3');
   const [copied, setCopied] = useState(false);
   const { sending, isClaimed, sendEcash } = useEcash(mintUrl);
 
@@ -60,6 +63,9 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
     const result = await sendEcash(parsedAmount, undefined, targetPubkey || undefined);
     if (result) {
       setToken(result.token);
+      setTokenV3(result.token_v3 || result.token);
+      setTokenV4(result.token_v4 || result.token);
+      setFormatVersion('v3');
     }
   };
 
@@ -118,6 +124,38 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
               <div className="text-center">
                 <p className="text-label-caps font-label-caps text-on-surface-variant mb-1">AMOUNT SENT</p>
                 <p className="text-[28px] font-display-lg text-primary">₿{parsedAmount.toLocaleString()}</p>
+              </div>
+
+              {/* Format Selector */}
+              <div className="flex items-center gap-1 bg-surface-container p-1 rounded-xl border border-outline-variant/15 text-[12px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormatVersion('v3');
+                    if (tokenV3) setToken(tokenV3);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${
+                    formatVersion === 'v3'
+                      ? 'bg-primary text-on-primary shadow-sm'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  cashuA (v3 - Universal)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormatVersion('v4');
+                    if (tokenV4) setToken(tokenV4);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${
+                    formatVersion === 'v4'
+                      ? 'bg-primary text-on-primary shadow-sm'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  cashuB (v4 - Compact)
+                </button>
               </div>
 
               {/* QR Code */}

@@ -82,6 +82,7 @@ pub enum TransactionDiff {
     MeltFailed(Vec<ecash_core::types::Proof>),
     SendFailedRestore(Vec<String>, std::collections::HashSet<String>), // mint_urls, spent_secrets
     ReceiveEcashSuccessRestore(String), // mint_url
+    ReceiveEcashRetrySwap(Vec<ecash_core::types::Proof>),
     IssueFailedSweepAndRestore {
         mints: Vec<String>,
         master_seed_hex: String,
@@ -154,34 +155,12 @@ pub async fn check_transaction_network(
             }
         },
         TransactionType::ReceiveEcash(recv_data) => {
-            let mut input_proofs = Vec::new();
-            if recv_data.token_string.starts_with("cashuA") {
-                let token_body = recv_data.token_string.strip_prefix("cashuA").unwrap();
-                use base64::Engine;
-                let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(token_body)
-                    .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(token_body))
-                    .or_else(|_| base64::engine::general_purpose::STANDARD.decode(token_body));
-                
-                if let Ok(json_bytes) = decoded {
-                    if let Ok(token_json) = serde_json::from_slice::<serde_json::Value>(&json_bytes) {
-                        if let Some(token_array) = token_json.get("token").and_then(|t| t.as_array()) {
-                            if !token_array.is_empty() {
-                                if let Some(proofs_json) = token_array[0].get("proofs").and_then(|p| p.as_array()) {
-                                    for pj in proofs_json {
-                                        if let Some(secret) = pj.get("secret").and_then(|s| s.as_str()) {
-                                            input_proofs.push(secret.to_string());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            let (mint_url, input_proofs, _) = crate::token::decode_token_string(&recv_data.token_string)
+                .map_err(|e| anyhow!("Failed to decode token: {}", e))?;
             
             let mut ys = Vec::new();
-            for secret in input_proofs {
-                let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(secret.as_bytes()));
+            for p in &input_proofs {
+                let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()));
                 ys.push(y);
             }
             
@@ -189,7 +168,9 @@ pub async fn check_transaction_network(
             let all_spent = !ys.is_empty() && states.values().all(|s| s == "SPENT" || s == "PENDING");
             
             if all_spent {
-                Ok(TransactionDiff::ReceiveEcashSuccessRestore(tx.mint_url.clone()))
+                Ok(TransactionDiff::ReceiveEcashSuccessRestore(mint_url))
+            } else if !input_proofs.is_empty() {
+                Ok(TransactionDiff::ReceiveEcashRetrySwap(input_proofs))
             } else {
                 Ok(TransactionDiff::StatusOnly(TransactionStatus::Failed))
             }
@@ -271,9 +252,9 @@ pub async fn apply_transaction_diff(
     tx_id: &str, 
     diff: TransactionDiff
 ) -> Result<TransactionStatus> {
-    let tx_mint = {
+    let (tx_mint, tx_amount) = {
         let t = state.transactions.iter().find(|t| t.id == tx_id).ok_or_else(|| anyhow!("Transaction not found"))?;
-        t.mint_url.clone()
+        (t.mint_url.clone(), t.amount)
     };
 
     let new_status = match diff {
@@ -303,12 +284,66 @@ pub async fn apply_transaction_diff(
             }
             TransactionStatus::Failed
         },
-        TransactionDiff::ReceiveEcashSuccessRestore(mint_url) => {
-            let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![mint_url], None).await;
-            if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
-                t.status = TransactionStatus::Success;
+        TransactionDiff::ReceiveEcashRetrySwap(input_proofs) => {
+            let desired_amounts = ecash_core::types::split_into_powers_of_2(tx_amount);
+            let swap_res = crate::swap::swap_proofs(
+                state,
+                wallet_path,
+                passphrase,
+                &tx_mint,
+                input_proofs,
+                desired_amounts,
+                vec![],
+                None,
+            ).await;
+
+            match swap_res {
+                Ok(new_proofs) => {
+                    state.proofs.entry(tx_mint.clone()).or_default().extend(new_proofs);
+                    if !state.mints.contains(&tx_mint) {
+                        state.mints.push(tx_mint.clone());
+                    }
+                    if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                        t.status = TransactionStatus::Success;
+                    }
+                    TransactionStatus::Success
+                }
+                Err(e) => {
+                    tracing::error!("[check_status] ReceiveEcash retry swap failed: {}", e);
+                    let err_str = e.to_string().to_lowercase();
+                    if err_str.contains("already spent") || err_str.contains("token already spent") {
+                        let total_restored = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![tx_mint.clone()], None).await.unwrap_or(0);
+                        if total_restored > 0 {
+                            if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                                t.status = TransactionStatus::Success;
+                            }
+                            TransactionStatus::Success
+                        } else {
+                            if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                                t.status = TransactionStatus::Failed;
+                            }
+                            TransactionStatus::Failed
+                        }
+                    } else {
+                        // Keep pending so user can retry again
+                        TransactionStatus::Pending
+                    }
+                }
             }
-            TransactionStatus::Success
+        },
+        TransactionDiff::ReceiveEcashSuccessRestore(mint_url) => {
+            let total_restored = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![mint_url], None).await.unwrap_or(0);
+            if total_restored > 0 {
+                if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                    t.status = TransactionStatus::Success;
+                }
+                TransactionStatus::Success
+            } else {
+                if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                    t.status = TransactionStatus::Failed;
+                }
+                TransactionStatus::Failed
+            }
         },
         TransactionDiff::ReceiveLightningSuccess(new_proofs) => {
             state.proofs.entry(tx_mint.clone()).or_default().extend(new_proofs);
