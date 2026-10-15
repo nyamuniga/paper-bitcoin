@@ -1549,7 +1549,7 @@
 
             <!-- Right Actions -->
             <div class="header-actions">
-                <span class="nav-link-version" id="version-text">v0.1.6</span>
+                <span class="nav-link-version" id="version-text">v0.1.7</span>
                 <a href="#download" class="btn-header-cta">
                     <span>Get Wallet</span>
                 </a>
@@ -1607,7 +1607,7 @@
                 <span>Get Wallet</span>
             </a>
             <div class="mobile-menu-version">
-                <span>Release Version </span><span class="version-tag" id="mobile-version-text">v0.1.6</span>
+                <span>Release Version </span><span class="version-tag" id="mobile-version-text">v0.1.7</span>
             </div>
         </div>
     </div>
@@ -1991,6 +1991,8 @@
                     if (versionMatch && versionMatch[1]) {
                         const versionEl = document.getElementById('version-text');
                         if (versionEl) versionEl.innerText = versionMatch[1];
+                        const mobileVersionEl = document.getElementById('mobile-version-text');
+                        if (mobileVersionEl) mobileVersionEl.innerText = versionMatch[1];
                     }
                 }
             }
