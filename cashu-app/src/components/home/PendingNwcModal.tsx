@@ -3,12 +3,14 @@ import { createPortal } from 'react-dom';
 import { X, Check, XCircle, Zap, Loader2, Clock } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNwcStore, PendingNwcRequest } from '../../store/nwcStore';
+import { useBottomSheet } from '../../hooks/useBottomSheet';
 
 interface PendingNwcModalProps {
   onClose: () => void;
 }
 
 export const PendingNwcModal: React.FC<PendingNwcModalProps> = ({ onClose }) => {
+  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
   const { pendingRequests, approveRequest, rejectRequest } = useNwcStore();
   const [processingId, setProcessingId] = useState<string | null>(null);
 
@@ -30,7 +32,7 @@ export const PendingNwcModal: React.FC<PendingNwcModalProps> = ({ onClose }) => 
       await approveRequest(req.event_id);
       toast.success('Zap approved and paid!', { id: toastId });
       if (pendingRequests.length === 1) {
-        onClose();
+        closeWithAnimation();
       }
     } catch (err: any) {
       toast.error(`Failed to approve Zap: ${err}`, { id: toastId });
@@ -46,7 +48,7 @@ export const PendingNwcModal: React.FC<PendingNwcModalProps> = ({ onClose }) => 
       await rejectRequest(req.event_id);
       toast.success('Zap rejected', { id: toastId });
       if (pendingRequests.length === 1) {
-        onClose();
+        closeWithAnimation();
       }
     } catch (err: any) {
       toast.error(`Failed to reject Zap: ${err}`, { id: toastId });
@@ -57,21 +59,34 @@ export const PendingNwcModal: React.FC<PendingNwcModalProps> = ({ onClose }) => 
 
   return createPortal(
     <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
-      onClick={onClose}
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
+      style={backdropStyle}
+      onClick={closeWithAnimation}
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="bg-surface-container-high rounded-2xl w-full max-w-md p-6 relative max-h-[80vh] flex flex-col"
+        style={sheetStyle}
+        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md p-6 relative max-h-[88vh] flex flex-col border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] pb-8 sm:pb-6"
       >
+        {/* Drag Handle */}
+        <div 
+          {...dragHandleProps}
+          className="w-full flex justify-center pt-0 pb-3 -mt-2 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
+        >
+          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+        </div>
+
         <button
-          onClick={onClose}
+          onClick={closeWithAnimation}
           className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface transition-colors"
         >
           <X size={24} />
         </button>
 
-        <div className="flex items-center gap-3 mb-6">
+        <div 
+          {...dragHandleProps}
+          className="flex items-center gap-3 mb-6 cursor-grab active:cursor-grabbing"
+        >
           <div className="bg-primary/20 p-2 rounded-xl text-primary">
             <Zap size={24} />
           </div>

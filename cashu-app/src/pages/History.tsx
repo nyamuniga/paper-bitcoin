@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Transaction, TransactionCard } from '../components/history/TransactionCard';
+import { TransactionCardSkeleton } from '../components/shared/Skeleton';
 import { PageHeader } from '../components/shared/PageHeader';
 import { useHistory } from '../hooks/useHistory';
 import { TransactionDetailsModal } from '../components/history/TransactionDetailsModal';
 import { useTransactionStore } from '../store/transactionStore';
+import { useWalletStore } from '../store/wallet';
 import { AppPhase } from '../types/momo';
 import { syncBarkVutxos } from '../services/barkService';
 
@@ -13,6 +15,12 @@ import { useNavigate } from 'react-router-dom';
 
 export default function History() {
   const navigate = useNavigate();
+  const markHistorySeen = useWalletStore((s) => s.markHistorySeen);
+
+  useEffect(() => {
+    markHistorySeen();
+  }, [markHistorySeen]);
+
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const {
     transactions,
@@ -96,7 +104,11 @@ export default function History() {
       />
 
       {loading ? (
-        <div className="text-center py-10 text-on-surface-variant">Loading...</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <TransactionCardSkeleton key={i} />
+          ))}
+        </div>
       ) : mergedTransactions.length === 0 ? (
         <div className="text-center py-10 text-on-surface-variant bg-surface-container-high rounded-xl border border-outline-variant/10">
           No transactions yet.

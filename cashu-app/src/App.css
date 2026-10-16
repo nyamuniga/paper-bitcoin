@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -55,86 +55,86 @@
   --spacing-card-gap: 20px;
   --spacing-base: 8px;
 
-  --font-sans: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'Space Grotesk', monospace;
+  --font-sans: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --font-display-hero: 'Sora', sans-serif;
-  --font-display-hero-mobile: 'Sora', sans-serif;
-  --font-display-lg: 'Sora', sans-serif;
-  --font-headline-lg: 'Sora', sans-serif;
-  --font-headline-lg-mobile: 'Sora', sans-serif;
-  --font-headline-md: 'Sora', sans-serif;
-  --font-headline-sm: 'Sora', sans-serif;
-  --font-body-lg: 'Manrope', sans-serif;
-  --font-body-md: 'Manrope', sans-serif;
-  --font-body-sm: 'Manrope', sans-serif;
-  --font-label-numeric: 'Space Grotesk', monospace;
-  --font-label-code: 'Space Grotesk', monospace;
-  --font-label-tag: 'Space Grotesk', monospace;
-  --font-label-caps: 'Space Grotesk', monospace;
+  --font-display-hero: 'Poppins', sans-serif;
+  --font-display-hero-mobile: 'Poppins', sans-serif;
+  --font-display-lg: 'Poppins', sans-serif;
+  --font-headline-lg: 'Poppins', sans-serif;
+  --font-headline-lg-mobile: 'Poppins', sans-serif;
+  --font-headline-md: 'Poppins', sans-serif;
+  --font-headline-sm: 'Poppins', sans-serif;
+  --font-body-lg: 'Poppins', sans-serif;
+  --font-body-md: 'Poppins', sans-serif;
+  --font-body-sm: 'Poppins', sans-serif;
+  --font-label-numeric: 'Poppins', sans-serif;
+  --font-label-code: 'JetBrains Mono', monospace;
+  --font-label-tag: 'Poppins', sans-serif;
+  --font-label-caps: 'Poppins', sans-serif;
 
-  --text-display-hero: 48px;
-  --text-display-hero--line-height: 56px;
+  --text-display-hero: 52px;
+  --text-display-hero--line-height: 60px;
   --text-display-hero--letter-spacing: -0.03em;
   --text-display-hero--font-weight: 600;
 
-  --text-display-hero-mobile: 36px;
-  --text-display-hero-mobile--line-height: 44px;
+  --text-display-hero-mobile: 39px;
+  --text-display-hero-mobile--line-height: 48px;
   --text-display-hero-mobile--letter-spacing: -0.02em;
   --text-display-hero-mobile--font-weight: 600;
 
-  --text-display-lg: 48px;
-  --text-display-lg--line-height: 56px;
+  --text-display-lg: 52px;
+  --text-display-lg--line-height: 60px;
   --text-display-lg--letter-spacing: -0.03em;
   --text-display-lg--font-weight: 600;
 
-  --text-headline-lg: 32px;
-  --text-headline-lg--line-height: 40px;
+  --text-headline-lg: 34px;
+  --text-headline-lg--line-height: 42px;
   --text-headline-lg--letter-spacing: -0.02em;
   --text-headline-lg--font-weight: 600;
 
-  --text-headline-lg-mobile: 26px;
-  --text-headline-lg-mobile--line-height: 34px;
+  --text-headline-lg-mobile: 28px;
+  --text-headline-lg-mobile--line-height: 36px;
   --text-headline-lg-mobile--letter-spacing: -0.01em;
   --text-headline-lg-mobile--font-weight: 600;
 
-  --text-headline-md: 22px;
-  --text-headline-md--line-height: 28px;
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 30px;
   --text-headline-md--font-weight: 500;
 
-  --text-headline-sm: 18px;
-  --text-headline-sm--line-height: 24px;
+  --text-headline-sm: 20px;
+  --text-headline-sm--line-height: 26px;
   --text-headline-sm--font-weight: 500;
 
-  --text-body-lg: 16px;
-  --text-body-lg--line-height: 24px;
+  --text-body-lg: 17.5px;
+  --text-body-lg--line-height: 26px;
   --text-body-lg--font-weight: 400;
 
-  --text-body-md: 14px;
-  --text-body-md--line-height: 20px;
+  --text-body-md: 15.5px;
+  --text-body-md--line-height: 22px;
   --text-body-md--font-weight: 400;
 
-  --text-body-sm: 12px;
-  --text-body-sm--line-height: 18px;
+  --text-body-sm: 13.5px;
+  --text-body-sm--line-height: 19px;
   --text-body-sm--font-weight: 400;
 
-  --text-label-numeric: 15px;
-  --text-label-numeric--line-height: 20px;
+  --text-label-numeric: 16.5px;
+  --text-label-numeric--line-height: 22px;
   --text-label-numeric--letter-spacing: 0.02em;
   --text-label-numeric--font-weight: 500;
 
-  --text-label-code: 13px;
-  --text-label-code--line-height: 16px;
+  --text-label-code: 14px;
+  --text-label-code--line-height: 18px;
   --text-label-code--letter-spacing: 0.05em;
   --text-label-code--font-weight: 500;
 
-  --text-label-tag: 11px;
-  --text-label-tag--line-height: 14px;
+  --text-label-tag: 12px;
+  --text-label-tag--line-height: 16px;
   --text-label-tag--letter-spacing: 0.08em;
   --text-label-tag--font-weight: 600;
 
-  --text-label-caps: 11px;
-  --text-label-caps--line-height: 14px;
+  --text-label-caps: 12px;
+  --text-label-caps--line-height: 16px;
   --text-label-caps--letter-spacing: 0.08em;
   --text-label-caps--font-weight: 600;
 }
@@ -229,6 +229,15 @@
   --color-surface-variant: #e5dfd2;
 }
 
+html {
+  scrollbar-gutter: stable;
+  overflow-x: hidden;
+}
+
+body {
+  overflow-x: hidden;
+}
+
 html,
 body {
   overscroll-behavior: none;
@@ -255,6 +264,11 @@ img,
 a {
   -webkit-user-drag: none;
   user-drag: none;
+}
+
+html {
+  font-size: 17px;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -373,7 +387,7 @@ body {
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-/* Status Pill - Design MD Spec: Background #0E2E20, border rgba(229, 168, 59, 0.4), text #E5A83B in Space Grotesk */
+/* Status Pill - Background #0E2E20, border rgba(229, 168, 59, 0.4), text #E5A83B in Mono */
 .status-pill {
   background-color: #0e2e20;
   border: 1px solid rgba(229, 168, 59, 0.4);
@@ -461,3 +475,216 @@ section,
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
 }
+
+/* ── Clean Logo Shine Animation ── */
+@keyframes logo-shine {
+  0% {
+    transform: translateX(-160%) skewX(-20deg);
+  }
+  35%, 100% {
+    transform: translateX(250%) skewX(-20deg);
+  }
+}
+
+.animate-logo-shine {
+  animation: logo-shine 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* ── Dropdown Downward Expansion Animations ── */
+@keyframes dropdown-expand-down {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes dropdown-collapse-up {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -8px, 0) scale(0.96);
+  }
+}
+
+@keyframes dropdown-item-reveal {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-dropdown-expand {
+  transform-origin: top center;
+  animation: dropdown-expand-down 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-dropdown-collapse {
+  transform-origin: top center;
+  animation: dropdown-collapse-up 160ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-dropdown-item {
+  animation: dropdown-item-reveal 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Settings Accordion Dropdown Animation ── */
+.accordion-content-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 200ms ease-out;
+  pointer-events: none;
+}
+
+.accordion-content-expand {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition: grid-template-rows 320ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: auto;
+}
+
+.accordion-inner-content {
+  overflow: hidden;
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.accordion-inner-content-closed {
+  transform: translate3d(0, -6px, 0);
+}
+
+.accordion-inner-content-open {
+  transform: translate3d(0, 0, 0);
+}
+
+/* ── Skeleton Shimmer Wave ── */
+@keyframes skeleton-shimmer-wave {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: rgba(20, 45, 32, 0.45);
+}
+
+.skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(242, 169, 59, 0.04) 20%,
+    rgba(247, 244, 235, 0.09) 50%,
+    rgba(242, 169, 59, 0.04) 80%,
+    transparent 100%
+  );
+  animation: skeleton-shimmer-wave 1.8s infinite ease-in-out;
+  pointer-events: none;
+}
+
+
+/* ── Tab & Form Slide Transitions ── */
+@keyframes tab-slide-from-right {
+  0% {
+    opacity: 0;
+    transform: translate3d(20px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes tab-slide-from-left {
+  0% {
+    opacity: 0;
+    transform: translate3d(-20px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-tab-from-right {
+  animation: tab-slide-from-right 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+.animate-tab-from-left {
+  animation: tab-slide-from-left 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+/* ── Native Page Transitions ── */
+@keyframes page-enter-forward {
+  0% {
+    opacity: 0;
+    transform: translate3d(24px, 0, 0) scale(0.994);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes page-enter-backward {
+  0% {
+    opacity: 0;
+    transform: translate3d(-24px, 0, 0) scale(0.994);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes page-enter-lift {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.996);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.animate-page-forward {
+  animation: page-enter-forward 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+.animate-page-backward {
+  animation: page-enter-backward 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+.animate-page-lift {
+  animation: page-enter-lift 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+

@@ -4,6 +4,7 @@ import { ArrowDownLeft, ArrowUpRight, FileText, ChevronRight } from 'lucide-reac
 import { useHistory } from '../../hooks/useHistory';
 import { Transaction } from '../history/TransactionCard';
 import { TransactionDetailsModal } from '../history/TransactionDetailsModal';
+import { RecentTransactionsSkeleton } from '../shared/Skeleton';
 
 export const RecentTransactions: React.FC = () => {
   const navigate = useNavigate();
@@ -104,7 +105,7 @@ export const RecentTransactions: React.FC = () => {
           {(loading || recentTxs.length > 0) && (
             <Link
               to="/history"
-              className="text-[#f2a93b] font-display-hero text-[11px] font-bold tracking-wider hover:opacity-85 transition-opacity flex items-center gap-0.5"
+              className="text-[#f2a93b] font-display-hero text-[11px] font-bold tracking-wider hover:opacity-85 transition-opacity duration-200 inline-flex items-center gap-0.5 shrink-0"
             >
               VIEW ALL
               <ChevronRight size={13} className="stroke-[2.5]" />
@@ -113,9 +114,7 @@ export const RecentTransactions: React.FC = () => {
         </div>
 
         {loading ? (
-          <div className="text-center text-[#627d70] py-8 text-body-md relative z-10 font-sans">
-            Loading transactions...
-          </div>
+          <RecentTransactionsSkeleton count={4} />
         ) : transactions.length === 0 ? (
           <div className="text-center text-[#627d70] py-8 text-body-md relative z-10 font-sans">
             No recent activity
