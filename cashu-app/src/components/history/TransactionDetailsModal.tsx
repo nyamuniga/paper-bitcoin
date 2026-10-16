@@ -5,6 +5,7 @@ import { Transaction } from './TransactionCard';
 import { toast } from 'react-hot-toast';
 import { SafeQRCode } from '../shared/SafeQRCode';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
+import { useBottomSheet } from '../../hooks/useBottomSheet';
 
 interface TransactionDetailsModalProps {
   tx: Transaction;
@@ -15,6 +16,7 @@ interface TransactionDetailsModalProps {
 }
 
 export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ tx, onClose, onRecover, onCheckClaimed, onRetryReceiveEcash }) => {
+  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
   const isMint = 'Mint' in tx.tx_type;
   const isIssue = 'Issue' in tx.tx_type;
   const isMelt = 'Melt' in tx.tx_type;
@@ -64,20 +66,33 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
 
   return createPortal(
     <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
-      onClick={onClose}
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
+      style={backdropStyle}
+      onClick={closeWithAnimation}
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="bg-surface-container-high rounded-2xl w-full max-w-md border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative max-h-[90vh]"
+        style={sheetStyle}
+        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[92vh] pb-6 sm:pb-0"
       >
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
+
+        {/* Drag Handle */}
+        <div 
+          {...dragHandleProps}
+          className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
+        >
+          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+        </div>
         
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-outline-variant/10 relative z-10">
+        <div 
+          {...dragHandleProps}
+          className="flex justify-between items-center px-6 py-4 border-b border-outline-variant/10 relative z-10 cursor-grab active:cursor-grabbing"
+        >
           <h2 className="text-headline-sm font-headline-sm text-on-surface">Transaction Details</h2>
           <button 
-            onClick={onClose}
+            onClick={closeWithAnimation}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors"
           >
             <X size={18} />
@@ -88,18 +103,18 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
         <div className="p-6 flex flex-col gap-6 relative z-10 overflow-y-auto">
           {/* Main info */}
           <div className="flex flex-col items-center text-center">
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center border mb-4 ${
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center border mb-3 ${
               isMint || isRedeem || isReceive ? 'bg-[#0e291d] border-[#1c442f] text-[#34d399]' : 'bg-[#10241b] border-[#1b3829] text-[#627d70]'
             }`}>
               {isMint || isRedeem || isReceive ? <ArrowDownLeft className="w-8 h-8 stroke-[2.25]" /> :
                isIssue ? <FileText className="w-8 h-8 stroke-[2]" /> : 
                <ArrowUpRight className="w-8 h-8 stroke-[2.25]" />}
             </div>
-            <h3 className="text-headline-md font-headline-md text-on-surface">{getTxLabel()}</h3>
-            <p className="text-display-sm font-display-sm mt-2 text-primary">
+            <span className="text-body-sm font-body-sm font-medium text-on-surface-variant tracking-wide">{getTxLabel()}</span>
+            <p className="text-headline-md font-headline-md font-bold mt-1 text-primary">
               {isMint || isRedeem || isReceive ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
             </p>
-            {tx.fee > 0 && <p className="text-label-caps font-label-caps text-on-surface-variant mt-1">Fee: ₿{tx.fee.toLocaleString()}</p>}
+            {tx.fee > 0 && <p className="text-body-sm font-body-sm text-on-surface-variant mt-0.5">Fee: ₿{tx.fee.toLocaleString()}</p>}
           </div>
 
           <div className="divider-dashed my-1 border-outline-variant/20"></div>
@@ -134,7 +149,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
 
             <div className="flex flex-col gap-1.5">
               <span className="text-label-caps font-label-caps text-on-surface-variant">TRANSACTION ID</span>
-              <span className="text-body-md font-body-md text-on-surface bg-surface-container-lowest p-2 rounded-lg border border-outline-variant/10 truncate font-mono text-xs select-all text-center">
+              <span className="font-mono text-xs text-on-surface bg-surface-container-lowest p-2.5 rounded-xl border border-outline-variant/10 truncate select-all text-center">
                 {tx.id}
               </span>
             </div>
@@ -142,7 +157,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             {quoteId && (
               <div className="flex flex-col gap-1.5">
                 <span className="text-label-caps font-label-caps text-on-surface-variant">QUOTE ID</span>
-                <span className="text-body-md font-body-md text-on-surface bg-surface-container-lowest p-2 rounded-lg border border-outline-variant/10 truncate font-mono text-xs select-all text-center">
+                <span className="font-mono text-xs text-on-surface bg-surface-container-lowest p-2.5 rounded-xl border border-outline-variant/10 truncate select-all text-center">
                   {quoteId}
                 </span>
               </div>
@@ -158,7 +173,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             {tx.status === 'Pending' && onRecover && (
               <button
                 onClick={onRecover}
-                className="mt-2 w-full py-2.5 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-label-lg transition-colors border border-primary/30 flex items-center justify-center gap-2"
+                className="mt-2 w-full py-2.5 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-bold text-body-md transition-colors border border-primary/30 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CheckCircle className="w-4 h-4" />
                 {isReceiveEcash ? 'Check Status & Claim' : 'Check Status & Recover'}
@@ -168,7 +183,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             {tx.status !== 'Pending' && (isSend || isIssue) && onCheckClaimed && (
               <button
                 onClick={onCheckClaimed}
-                className="mt-2 w-full py-2.5 bg-surface-container-highest hover:bg-surface-bright text-on-surface rounded-xl font-label-lg transition-colors border border-outline-variant/20 flex items-center justify-center gap-2"
+                className="mt-2 w-full py-2.5 bg-surface-container-highest hover:bg-surface-bright text-on-surface rounded-xl font-bold text-body-md transition-colors border border-outline-variant/20 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CheckCircle className="w-4 h-4 text-emerald-400" />
                 Check if Claimed
@@ -178,7 +193,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             {tx.status === 'Failed' && isReceiveEcash && onRetryReceiveEcash && (
               <button
                 onClick={onRetryReceiveEcash}
-                className="mt-2 w-full py-2.5 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-label-lg transition-colors border border-primary/30 flex items-center justify-center gap-2"
+                className="mt-2 w-full py-2.5 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-bold text-body-md transition-colors border border-primary/30 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <ArrowDownLeft className="w-4 h-4 stroke-[2.25]" />
                 Retry Claim
@@ -199,7 +214,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                   <div className="bg-white p-4 rounded-xl shadow-lg relative min-w-[212px] min-h-[212px] flex items-center justify-center">
                     <SafeQRCode value={currentFrame || (tokenString && tokenString.length < 1500 ? tokenString : '')} size={180} />
                     {isAnimated && (
-                      <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-label-caps">
+                      <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded font-mono">
                         {currentFrameIndex + 1}/{totalFrames}
                       </div>
                     )}
@@ -214,11 +229,11 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                     onClick={handleCopy}
                     className="w-full bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30 shadow-inner cursor-pointer hover:border-primary/30 transition-colors"
                   >
-                    <p className="text-[11px] font-mono text-on-surface-variant break-all line-clamp-3 select-all">{tokenString}</p>
+                    <p className="text-xs font-mono text-on-surface-variant break-all line-clamp-3 select-all">{tokenString}</p>
                   </div>
                   <button
                     onClick={handleCopy}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20"
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-full bg-primary/15 text-primary font-bold text-body-md hover:bg-primary/25 transition-colors border border-primary/20 cursor-pointer"
                   >
                     {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Token</>}
                   </button>

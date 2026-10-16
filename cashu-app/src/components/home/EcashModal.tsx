@@ -14,6 +14,7 @@ import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { extractMintFromToken } from '../../utils/format';
+import { useBottomSheet } from '../../hooks/useBottomSheet';
 
 interface EcashModalProps {
   mintUrl: string;
@@ -25,9 +26,27 @@ interface EcashModalProps {
 type Tab = 'send' | 'receive';
 
 export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialToken, onClose }) => {
+  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [mintUrl, setMintUrl] = useState(initialMintUrl);
   const [showMintDropdown, setShowMintDropdown] = useState(false);
+  const [isClosingMintDropdown, setIsClosingMintDropdown] = useState(false);
+
+  const closeMintDropdown = () => {
+    setIsClosingMintDropdown(true);
+    setTimeout(() => {
+      setShowMintDropdown(false);
+      setIsClosingMintDropdown(false);
+    }, 160);
+  };
+
+  const toggleMintDropdown = () => {
+    if (showMintDropdown) {
+      closeMintDropdown();
+    } else {
+      setShowMintDropdown(true);
+    }
+  };
 
   // Send state
   const [amount, setAmount] = useState('');
@@ -156,17 +175,40 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <div className="bg-surface-container-high rounded-2xl w-full max-w-lg border border-outline-variant/20 shadow-2xl overflow-hidden flex flex-col relative max-h-[90vh]">
+    <div
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
+      style={backdropStyle}
+      onClick={closeWithAnimation}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={sheetStyle}
+        className={`bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-lg border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[96vh] transition-[height,min-height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          activeTab === 'send'
+            ? 'h-[96vh] sm:h-auto sm:min-h-[700px] pb-6 sm:pb-4'
+            : 'pb-6 sm:pb-0'
+        }`}
+      >
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
 
+        {/* Drag Handle */}
+        <div
+          {...dragHandleProps}
+          className="w-full flex justify-center pt-2.5 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
+        >
+          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+        </div>
+
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-outline-variant/10 relative z-10">
+        <div
+          {...dragHandleProps}
+          className="flex justify-between items-center px-5 sm:px-6 py-3 sm:py-4 border-b border-outline-variant/10 relative z-10 cursor-grab active:cursor-grabbing"
+        >
           <h2 className="text-headline-sm font-headline-sm text-on-surface flex items-center gap-2">
-            <Coins className="text-primary w-5 h-5" /> Ecash
+            <Coins className="text-primary w-5 h-5" /> eCash
           </h2>
           <button
-            onClick={onClose}
+            onClick={closeWithAnimation}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors"
           >
             <X size={18} />
@@ -174,31 +216,43 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-outline-variant/10 relative z-10">
+        <div className="relative flex border-b border-outline-variant/10 z-10 bg-surface-container-high/40 select-none">
           <button
             onClick={() => switchTab('send')}
-            className={`flex-1 py-3 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'send'
-              ? 'text-primary border-b-2 border-primary'
-              : 'text-on-surface-variant hover:text-on-surface'
-              }`}
+            className={`flex-1 py-2.5 sm:py-3 text-[13px] sm:text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
+              activeTab === 'send'
+                ? 'text-primary'
+                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
+            }`}
           >
-            <ArrowUp size={16} /> SEND
+            <ArrowUp size={16} className={`transition-transform duration-200 ${activeTab === 'send' ? 'scale-110 text-primary' : ''}`} /> 
+            <span>SEND</span>
           </button>
           <button
             onClick={() => switchTab('receive')}
-            className={`flex-1 py-3 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'receive'
-              ? 'text-primary border-b-2 border-primary'
-              : 'text-on-surface-variant hover:text-on-surface'
-              }`}
+            className={`flex-1 py-2.5 sm:py-3 text-[13px] sm:text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
+              activeTab === 'receive'
+                ? 'text-primary'
+                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
+            }`}
           >
-            <ArrowDown size={16} /> RECEIVE
+            <ArrowDown size={16} className={`transition-transform duration-200 ${activeTab === 'receive' ? 'scale-110 text-primary' : ''}`} /> 
+            <span>RECEIVE</span>
           </button>
+
+          {/* Gliding active indicator */}
+          <div
+            className="absolute bottom-0 left-0 h-[2.5px] bg-primary shadow-[0_0_12px_rgba(242,169,59,0.7)] rounded-t-full transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] w-1/2 pointer-events-none"
+            style={{
+              transform: `translate3d(${activeTab === 'send' ? '0%' : '100%'}, 0, 0)`
+            }}
+          />
         </div>
 
         {/* Content */}
-        <div className="p-6 flex flex-col gap-6 relative z-10 overflow-y-auto">
+        <div className="p-4 sm:p-6 flex flex-col gap-3.5 sm:gap-4 relative z-10 overflow-y-auto overflow-x-hidden flex-1">
           {/* Mint info */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5 sm:gap-2">
             <p className="text-body-md font-body-md text-on-surface-variant">
               {activeTab === 'send'
                 ? (token ? 'Ecash token created from:' : 'Send ecash token from:')
@@ -206,11 +260,11 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
             </p>
             <div className="relative">
               {showMintDropdown && (
-                <div className="fixed inset-0 z-40" onClick={() => setShowMintDropdown(false)}></div>
+                <div className="fixed inset-0 z-40" onClick={closeMintDropdown}></div>
               )}
               <button
-                onClick={() => setShowMintDropdown(!showMintDropdown)}
-                className="w-full flex items-center justify-between bg-surface-container-highest p-3 rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-colors relative z-50"
+                onClick={toggleMintDropdown}
+                className="w-full flex items-center justify-between bg-surface-container-highest p-2.5 sm:p-3 rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-colors relative z-50 cursor-pointer"
               >
                 <div className="flex items-center gap-2 min-w-0 pr-4">
                   <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
@@ -218,21 +272,30 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap">
                   <span className="text-body-md font-body-md font-semibold text-on-surface">₿{availableBalance.toLocaleString()}</span>
-                  <ChevronDown size={16} className="text-on-surface-variant flex-shrink-0" />
+                  <ChevronDown 
+                    size={16} 
+                    className={`flex-shrink-0 transition-transform duration-300 ease-out ${
+                      showMintDropdown && !isClosingMintDropdown ? 'rotate-180 text-primary' : 'text-on-surface-variant'
+                    }`} 
+                  />
                 </div>
               </button>
 
               {showMintDropdown && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-surface-container-highest rounded-2xl shadow-2xl border border-outline-variant/20 overflow-hidden flex flex-col animate-fade-in z-50 max-h-[250px] overflow-y-auto">
+                <div className={`absolute top-full left-0 right-0 mt-2 bg-surface-container-highest rounded-2xl shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] border border-outline-variant/20 overflow-hidden flex flex-col z-50 max-h-[250px] overflow-y-auto ${
+                  isClosingMintDropdown ? 'animate-dropdown-collapse' : 'animate-dropdown-expand'
+                }`}>
                   {mintUrls.map((m, index) => (
                     <button
                       key={m}
-                      onClick={() => { setMintUrl(m); setShowMintDropdown(false); }}
-                      className={`flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left w-full ${index > 0 ? 'border-t border-outline-variant/10' : ''}`}
+                      style={{ animationDelay: `${index * 30}ms` }}
+                      onClick={() => { setMintUrl(m); closeMintDropdown(); }}
+                      className="flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left w-full border-b border-outline-variant/10 last:border-b-0 animate-dropdown-item cursor-pointer"
                     >
                       <div className="flex items-center gap-2 min-w-0 pr-2">
                         <MintIcon mintUrl={m} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
                         <MintName mintUrl={m} className="text-body-sm font-body-sm text-on-surface truncate" />
+                        {mintUrl === m && <Check size={14} className="text-primary flex-shrink-0" />}
                       </div>
                       <span className="text-body-sm font-body-sm font-bold text-on-surface flex-shrink-0">₿{(mintBalances![m] || 0).toLocaleString()}</span>
                     </button>
@@ -242,18 +305,24 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
             </div>
           </div>
 
-          {activeTab === 'send' ? (
+          <div
+            key={activeTab}
+            className={`flex flex-col gap-4 ${
+              activeTab === 'receive' ? 'animate-tab-from-right' : 'animate-tab-from-left'
+            }`}
+          >
+            {activeTab === 'send' ? (
             /* ─── SEND TAB ────────────────────────────────────────────── */
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-3 sm:gap-4">
               {/* Amount input */}
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2.5 sm:gap-3">
                 {!token && (
                   <>
                     <AmountDisplay amount={amount} compact />
                     <NumberPad value={amount} onChange={(val) => { setAmount(val); setToken(null); }} compact />
 
-                    <div className="flex flex-col gap-2 mt-2">
-                      <label className="text-[12px] font-label-caps text-on-surface-variant ml-1">Lock to Pubkey (Optional)</label>
+                    <div className="flex flex-col gap-1 mt-0.5">
+                      <label className="text-[11px] font-label-caps text-on-surface-variant ml-1">Lock to Pubkey (Optional)</label>
                       <input
                         type="text"
                         value={pubkey}
@@ -276,7 +345,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                           setPubkey(val);
                         }}
                         placeholder="npub1... or hex pubkey"
-                        className="w-full bg-surface-container p-3 rounded-xl border border-outline-variant/10 text-[14px] text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 transition-colors"
+                        className="w-full bg-surface-container py-2.5 px-3 rounded-xl border border-outline-variant/10 text-[13px] text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 transition-colors"
                       />
                     </div>
                   </>
@@ -288,7 +357,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                 <button
                   onClick={handleSend}
                   disabled={sending || !isValid}
-                  className={`btn-gradient w-full py-4 rounded-full text-on-primary font-headline-lg-mobile text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${sending || !isValid ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                  className={`btn-gradient w-full py-3.5 sm:py-4 rounded-full text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center mt-1 ${sending || !isValid ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                     }`}
                 >
                   {sending ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Token'}
@@ -310,11 +379,10 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                         setFormatVersion('v3');
                         if (tokenV3) setToken(tokenV3);
                       }}
-                      className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${
-                        formatVersion === 'v3'
+                      className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${formatVersion === 'v3'
                           ? 'bg-primary text-on-primary shadow-sm'
                           : 'text-on-surface-variant hover:text-on-surface'
-                      }`}
+                        }`}
                     >
                       cashuA (v3 - Universal)
                     </button>
@@ -324,11 +392,10 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                         setFormatVersion('v4');
                         if (tokenV4) setToken(tokenV4);
                       }}
-                      className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${
-                        formatVersion === 'v4'
+                      className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${formatVersion === 'v4'
                           ? 'bg-primary text-on-primary shadow-sm'
                           : 'text-on-surface-variant hover:text-on-surface'
-                      }`}
+                        }`}
                     >
                       cashuB (v4 - Compact)
                     </button>
@@ -387,7 +454,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                   <p className="text-[28px] font-display-lg text-emerald-400">₿{receivedAmount.toLocaleString()}</p>
                 </div>
                 <button
-                  onClick={onClose}
+                  onClick={closeWithAnimation}
                   className="w-full py-4 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20"
                 >
                   Done
@@ -466,6 +533,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
               </div>
             )
           )}
+          </div>
         </div>
       </div>
       {sending && (

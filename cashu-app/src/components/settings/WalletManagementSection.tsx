@@ -1,19 +1,29 @@
 import { useState, useEffect } from 'react';
-import { Lock, Trash2, AlertTriangle, ChevronRight, ChevronDown, Wallet, Terminal } from 'lucide-react';
+import { Lock, Trash2, AlertTriangle, ChevronDown, Wallet, Terminal } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { listen } from '@tauri-apps/api/event';
 import { useWalletStore } from '../../store/wallet';
 import { useAuth } from '../../hooks/useAuth';
 import { CleanWalletModal, CleanWalletResult } from './CleanWalletModal';
 
-export const WalletManagementSection = () => {
+interface WalletManagementSectionProps {
+  isExpanded?: boolean;
+  onToggle?: () => void;
+}
+
+export const WalletManagementSection: React.FC<WalletManagementSectionProps> = ({
+  isExpanded: isExpandedProp,
+  onToggle,
+}) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const clearWalletState = useWalletStore((s) => s.clearWalletState);
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const { lockWallet, resetWallet } = useAuth();
   const [isCleaning, setIsCleaning] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = isExpandedProp !== undefined ? isExpandedProp : internalExpanded;
+  const toggleExpanded = onToggle || (() => setInternalExpanded((prev) => !prev));
 
   // Live Clean Logs & Modal State
   const [showCleanModal, setShowCleanModal] = useState(false);
@@ -100,8 +110,8 @@ export const WalletManagementSection = () => {
   return (
     <section className="bg-surface-container-high rounded-xl border border-outline-variant overflow-hidden">
       <div
-        className="flex items-center justify-between p-4 md:p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
-        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center justify-between p-4 md:p-6 cursor-pointer hover:bg-surface-container-highest transition-colors select-none"
+        onClick={toggleExpanded}
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="w-10 h-10 rounded-full bg-primary/10 flex shrink-0 items-center justify-center text-primary border border-primary/20">
@@ -113,13 +123,19 @@ export const WalletManagementSection = () => {
           </div>
         </div>
 
-        <div className="text-on-surface-variant">
-          {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+        <div className="text-on-surface-variant shrink-0">
+          <ChevronDown
+            size={20}
+            className={`transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              isExpanded ? 'rotate-180 text-primary' : 'text-on-surface-variant'
+            }`}
+          />
         </div>
       </div>
 
-      {isExpanded && (
-        <div className="px-6 pb-6 pt-2 border-t border-outline-variant flex flex-col gap-4">
+      <div className={isExpanded ? 'accordion-content-expand' : 'accordion-content-collapse'}>
+        <div className={`accordion-inner-content ${isExpanded ? 'accordion-inner-content-open' : 'accordion-inner-content-closed'}`}>
+          <div className="px-6 pb-6 pt-2 border-t border-outline-variant flex flex-col gap-4">
 
           <button
             onClick={handleLock}
@@ -214,7 +230,8 @@ export const WalletManagementSection = () => {
             </div>
           )}
         </div>
-      )}
+      </div>
+    </div>
 
       {/* Real-time Clean & Restore Logs Modal */}
       <CleanWalletModal
