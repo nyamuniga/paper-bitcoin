@@ -13,7 +13,7 @@ import { toast } from 'react-hot-toast';
 import { Zap } from 'lucide-react';
 
 export const Home = () => {
-  const { balance, mintBalances } = useHome();
+  const { balance, mintBalances, isLoading } = useHome();
   // Initialize Nostr identity and background token claim loop
   const { claimNow } = useNostr();
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
@@ -112,99 +112,49 @@ export const Home = () => {
       doRefresh();
     };
 
-    // --- Pointer events (macOS / desktop / web with mouse) ---
-    let pointerActive = false;
-
-    const onPointerDown = (e: PointerEvent) => {
-      // Only handle mouse/pen – touch pointers are handled by touch events above
-      if (e.pointerType === 'touch') return;
-      if (window.scrollY <= 5) {
-        startYRef.current = e.clientY;
-        pointerActive = true;
-      }
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (e.pointerType === 'touch') return;
-      if (!pointerActive || startYRef.current <= 0) return;
-
-      const dist = e.clientY - startYRef.current;
-
-      if (dist > 0) {
-        const dampened = Math.min(dist * 0.5, 80);
-        setPullDistance(dampened);
-        if (dist > 60) {
-          setPulling(true);
-        } else {
-          setPulling(false);
-        }
-      } else if (dist < -10) {
-        startYRef.current = 0;
-        setPullDistance(0);
-        setPulling(false);
-        pointerActive = false;
-      }
-    };
-
-    const onPointerUp = (e: PointerEvent) => {
-      if (e.pointerType === 'touch') return;
-      if (pointerActive) {
-        pointerActive = false;
-        doRefresh();
-      }
-    };
-
     // Touch: use { passive: false } on touchmove so we can call preventDefault()
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchmove', onTouchMove, { passive: false });
     el.addEventListener('touchend', onTouchEnd, { passive: true });
     el.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
-    // Pointer: for desktop mouse/trackpad (macOS Tauri, web browser)
-    el.addEventListener('pointerdown', onPointerDown);
-    el.addEventListener('pointermove', onPointerMove);
-    el.addEventListener('pointerup', onPointerUp);
-    el.addEventListener('pointerleave', onPointerUp);
-    el.addEventListener('pointercancel', onPointerUp);
-
     return () => {
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
       el.removeEventListener('touchcancel', onTouchEnd);
-      el.removeEventListener('pointerdown', onPointerDown);
-      el.removeEventListener('pointermove', onPointerMove);
-      el.removeEventListener('pointerup', onPointerUp);
-      el.removeEventListener('pointerleave', onPointerUp);
-      el.removeEventListener('pointercancel', onPointerUp);
     };
   }, [doRefresh]);
 
   return (
     <div 
       ref={containerRef}
-      className={`w-full relative min-h-screen ${startYRef.current > 0 ? 'select-none' : ''}`}
+      className={`w-full relative min-h-screen ${pullDistance > 0 ? 'select-none' : ''}`}
     >
       {/* Pull to refresh indicator */}
-      <div 
-        className="absolute w-full flex justify-center left-0 top-0 z-50 pointer-events-none transition-transform duration-200 ease-out"
-        style={{ 
-          transform: `translateY(${refreshing ? 20 : pullDistance - 40}px)`,
-          opacity: pullDistance > 10 || refreshing ? 1 : 0 
-        }}
-      >
-        <div className="bg-surface-container-high rounded-full p-2 shadow-lg border border-outline-variant flex items-center justify-center">
-          <Loader2 
-            size={24} 
-            className={`text-primary ${refreshing ? 'animate-spin' : ''}`} 
-            style={{ transform: !refreshing ? `rotate(${pullDistance * 5}deg)` : 'none' }}
-          />
+      {(pullDistance > 0 || refreshing) && (
+        <div 
+          className="absolute w-full flex justify-center left-0 top-0 z-50 pointer-events-none transition-transform duration-200 ease-out"
+          style={{ 
+            transform: `translateY(${refreshing ? 20 : pullDistance - 40}px)`,
+            opacity: pullDistance > 10 || refreshing ? 1 : 0 
+          }}
+        >
+          <div className="bg-surface-container-high rounded-full p-2 shadow-lg border border-outline-variant flex items-center justify-center">
+            <Loader2 
+              size={24} 
+              className={`text-primary ${refreshing ? 'animate-spin' : ''}`} 
+              style={{ transform: !refreshing ? `rotate(${pullDistance * 5}deg)` : 'none' }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <main 
-        className="px-4 sm:px-6 md:px-8 pt-2 md:pt-5 pb-12 w-full max-w-[480px] md:max-w-[1200px] mx-auto transition-transform duration-200 ease-out flex flex-col gap-4"
-        style={{ transform: `translateY(${refreshing ? 50 : pullDistance}px)` }}
+        className={`px-4 sm:px-6 md:px-8 pt-2 md:pt-5 pb-12 w-full max-w-[480px] md:max-w-[1200px] mx-auto flex flex-col gap-4 ${
+          pullDistance > 0 || refreshing ? 'transition-transform duration-200 ease-out' : ''
+        }`}
+        style={pullDistance > 0 || refreshing ? { transform: `translateY(${refreshing ? 50 : pullDistance}px)` } : undefined}
       >
         {pendingRequests.length > 0 && (
           <div 
@@ -228,7 +178,7 @@ export const Home = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-start">
           <div className="md:col-span-5 lg:col-span-5 flex flex-col gap-3.5 sm:gap-4">
-            <WalletBalanceCard balance={balance} mintBalances={mintBalances} />
+            <WalletBalanceCard balance={balance} mintBalances={mintBalances} isLoading={isLoading} />
             <LightningAddressCard />
           </div>
           <div className="md:col-span-7 lg:col-span-7">

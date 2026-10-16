@@ -1,16 +1,26 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'react-hot-toast';
-import { Link2, ChevronDown, ChevronRight, Copy, QrCode, Edit2, RefreshCcw, Check, X, X as XIcon } from 'lucide-react';
+import { Link2, ChevronDown, Copy, QrCode, Edit2, RefreshCcw, Check, X, X as XIcon } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { useWalletStore } from '../../store/wallet';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
 
-export const NWCSection = () => {
+interface NWCSectionProps {
+  isExpanded?: boolean;
+  onToggle?: () => void;
+}
+
+export const NWCSection: React.FC<NWCSectionProps> = ({
+  isExpanded: isExpandedProp,
+  onToggle,
+}) => {
   const [isEnabled, setIsEnabled] = useState(false);
   const [nwcUri, setNwcUri] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = isExpandedProp !== undefined ? isExpandedProp : internalExpanded;
+  const toggleExpanded = onToggle || (() => setInternalExpanded((prev) => !prev));
   const [isResetting, setIsResetting] = useState(false);
 
   const [mintUrl, setMintUrl] = useState<string>('');
@@ -122,8 +132,8 @@ export const NWCSection = () => {
       <div className="absolute top-0 left-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 -translate-x-1/4 pointer-events-none transition-transform group-hover:scale-110 duration-700"></div>
 
       <div
-        className="flex items-center justify-between p-4 md:p-6 relative z-10 cursor-pointer hover:bg-surface-container-highest transition-colors"
-        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center justify-between p-4 md:p-6 relative z-10 cursor-pointer hover:bg-surface-container-highest transition-colors select-none"
+        onClick={toggleExpanded}
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-full bg-primary/10 flex shrink-0 items-center justify-center text-primary border border-primary/20">
@@ -136,13 +146,19 @@ export const NWCSection = () => {
         </div>
         <div className="flex items-center gap-4 shrink-0">
           <div className="text-on-surface-variant shrink-0">
-            {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+            <ChevronDown
+              size={20}
+              className={`transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                isExpanded ? 'rotate-180 text-primary' : 'text-on-surface-variant'
+              }`}
+            />
           </div>
         </div>
       </div>
 
-      {isExpanded && (
-        <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2 border-t border-outline-variant relative z-10">
+      <div className={isExpanded ? 'accordion-content-expand' : 'accordion-content-collapse'}>
+        <div className={`accordion-inner-content ${isExpanded ? 'accordion-inner-content-open' : 'accordion-inner-content-closed'}`}>
+          <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2 border-t border-outline-variant relative z-10">
           <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
             Connect a Nostr app to this wallet. Paired apps can check your balance, create invoices, and pay Lightning invoices with your ecash.
           </p>
@@ -302,7 +318,8 @@ export const NWCSection = () => {
             )}
           </div>
         </div>
-      )}
+      </div>
     </div>
-  );
+  </div>
+);
 };

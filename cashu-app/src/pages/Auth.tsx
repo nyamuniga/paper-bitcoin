@@ -1,9 +1,10 @@
-import { RefreshCw } from 'lucide-react';
 import { LoginForm } from '../components/auth/LoginForm';
 import { CreateWalletForm } from '../components/auth/CreateWalletForm';
 import { RestoreWalletForm } from '../components/auth/RestoreWalletForm';
 import { RecoveryPhraseDisplay } from '../components/auth/RecoveryPhraseDisplay';
 import { ConfirmResetDialog } from '../components/auth/ConfirmResetDialog';
+import { VaultLoader } from '../components/shared/VaultLoader';
+import { AnimatedMedallion } from '../components/shared/AnimatedMedallion';
 import { useAuth } from '../hooks/useAuth';
 
 export const Auth = () => {
@@ -29,7 +30,7 @@ export const Auth = () => {
   } = useAuth();
 
   if (isSetup === null) {
-    return <div className="flex h-screen items-center justify-center bg-background"><RefreshCw className="animate-spin text-primary" size={32} /></div>;
+    return <VaultLoader />;
   }
 
   if (generatedMnemonic) {
@@ -65,10 +66,9 @@ export const Auth = () => {
       <div className={`w-full max-w-sm bg-surface-container/90 backdrop-blur-xl border border-primary/25 rounded-3xl p-8 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] transition-transform duration-300 relative z-10 ${shake ? 'animate-shake' : ''}`}>
 
         <div className="flex flex-col items-center justify-center mb-5">
-          <img
-            src="/logo.png"
-            alt="BitNotes Emblem"
-            className="w-20 h-20 rounded-full border-2 border-primary/45 shadow-[0_0_24px_rgba(229,168,59,0.25)] object-cover mb-2.5 hover:scale-105 transition-transform"
+          <AnimatedMedallion
+            size="md"
+            className="mb-2.5"
           />
           <span className="font-mono text-[10px] font-semibold text-primary uppercase tracking-widest status-pill px-2.5 py-0.5 rounded-full">
             Sovereign Ecash Vault

@@ -7,6 +7,7 @@ export const useHome = () => {
   const balance = useWalletStore((s) => s.balanceSats);
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const pendingTxs = useWalletStore((s) => s.pendingTxs);
+  const isLoading = useWalletStore((s) => s.isLoading || s.lastUpdate === 0);
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
   const [invoice, setInvoice] = useState('');
@@ -31,6 +32,7 @@ export const useHome = () => {
     balance,
     mintBalances,
     pendingTxs,
+    isLoading,
     invoice,
     setInvoice,
     paying,

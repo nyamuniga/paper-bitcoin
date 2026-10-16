@@ -1,5 +1,6 @@
 import React from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
+import { AnimatedMedallion } from './AnimatedMedallion';
 
 interface FullScreenLoaderProps {
   title?: string;
@@ -24,9 +25,7 @@ export const FullScreenLoader: React.FC<FullScreenLoaderProps> = ({
             <AlertCircle className="w-10 h-10 text-error" />
           </div>
         ) : (
-          <div className="w-20 h-20 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center relative z-10">
-            <Loader2 className="w-10 h-10 text-primary animate-spin" />
-          </div>
+          <AnimatedMedallion size="md" className="relative z-10" />
         )}
 
         <div className="relative z-10 flex flex-col items-center gap-2 text-center">
