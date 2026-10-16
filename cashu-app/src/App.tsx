@@ -12,6 +12,7 @@ import Mints from './pages/Mints';
 import DiscoverMints from './pages/DiscoverMints';
 import { Pay } from './pages/Pay';
 import { TopNav } from './components/navigation/TopNav';
+import { PageTransition } from './components/navigation/PageTransition';
 import { TransactionProcessor } from './hooks/useTransactionProcessor';
 import { useNostr } from './hooks/useNostr';
 import './App.css';
@@ -41,16 +42,18 @@ export default function App() {
       <div className="fixed inset-0 texture-overlay z-0 pointer-events-none"></div>
       <div className="min-h-screen bg-background pb-8 relative z-10 flex flex-col">
         <TopNav />
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/scan" element={<Scan />} />
-          <Route path="/issue" element={<Issue />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/mints" element={<Mints />} />
-          <Route path="/discover" element={<DiscoverMints />} />
-          <Route path="/pay" element={<Pay />} />
-        </Routes>
+        <PageTransition>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/scan" element={<Scan />} />
+            <Route path="/issue" element={<Issue />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/mints" element={<Mints />} />
+            <Route path="/discover" element={<DiscoverMints />} />
+            <Route path="/pay" element={<Pay />} />
+          </Routes>
+        </PageTransition>
       </div>
     </BrowserRouter>
   );

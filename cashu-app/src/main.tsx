@@ -1,6 +1,15 @@
 import './polyfills';
 import './nativeSetup';
 import './store/themeStore';
+import '@fontsource/poppins/300.css';
+import '@fontsource/poppins/400.css';
+import '@fontsource/poppins/500.css';
+import '@fontsource/poppins/600.css';
+import '@fontsource/poppins/700.css';
+import '@fontsource/poppins/800.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/500.css';
+import '@fontsource/jetbrains-mono/600.css';
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
@@ -27,7 +36,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
             borderRadius: '16px',
             fontSize: '13px',
             fontWeight: '500',
-            fontFamily: "'Manrope', sans-serif",
+            fontFamily: "'Poppins', sans-serif",
             backdropFilter: 'blur(12px)',
             maxWidth: '90vw',
           },

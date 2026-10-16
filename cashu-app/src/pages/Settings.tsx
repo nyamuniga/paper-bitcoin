@@ -9,6 +9,11 @@ import { PageHeader } from '../components/shared/PageHeader';
 
 export const Settings = () => {
   const [appInfo, setAppInfo] = useState({ name: '', version: '' });
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+
+  const toggleSection = (sectionId: string) => {
+    setActiveSection((prev) => (prev === sectionId ? null : sectionId));
+  };
 
   useEffect(() => {
     const fetchInfo = async () => {
@@ -31,13 +36,28 @@ export const Settings = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <div className="flex flex-col gap-6">
-          <RecoveryPhraseSection />
-          <NWCSection />
+          <RecoveryPhraseSection
+            isExpanded={activeSection === 'recovery'}
+            onToggle={() => toggleSection('recovery')}
+          />
+          <NWCSection
+            isExpanded={activeSection === 'nwc'}
+            onToggle={() => toggleSection('nwc')}
+          />
         </div>
         <div className="flex flex-col gap-6">
-          <NostrSection />
-          <LockedEcashSection />
-          <WalletManagementSection />
+          <NostrSection
+            isExpanded={activeSection === 'nostr'}
+            onToggle={() => toggleSection('nostr')}
+          />
+          <LockedEcashSection
+            isExpanded={activeSection === 'locked-ecash'}
+            onToggle={() => toggleSection('locked-ecash')}
+          />
+          <WalletManagementSection
+            isExpanded={activeSection === 'wallet'}
+            onToggle={() => toggleSection('wallet')}
+          />
         </div>
       </div>
 

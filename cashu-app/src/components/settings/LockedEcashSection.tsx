@@ -1,15 +1,25 @@
 import React, { useState, useMemo } from 'react';
-import { Lock, Copy, QrCode, Check, X, ChevronRight, ChevronDown } from 'lucide-react';
+import { Lock, Copy, QrCode, Check, X, ChevronDown } from 'lucide-react';
 import { useNostrStore } from '../../store/nostrStore';
 import QRCode from 'react-qr-code';
 import toast from 'react-hot-toast';
 import { nip19 } from 'nostr-tools';
 
-export const LockedEcashSection: React.FC = () => {
+interface LockedEcashSectionProps {
+  isExpanded?: boolean;
+  onToggle?: () => void;
+}
+
+export const LockedEcashSection: React.FC<LockedEcashSectionProps> = ({
+  isExpanded: isExpandedProp,
+  onToggle,
+}) => {
   const { npub } = useNostrStore();
   const [showQr, setShowQr] = useState(false);
   const [copiedHex, setCopiedHex] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = isExpandedProp !== undefined ? isExpandedProp : internalExpanded;
+  const toggleExpanded = onToggle || (() => setInternalExpanded((prev) => !prev));
 
   const hexPubkey = useMemo(() => {
     if (!npub) return '';
@@ -40,58 +50,65 @@ export const LockedEcashSection: React.FC = () => {
     <>
       <section className="bg-surface-container-high rounded-xl border border-outline-variant overflow-hidden">
         <div
-          className="flex items-center justify-between p-4 md:p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
-          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center justify-between p-4 md:p-6 cursor-pointer hover:bg-surface-container-highest transition-colors select-none"
+          onClick={toggleExpanded}
         >
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary border border-primary/20 shrink-0">
               <Lock size={20} />
             </div>
             <div className="min-w-0 flex-1">
-            <h2 className="text-body-md font-body-md font-bold text-on-surface mb-0.5">Locked Ecash</h2>
-            <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">P2PK public key receiving</p>
-          </div>
+              <h2 className="text-body-md font-body-md font-bold text-on-surface mb-0.5">Locked Ecash</h2>
+              <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">P2PK public key receiving</p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
             <div className="text-on-surface-variant shrink-0">
-              {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+              <ChevronDown
+                size={20}
+                className={`transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                  isExpanded ? 'rotate-180 text-primary' : 'text-on-surface-variant'
+                }`}
+              />
             </div>
           </div>
         </div>
 
-        {isExpanded && (
-          <div className="px-6 pb-6 pt-2 border-t border-outline-variant flex flex-col gap-4">
-            {hexPubkey && (
-              <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant flex items-center justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-label-caps text-on-surface-variant mb-1">YOUR PUBKEY (HEX)</p>
-                  <p className="text-body-md font-mono text-on-surface truncate">{hexPubkey}</p>
+        <div className={isExpanded ? 'accordion-content-expand' : 'accordion-content-collapse'}>
+          <div className={`accordion-inner-content ${isExpanded ? 'accordion-inner-content-open' : 'accordion-inner-content-closed'}`}>
+            <div className="px-6 pb-6 pt-2 border-t border-outline-variant flex flex-col gap-4">
+              {hexPubkey && (
+                <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant flex items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-label-caps text-on-surface-variant mb-1">YOUR PUBKEY (HEX)</p>
+                    <p className="text-body-md font-mono text-on-surface truncate">{hexPubkey}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={handleCopyHex}
+                      className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-lg transition-colors border border-outline-variant"
+                      title="Copy hex pubkey"
+                    >
+                      {copiedHex ? <Check size={18} className="text-emerald-500" /> : <Copy size={18} />}
+                    </button>
+                    <button
+                      onClick={() => setShowQr(true)}
+                      className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-lg transition-colors border border-outline-variant"
+                      title="Show QR Code"
+                    >
+                      <QrCode size={18} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={handleCopyHex}
-                    className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-lg transition-colors border border-outline-variant"
-                    title="Copy hex pubkey"
-                  >
-                    {copiedHex ? <Check size={18} className="text-emerald-500" /> : <Copy size={18} />}
-                  </button>
-                  <button
-                    onClick={() => setShowQr(true)}
-                    className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-lg transition-colors border border-outline-variant"
-                    title="Show QR Code"
-                  >
-                    <QrCode size={18} />
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
 
-            <p className="text-xs text-on-surface-variant leading-relaxed">
-              When someone sends you ecash locked with P2PK, share your hex public key above. Only your wallet can unlock and spend those proofs.
-            </p>
+              <p className="text-xs text-on-surface-variant leading-relaxed">
+                When someone sends you ecash locked with P2PK, share your hex public key above. Only your wallet can unlock and spend those proofs.
+              </p>
+            </div>
           </div>
-        )}
+        </div>
       </section>
 
       {showQr && (

@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <title>BitNotes | Sovereign Physical Ecash</title>
     <script>
       (function () {
@@ -27,7 +27,22 @@
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="native-splash" style="position:fixed;inset:0;background-color:#06110c;display:flex;align-items:center;justify-content:center;z-index:9999;">
+        <style>
+          @keyframes nativeLogoShine {
+            0% { transform: translateX(-160%) skewX(-20deg); }
+            35%, 100% { transform: translateX(250%) skewX(-20deg); }
+          }
+        </style>
+        <div style="position:relative;width:112px;height:112px;border-radius:9999px;overflow:hidden;">
+          <img src="/logo.png" alt="BitNotes" style="width:100%;height:100%;object-fit:cover;display:block;" />
+          <div style="position:absolute;inset:0;overflow:hidden;border-radius:9999px;pointer-events:none;">
+            <div style="position:absolute;top:0;bottom:0;width:60%;background:linear-gradient(110deg,transparent 0%,rgba(255,255,255,0.15) 30%,rgba(255,255,255,0.65) 50%,rgba(255,255,255,0.15) 70%,transparent 100%);animation:nativeLogoShine 2.8s cubic-bezier(0.4,0,0.2,1) infinite;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Network, Eye, EyeOff, Plus, Trash2, Shield, Copy, Edit2, Check, X, RefreshCcw, ChevronRight, ChevronDown } from 'lucide-react';
+import { Network, Eye, EyeOff, Plus, Trash2, Shield, Copy, Edit2, Check, X, RefreshCcw, ChevronDown } from 'lucide-react';
 import { useNostrStore } from '../../store/nostrStore';
 import { invoke } from '@tauri-apps/api/core';
 import { deriveNostrKeypair } from '../../services/nostrService';
@@ -20,7 +20,15 @@ const truncateKey = (key: string | null) => {
   return `${key.slice(0, 10)}...${key.slice(-10)}`;
 };
 
-export const NostrSection: React.FC = () => {
+interface NostrSectionProps {
+  isExpanded?: boolean;
+  onToggle?: () => void;
+}
+
+export const NostrSection: React.FC<NostrSectionProps> = ({
+  isExpanded: isExpandedProp,
+  onToggle,
+}) => {
   const { npub, relays, setRelays, isInitializing } = useNostrStore();
   const [nsec, setNsec] = useState<string | null>(null);
   const [showNsec, setShowNsec] = useState(false);
@@ -29,7 +37,9 @@ export const NostrSection: React.FC = () => {
   const [newRelay, setNewRelay] = useState('');
   const [hasCustomKey, setHasCustomKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = isExpandedProp !== undefined ? isExpandedProp : internalExpanded;
+  const toggleExpanded = onToggle || (() => setInternalExpanded((prev) => !prev));
   const [isReverting, setIsReverting] = useState(false);
 
   useEffect(() => {
@@ -175,8 +185,8 @@ export const NostrSection: React.FC = () => {
       <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none transition-transform group-hover:scale-110 duration-700"></div>
 
       <div
-        className="flex items-center justify-between p-4 md:p-6 relative z-10 cursor-pointer hover:bg-surface-container-highest transition-colors"
-        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center justify-between p-4 md:p-6 relative z-10 cursor-pointer hover:bg-surface-container-highest transition-colors select-none"
+        onClick={toggleExpanded}
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-full bg-primary/10 flex shrink-0 items-center justify-center text-primary border border-primary/20">
@@ -189,13 +199,19 @@ export const NostrSection: React.FC = () => {
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-on-surface-variant shrink-0">
-            {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+            <ChevronDown
+              size={20}
+              className={`transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                isExpanded ? 'rotate-180 text-primary' : 'text-on-surface-variant'
+              }`}
+            />
           </div>
         </div>
       </div>
 
-      {isExpanded && (
-        <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2 border-t border-outline-variant space-y-4 relative z-10">
+      <div className={isExpanded ? 'accordion-content-expand' : 'accordion-content-collapse'}>
+        <div className={`accordion-inner-content ${isExpanded ? 'accordion-inner-content-open' : 'accordion-inner-content-closed'}`}>
+          <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2 border-t border-outline-variant space-y-4 relative z-10">
           {/* npub */}
           <div>
             <label className="text-label-md font-label-md text-on-surface-variant mb-2 block">
@@ -362,9 +378,9 @@ export const NostrSection: React.FC = () => {
               </button>
             </div>
           </div>
-
         </div>
-      )}
+      </div>
     </div>
-  );
+  </div>
+);
 };
