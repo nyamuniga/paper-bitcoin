@@ -183,11 +183,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
       <div
         onClick={e => e.stopPropagation()}
         style={sheetStyle}
-        className={`bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl w-full max-w-lg border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[96vh] transition-[height,min-height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          activeTab === 'send'
-            ? 'h-[96vh] sm:h-auto sm:min-h-[700px] pb-6 sm:pb-4'
-            : 'pb-6 sm:pb-0'
-        }`}
+        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl w-full max-w-lg border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[92vh] pb-6 sm:pb-4"
       >
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
 
