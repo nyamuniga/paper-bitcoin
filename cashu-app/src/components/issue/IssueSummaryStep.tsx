@@ -100,7 +100,7 @@ export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
                     }`}
                   >
                     <Zap size={15} className={fundMethod === 'lightning' ? 'text-primary fill-primary/20' : 'text-[#8b9e94]'} />
-                    Lightning
+                    External
                   </button>
                   <button
                     type="button"
@@ -112,7 +112,7 @@ export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
                     }`}
                   >
                     <Wallet size={15} className={fundMethod === 'wallet' ? 'text-primary' : 'text-[#8b9e94]'} />
-                    Local Wallet
+                    Local
                   </button>
                 </div>
 
