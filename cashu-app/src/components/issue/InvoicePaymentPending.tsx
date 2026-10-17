@@ -37,12 +37,10 @@ export const InvoicePaymentPending: React.FC<InvoicePaymentPendingProps> = ({
   };
 
   return (
-    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col items-center">
-      <div className="w-full max-w-2xl mb-6">
-        <PageHeader title="Pay Lightning Invoice" subtitle="Scan with an external Lightning wallet" />
-      </div>
+    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
+      <PageHeader title="Pay Lightning Invoice" subtitle="Scan with an external Lightning wallet" />
 
-      <div className="w-full max-w-2xl bg-surface-container-high rounded-2xl p-8 relative overflow-hidden shadow-xl border border-outline-variant flex flex-col space-y-6 items-center text-center">
+      <div className="w-full max-w-2xl mx-auto bg-surface-container-high rounded-2xl p-8 relative overflow-hidden shadow-xl border border-outline-variant flex flex-col space-y-6 items-center text-center">
         <div className="noise-overlay pointer-events-none"></div>
         <div className="relative z-10 flex flex-col space-y-6 w-full items-center">
           <p className="text-on-surface-variant font-label-caps text-label-caps">

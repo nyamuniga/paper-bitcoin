@@ -5,6 +5,24 @@ interface UseBottomSheetOptions {
   dismissThreshold?: number;
 }
 
+let openBottomSheetCount = 0;
+
+export function registerBottomSheetOpen() {
+  openBottomSheetCount++;
+  if (openBottomSheetCount === 1) {
+    document.documentElement.classList.add('has-bottom-sheet-open');
+    document.body.classList.add('has-bottom-sheet-open');
+  }
+}
+
+export function registerBottomSheetClose() {
+  openBottomSheetCount = Math.max(0, openBottomSheetCount - 1);
+  if (openBottomSheetCount === 0) {
+    document.documentElement.classList.remove('has-bottom-sheet-open');
+    document.body.classList.remove('has-bottom-sheet-open');
+  }
+}
+
 export function useBottomSheet({ onClose, dismissThreshold = 60 }: UseBottomSheetOptions) {
   const [isOpen, setIsOpen] = useState(false);
   const [dragY, setDragY] = useState(0);
@@ -14,6 +32,14 @@ export function useBottomSheet({ onClose, dismissThreshold = 60 }: UseBottomShee
   const startYRef = useRef(0);
   const currentYRef = useRef(0);
   const startTimeRef = useRef(0);
+
+  // Lock background scroll and register active sheet
+  useEffect(() => {
+    registerBottomSheetOpen();
+    return () => {
+      registerBottomSheetClose();
+    };
+  }, []);
 
   // Trigger smooth entrance on mount
   useEffect(() => {
@@ -68,6 +94,7 @@ export function useBottomSheet({ onClose, dismissThreshold = 60 }: UseBottomShee
 
   const onTouchStart = useCallback(
     (e: React.TouchEvent) => {
+      e.stopPropagation();
       handleStart(e.touches[0].clientY);
     },
     [handleStart]
@@ -75,17 +102,23 @@ export function useBottomSheet({ onClose, dismissThreshold = 60 }: UseBottomShee
 
   const onTouchMove = useCallback(
     (e: React.TouchEvent) => {
+      e.stopPropagation();
       handleMove(e.touches[0].clientY);
     },
     [handleMove]
   );
 
-  const onTouchEnd = useCallback(() => {
-    handleEnd();
-  }, [handleEnd]);
+  const onTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      e.stopPropagation();
+      handleEnd();
+    },
+    [handleEnd]
+  );
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      e.stopPropagation();
       handleStart(e.clientY);
 
       const onMouseMove = (moveEvent: MouseEvent) => {

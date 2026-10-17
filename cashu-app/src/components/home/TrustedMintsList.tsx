@@ -246,9 +246,10 @@ interface TrustedMintsListProps {
   mintBalances: Record<string, number>;
   showAll?: boolean;
   topAction?: React.ReactNode;
+  hideAddCard?: boolean;
 }
 
-export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances, showAll = false, topAction }) => {
+export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances, showAll = false, topAction, hideAddCard = false }) => {
   const sortedMints = Object.entries(mintBalances).sort((a, b) => b[1] - a[1]);
   const displayMints = showAll ? sortedMints : sortedMints.slice(0, 6);
 
@@ -296,16 +297,18 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
           </div>
         </div>
         <div className={showAll ? "grid grid-cols-1 md:grid-cols-2 gap-3 overflow-hidden px-1 -mx-1 py-1 -my-1" : "flex flex-col gap-2 overflow-hidden px-1 -mx-1 py-1 -my-1"}>
-        <div 
-          onClick={() => setShowAddMint(true)}
-          className={`bg-surface-container-lowest rounded-2xl p-3.5 md:p-4 flex items-center justify-center gap-3 border border-dashed border-primary/50 relative group hover:bg-surface-container-low hover:border-primary/80 transition-all duration-300 cursor-pointer ${showAll ? 'md:col-span-2' : ''}`}
-        >
-          <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
-          <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 relative z-10 pointer-events-none group-hover:scale-105 transition-transform border border-primary/30">
-            <Plus className="text-primary w-5 h-5" />
+        {!hideAddCard && (
+          <div 
+            onClick={() => setShowAddMint(true)}
+            className={`bg-surface-container-lowest rounded-2xl p-3.5 md:p-4 flex items-center justify-center gap-3 border border-dashed border-primary/50 relative group hover:bg-surface-container-low hover:border-primary/80 transition-all duration-300 cursor-pointer ${showAll ? 'md:col-span-2' : ''}`}
+          >
+            <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
+            <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 relative z-10 pointer-events-none group-hover:scale-105 transition-transform border border-primary/30">
+              <Plus className="text-primary w-5 h-5" />
+            </div>
+            <span className="text-body-md font-body-md text-primary font-bold relative z-10 pointer-events-none tracking-wide">Add New Mint</span>
           </div>
-          <span className="text-body-md font-body-md text-primary font-bold relative z-10 pointer-events-none tracking-wide">Add New Mint</span>
-        </div>
+        )}
 
         {sortedMints.length === 0 ? (
           <div className="text-center text-on-surface-variant py-6 bg-surface-container-high rounded-2xl border border-outline-variant text-body-md font-body-md">No mints connected yet</div>

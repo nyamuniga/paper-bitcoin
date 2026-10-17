@@ -50,11 +50,9 @@ export const IssuedNoteSuccess: React.FC<IssuedNoteSuccessProps> = ({ issuedNote
   };
 
   return (
-    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col items-center">
-      <div className="w-full max-w-2xl mb-4">
-        <PageHeader title="Note Created" />
-      </div>
-      <div className="w-full max-w-2xl text-center mb-8 mt-4 flex flex-col items-center">
+    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
+      <PageHeader title="Note Created" />
+      <div className="w-full max-w-2xl mx-auto text-center mb-8 mt-4 flex flex-col items-center">
         <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
           <CheckCircle className="w-12 h-12 text-emerald-400" />
         </div>

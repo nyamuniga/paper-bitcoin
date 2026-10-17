@@ -58,7 +58,7 @@ export const AddMintModal: React.FC<AddMintModalProps> = ({ onClose }) => {
           {...dragHandleProps}
           className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
         >
-          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
 
         {/* Header */}

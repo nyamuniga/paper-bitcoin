@@ -40,7 +40,7 @@ export const RedeemLoadingStep: React.FC<RedeemLoadingStepProps> = ({ error, onB
         {error && onBack && (
           <button
             onClick={onBack}
-            className="relative z-10 mt-4 w-full py-3.5 rounded-full bg-surface-container-highest text-on-surface font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20"
+            className="relative z-10 mt-4 w-full py-3.5 rounded-2xl bg-surface-container-highest text-on-surface font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20 cursor-pointer"
           >
             Go Back
           </button>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowDownLeft, ArrowUpRight, FileText, ChevronRight } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, FileText, ChevronRight, Clock, X } from 'lucide-react';
 import { useHistory } from '../../hooks/useHistory';
 import { Transaction } from '../history/TransactionCard';
 import { TransactionDetailsModal } from '../history/TransactionDetailsModal';
@@ -33,8 +33,8 @@ export const RecentTransactions: React.FC = () => {
     const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
 
 
-    if (tx.momo_direction === 'RWF_TO_SATS') return 'Received RWF';
-    if (tx.momo_direction === 'SATS_TO_RWF') return 'Sent RWF';
+    if (tx.momo_direction === 'RWF_TO_SATS') return 'MoMo Top Up';
+    if (tx.momo_direction === 'SATS_TO_RWF') return 'MoMo Cash Out';
     if (isMint) return 'Received Lightning';
     if (isReceiveEcash) return 'Received eCash';
     if (isReceiveLightning) return 'Received Lightning';
@@ -46,6 +46,12 @@ export const RecentTransactions: React.FC = () => {
   };
 
   const getTxIcon = (tx: Transaction) => {
+    if (tx.status === 'Pending') {
+      return <Clock className="w-4 h-4 text-[#f2a93b] stroke-[2.25]" />;
+    }
+    if (tx.status === 'Failed' || tx.status === 'FailedMintError') {
+      return <X className="w-4 h-4 text-[#f87171] stroke-[2.5]" />;
+    }
     const isReceive = 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
     if (isReceive) {
       return <ArrowDownLeft className="w-4 h-4 text-[#34d399] stroke-[2.5]" />;
@@ -57,13 +63,19 @@ export const RecentTransactions: React.FC = () => {
   };
 
   const getTxIconBg = (tx: Transaction) => {
+    if (tx.status === 'Pending') {
+      return 'bg-[#f2a93b]/10 border-[#f2a93b]/20';
+    }
+    if (tx.status === 'Failed' || tx.status === 'FailedMintError') {
+      return 'bg-[#f87171]/10 border-[#f87171]/20';
+    }
     const isInflow = 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
     if (isInflow) return 'bg-[#0e291d] border-[#1c442f]';
     return 'bg-[#10241b] border-[#1b3829]';
   };
 
   const getTxAmountColor = (_tx: Transaction) => {
-    return 'text-[#f2a93b] font-bold';
+    return 'text-white font-bold';
   };
 
   const getTxSign = (tx: Transaction) => {
@@ -141,11 +153,6 @@ export const RecentTransactions: React.FC = () => {
                     <span className={`font-mono text-[14px] md:text-[15px] ${getTxAmountColor(tx)}`}>
                       {getTxSign(tx)}₿{tx.amount.toLocaleString()}
                     </span>
-                    {tx.status === 'Pending' && (
-                      <span className="block mt-1 px-2 py-0.5 rounded-full bg-[#182c1a] border border-[#2a452d] text-[#f2a93b] text-[10px] font-mono font-medium">
-                        Pending
-                      </span>
-                    )}
                   </div>
                 </div>
               );

@@ -121,7 +121,7 @@ export const TopNav = () => {
   return (
     <header 
       style={{ paddingTop: 'env(safe-area-inset-top)' }} 
-      className="bg-background top-0 left-0 w-full z-40 sticky"
+      className="bg-[#06110c]/95 backdrop-blur-md top-0 left-0 w-full z-50 sticky"
     >
       <div className="flex justify-between items-center w-full px-4 sm:px-6 md:px-8 max-w-[1200px] mx-auto h-16 relative">
         <Link

@@ -109,14 +109,30 @@ export default function DiscoverMints() {
 
   return (
     <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
-        <PageHeader
-          title="Discover"
-          subtitle="Public Cashu mint registry"
-        />
-        <div className="relative w-full md:w-64 shrink-0">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-on-surface-variant">
-            <Search size={18} />
+      <PageHeader
+        title="Discover"
+        subtitle="Public Cashu mint registry"
+        rightAction={
+          <div className="relative hidden md:block w-64 shrink-0">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#8b9e94]">
+              <Search size={16} />
+            </div>
+            <input
+              type="text"
+              placeholder="Search mints..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="w-full bg-[#0c1b14] border border-[#1e3c2e] text-[#f7f4eb] placeholder-[#627d70] text-xs rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:border-primary/80 transition-all font-mono shadow-sm"
+            />
+          </div>
+        }
+      >
+        <div className="relative md:hidden w-full pt-1">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#8b9e94]">
+            <Search size={16} />
           </div>
           <input
             type="text"
@@ -126,10 +142,10 @@ export default function DiscoverMints() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            className="w-full bg-surface-container-highest border border-outline-variant text-on-surface text-sm rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary transition-all"
+            className="w-full bg-[#0c1b14] border border-[#1e3c2e] text-[#f7f4eb] placeholder-[#627d70] text-xs rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:border-primary/80 transition-all font-mono shadow-sm"
           />
         </div>
-      </div>
+      </PageHeader>
 
       {loading ? (
         <div className="flex flex-col gap-3">

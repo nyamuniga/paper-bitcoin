@@ -12,28 +12,18 @@ export const Skeleton: React.FC<{ className?: string }> = ({ className = '' }) =
  */
 export const TransactionCardSkeleton: React.FC = () => (
   <div className="obsidian-card rounded-2xl p-5 border border-outline-variant/60 relative overflow-hidden select-none">
-    <div className="flex justify-between items-center mb-4 gap-3">
+    <div className="noise-overlay"></div>
+    <div className="relative z-10 flex justify-between items-center gap-3">
       <div className="flex items-center gap-3.5 min-w-0">
         <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />
-        <div className="flex flex-col gap-2 min-w-0">
+        <div className="flex flex-col gap-1.5 min-w-0">
           <Skeleton className="h-4 w-28 sm:w-36 rounded-md" />
-          <Skeleton className="h-3 w-16 sm:w-20 rounded-md opacity-60" />
+          <Skeleton className="h-3 w-14 sm:w-16 rounded-md opacity-60" />
         </div>
       </div>
-      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+      <div className="text-right flex-shrink-0">
         <Skeleton className="h-5 w-20 sm:w-24 rounded-md" />
-        <Skeleton className="h-3 w-12 rounded-md opacity-50" />
       </div>
-    </div>
-
-    <div className="divider-dashed my-3 opacity-30"></div>
-
-    <div className="flex justify-between items-center pt-0.5">
-      <div className="flex items-center gap-1.5">
-        <Skeleton className="w-4 h-4 rounded-full" />
-        <Skeleton className="h-3 w-16 rounded-md" />
-      </div>
-      <Skeleton className="h-3 w-20 rounded-md opacity-60" />
     </div>
   </div>
 );
