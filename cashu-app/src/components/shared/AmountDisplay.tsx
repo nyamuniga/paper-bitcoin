@@ -7,7 +7,7 @@ interface AmountDisplayProps {
 
 export const AmountDisplay: React.FC<AmountDisplayProps> = ({ amount, compact = false }) => {
   const containerClass = compact
-    ? "flex-1 flex flex-col items-center justify-center py-4"
+    ? "flex flex-col items-center justify-center py-2 sm:py-3"
     : "flex-1 flex flex-col items-center justify-center py-6 md:py-10";
 
   const labelClass = compact
@@ -15,7 +15,7 @@ export const AmountDisplay: React.FC<AmountDisplayProps> = ({ amount, compact = 
     : "text-label-caps font-label-caps text-on-surface-variant tracking-widest mb-3";
 
   const fontSizeClass = compact
-    ? amount.length > 6 ? 'text-[32px] md:text-[40px]' : 'text-[44px] md:text-[56px]'
+    ? amount.length > 6 ? 'text-[32px] md:text-[38px]' : 'text-[42px] md:text-[50px]'
     : amount.length > 6 ? 'text-[40px] md:text-[52px]' : 'text-[56px] md:text-[72px]';
 
   return (
