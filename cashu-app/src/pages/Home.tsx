@@ -76,31 +76,70 @@ export const Home = () => {
     const el = containerRef.current;
     if (!el) return;
 
+    const getScrollTop = () => {
+      return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    };
+
+    const isModalOrSheetActive = () => {
+      return (
+        document.body.classList.contains('has-bottom-sheet-open') ||
+        document.documentElement.classList.contains('has-bottom-sheet-open') ||
+        Boolean(document.querySelector('.fixed.inset-0.z-\\[100\\], [role="dialog"], [data-modal]'))
+      );
+    };
+
+    const isValidPullTarget = (target: EventTarget | null) => {
+      if (!target || !(target instanceof HTMLElement)) return false;
+      if (!containerRef.current || !containerRef.current.contains(target)) return false;
+      if (target.closest('[role="dialog"], [data-bottom-sheet], [data-modal], .modal-container, .fixed')) {
+        return false;
+      }
+      return true;
+    };
+
     // --- Touch events (Android / mobile) ---
     const onTouchStart = (e: TouchEvent) => {
-      if (window.scrollY <= 5) {
+      if (isModalOrSheetActive() || !isValidPullTarget(e.target)) {
+        startYRef.current = 0;
+        return;
+      }
+
+      if (getScrollTop() <= 5) {
         startYRef.current = e.touches[0].clientY;
+      } else {
+        startYRef.current = 0;
       }
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (window.scrollY <= 5 && startYRef.current > 0) {
+      if (isModalOrSheetActive() || startYRef.current <= 0) {
+        if (startYRef.current > 0) {
+          startYRef.current = 0;
+          setPullDistance(0);
+          setPulling(false);
+        }
+        return;
+      }
+
+      if (getScrollTop() <= 5) {
         const clientY = e.touches[0].clientY;
         const dist = clientY - startYRef.current;
 
         if (dist > 0) {
-          // Prevent the browser/WebView from handling this as a scroll/overscroll
-          e.preventDefault();
+          // Prevent browser pull/overscroll conflict when pulling down to refresh
+          if (e.cancelable) {
+            e.preventDefault();
+          }
 
           const dampened = Math.min(dist * 0.5, 80);
           setPullDistance(dampened);
-          if (dist > 60) {
+          if (dist > 50) {
             setPulling(true);
           } else {
             setPulling(false);
           }
         } else if (dist < -10) {
-          // If they swipe up, they want to scroll normally. Abort pull-to-refresh.
+          // If swiping up to scroll normally: abort pull-to-refresh
           startYRef.current = 0;
           setPullDistance(0);
           setPulling(false);
@@ -109,20 +148,98 @@ export const Home = () => {
     };
 
     const onTouchEnd = () => {
+      if (isModalOrSheetActive() || startYRef.current <= 0) {
+        startYRef.current = 0;
+        setPullDistance(0);
+        setPulling(false);
+        return;
+      }
+
+      doRefresh();
+    };
+
+    // --- Pointer events (desktop / mouse / trackpad) ---
+    let pointerActive = false;
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return;
+      if (isModalOrSheetActive() || !isValidPullTarget(e.target)) {
+        startYRef.current = 0;
+        pointerActive = false;
+        return;
+      }
+
+      if (getScrollTop() <= 5) {
+        startYRef.current = e.clientY;
+        pointerActive = true;
+      }
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return;
+      if (isModalOrSheetActive() || !pointerActive || startYRef.current <= 0) {
+        if (pointerActive) {
+          pointerActive = false;
+          startYRef.current = 0;
+          setPullDistance(0);
+          setPulling(false);
+        }
+        return;
+      }
+
+      const dist = e.clientY - startYRef.current;
+
+      if (dist > 0) {
+        const dampened = Math.min(dist * 0.5, 80);
+        setPullDistance(dampened);
+        if (dist > 50) {
+          setPulling(true);
+        } else {
+          setPulling(false);
+        }
+      } else if (dist < -10) {
+        startYRef.current = 0;
+        setPullDistance(0);
+        setPulling(false);
+        pointerActive = false;
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return;
+      if (isModalOrSheetActive() || !pointerActive || startYRef.current <= 0) {
+        pointerActive = false;
+        startYRef.current = 0;
+        setPullDistance(0);
+        setPulling(false);
+        return;
+      }
+
+      pointerActive = false;
       doRefresh();
     };
 
     // Touch: use { passive: false } on touchmove so we can call preventDefault()
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: false });
-    el.addEventListener('touchend', onTouchEnd, { passive: true });
-    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    // Pointer events for desktop testing
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
 
     return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('touchcancel', onTouchEnd);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
     };
   }, [doRefresh]);
 
@@ -134,17 +251,17 @@ export const Home = () => {
       {/* Pull to refresh indicator */}
       {(pullDistance > 0 || refreshing) && (
         <div 
-          className="absolute w-full flex justify-center left-0 top-0 z-50 pointer-events-none transition-transform duration-200 ease-out"
+          className="absolute w-full flex justify-center left-0 top-2 z-40 pointer-events-none transition-transform duration-200 ease-out"
           style={{ 
-            transform: `translateY(${refreshing ? 20 : pullDistance - 40}px)`,
-            opacity: pullDistance > 10 || refreshing ? 1 : 0 
+            transform: `translateY(${refreshing ? 24 : Math.min(pullDistance, 55)}px)`,
+            opacity: pullDistance > 5 || refreshing ? 1 : 0 
           }}
         >
-          <div className="bg-surface-container-high rounded-full p-2 shadow-lg border border-outline-variant flex items-center justify-center">
+          <div className="bg-[#0c1b14] rounded-full p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.6)] border border-[#1e3c2e] flex items-center justify-center">
             <Loader2 
-              size={24} 
+              size={22} 
               className={`text-primary ${refreshing ? 'animate-spin' : ''}`} 
-              style={{ transform: !refreshing ? `rotate(${pullDistance * 5}deg)` : 'none' }}
+              style={{ transform: !refreshing ? `rotate(${pullDistance * 6}deg)` : 'none' }}
             />
           </div>
         </div>

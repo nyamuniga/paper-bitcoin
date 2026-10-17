@@ -229,24 +229,26 @@
   --color-surface-variant: #e5dfd2;
 }
 
-html {
-  scrollbar-gutter: stable;
-  overflow-x: hidden;
-}
-
-body {
-  overflow-x: hidden;
-}
-
 html,
 body {
-  overscroll-behavior: none;
-  touch-action: pan-x pan-y;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
+}
+
+@media (min-width: 769px) {
+  html {
+    scrollbar-gutter: stable;
+  }
 }
 
 /* Allow text selection on interactive text elements */
@@ -269,6 +271,14 @@ a {
 html {
   font-size: 17px;
   -webkit-text-size-adjust: 100%;
+}
+
+/* Prevent background page scroll & pull rubberband when bottom sheet or modal is open */
+html.has-bottom-sheet-open,
+body.has-bottom-sheet-open {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+  touch-action: none !important;
 }
 
 body {
@@ -540,6 +550,47 @@ section,
   animation: dropdown-item-reveal 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* ── Mint Selector Outer Blur Backdrop Animation ── */
+@keyframes mint-backdrop-fade-in {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+    background-color: rgba(6, 17, 12, 0);
+  }
+  100% {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background-color: rgba(6, 17, 12, 0.55);
+  }
+}
+
+@keyframes mint-backdrop-fade-out {
+  0% {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background-color: rgba(6, 17, 12, 0.55);
+  }
+  100% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+    background-color: rgba(6, 17, 12, 0);
+  }
+}
+
+.animate-mint-backdrop-in {
+  animation: mint-backdrop-fade-in 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, backdrop-filter;
+}
+
+.animate-mint-backdrop-out {
+  animation: mint-backdrop-fade-out 160ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  will-change: opacity, backdrop-filter;
+}
+
 /* ── Settings Accordion Dropdown Animation ── */
 .accordion-content-collapse {
   display: grid;
@@ -643,22 +694,22 @@ section,
 @keyframes page-enter-forward {
   0% {
     opacity: 0;
-    transform: translate3d(24px, 0, 0) scale(0.994);
+    transform: translate3d(0, 14px, 0) scale(0.996);
   }
   100% {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: none;
   }
 }
 
 @keyframes page-enter-backward {
   0% {
     opacity: 0;
-    transform: translate3d(-24px, 0, 0) scale(0.994);
+    transform: translate3d(0, -14px, 0) scale(0.996);
   }
   100% {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: none;
   }
 }
 
@@ -669,22 +720,79 @@ section,
   }
   100% {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: none;
   }
 }
 
 .animate-page-forward {
-  animation: page-enter-forward 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  will-change: transform, opacity;
+  animation: page-enter-forward 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .animate-page-backward {
-  animation: page-enter-backward 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  will-change: transform, opacity;
+  animation: page-enter-backward 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .animate-page-lift {
-  animation: page-enter-lift 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  will-change: transform, opacity;
+  animation: page-enter-lift 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Estimated RWF Rate Text Animations ── */
+@keyframes rwf-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-rwf-shimmer {
+  background: linear-gradient(
+    90deg,
+    #5a7366 0%,
+    #8faea0 30%,
+    #f2a93b 50%,
+    #8faea0 70%,
+    #5a7366 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: rwf-shimmer 2.2s ease-in-out infinite;
+  display: inline-block;
+}
+
+@keyframes rwf-update-glow {
+  0% {
+    color: #f2a93b;
+    text-shadow: 0 0 10px rgba(242, 169, 59, 0.35);
+  }
+  50% {
+    color: #8faea0;
+    text-shadow: 0 0 5px rgba(143, 174, 160, 0.2);
+  }
+  100% {
+    color: #6f887b;
+    text-shadow: none;
+  }
+}
+
+.animate-rwf-updating {
+  animation: rwf-update-glow 750ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes rwf-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rwf-in {
+  animation: rwf-fade-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 

@@ -185,7 +185,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
       <div
         onClick={e => e.stopPropagation()}
         style={sheetStyle}
-        className="w-full max-w-lg bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden relative max-h-[92vh] pb-6 sm:pb-0"
+        className="w-full max-w-lg bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden relative max-h-[92vh] pb-6 sm:pb-0"
       >
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
 
@@ -194,7 +194,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           {...dragHandleProps}
           className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
         >
-          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
 
         {phase === AppPhase.IDLE && (
@@ -207,7 +207,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                 <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
                   <Phone className=" text-primary" size={20} />
                 </div>
-                <h2 className="text-headline-sm font-headline-sm text-on-surface">RWF Mobile Money</h2>
+                <h2 className="text-headline-sm font-headline-sm text-on-surface">Mobile Money (MoMo)</h2>
               </div>
               <button
                 onClick={handleClose}
@@ -219,16 +219,6 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
 
             <div className="relative flex border-b border-outline-variant/10 z-10 bg-surface-container-high/40 select-none">
               <button
-                onClick={() => switchTab('send')}
-                className={`flex-1 py-3.5 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${activeTab === 'send'
-                    ? 'text-primary'
-                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
-                  }`}
-              >
-                <PhoneOutgoing size={16} className={`transition-transform duration-200 ${activeTab === 'send' ? 'scale-110 text-primary' : ''}`} />
-                <span>SEND RWF</span>
-              </button>
-              <button
                 onClick={() => switchTab('receive')}
                 className={`flex-1 py-3.5 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${activeTab === 'receive'
                     ? 'text-primary'
@@ -236,14 +226,24 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                   }`}
               >
                 <PhoneIncoming size={16} className={`transition-transform duration-200 ${activeTab === 'receive' ? 'scale-110 text-primary' : ''}`} />
-                <span>RECEIVE RWF</span>
+                <span>TOP UP</span>
+              </button>
+              <button
+                onClick={() => switchTab('send')}
+                className={`flex-1 py-3.5 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${activeTab === 'send'
+                    ? 'text-primary'
+                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
+                  }`}
+              >
+                <PhoneOutgoing size={16} className={`transition-transform duration-200 ${activeTab === 'send' ? 'scale-110 text-primary' : ''}`} />
+                <span>CASH OUT</span>
               </button>
 
               {/* Gliding active indicator */}
               <div
                 className="absolute bottom-0 left-0 h-[2.5px] bg-primary shadow-[0_0_12px_rgba(242,169,59,0.7)] rounded-t-full transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] w-1/2 pointer-events-none"
                 style={{
-                  transform: `translate3d(${activeTab === 'send' ? '0%' : '100%'}, 0, 0)`
+                  transform: `translate3d(${activeTab === 'receive' ? '0%' : '100%'}, 0, 0)`
                 }}
               />
             </div>
@@ -262,8 +262,8 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
             <div className="flex flex-col gap-2 mb-6">
               <p className="text-body-md font-body-md text-on-surface-variant">
                 {activeTab === 'send'
-                  ? 'Pay MoMo from mint:'
-                  : 'Receive MoMo to mint:'}
+                  ? 'Cash out from mint:'
+                  : 'Top up to mint:'}
               </p>
               <div className="relative">
                 {showMintDropdown && (
@@ -315,7 +315,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
 
           <div
             key={activeTab}
-            className={`flex flex-col gap-4 ${activeTab === 'receive' ? 'animate-tab-from-right' : 'animate-tab-from-left'
+            className={`flex flex-col gap-4 ${activeTab === 'send' ? 'animate-tab-from-right' : 'animate-tab-from-left'
               }`}
           >
             {activeTab === 'receive' && (
@@ -326,7 +326,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       <PhoneIncoming size={32} />
                     </div>
                     <h3 className="text-headline-md text-on-surface mb-2">Success!</h3>
-                    <p className="text-body-md text-on-surface-variant">Sats have been minted to your wallet.</p>
+                    <p className="text-body-md text-on-surface-variant">Sats have been topped up to your wallet.</p>
                     <button
                       onClick={handleClose}
                       className="w-full mt-6 bg-primary text-on-primary py-4 rounded-2xl font-label-lg"
@@ -467,7 +467,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       disabled={!isFormValid}
                       className="w-full mt-4 bg-primary text-on-primary py-4 rounded-2xl font-label-lg disabled:opacity-50"
                     >
-                      {phase === AppPhase.FETCHING_RATE ? 'Calculating...' : phase === AppPhase.INITIATING_PAYMENT ? 'Initiating...' : 'Request from MoMo'}
+                      {phase === AppPhase.FETCHING_RATE ? 'Calculating...' : phase === AppPhase.INITIATING_PAYMENT ? 'Initiating...' : 'Top Up via MoMo'}
                     </button>
                   </>
                 )}
@@ -482,7 +482,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       <PhoneOutgoing size={32} />
                     </div>
                     <h3 className="text-headline-md text-on-surface mb-2">Transfer Complete!</h3>
-                    <p className="text-body-md text-on-surface-variant">RWF has been sent successfully to the mobile money number.</p>
+                    <p className="text-body-md text-on-surface-variant">RWF has been cashed out successfully to the mobile money number.</p>
                     <button
                       onClick={handleClose}
                       className="w-full mt-6 bg-primary text-on-primary py-4 rounded-2xl font-label-lg"
@@ -559,7 +559,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                         </div>
                         <div className="flex-1">
                           <p className={`text-label-lg ${phase === AppPhase.INITIATING_PAYOUT ? 'text-primary' : phase === AppPhase.VERIFYING_PAYOUT ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>Initiating MoMo Payout</p>
-                          <p className={`text-body-sm ${phase === AppPhase.INITIATING_PAYOUT ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}`}>Instructing gateway to send RWF</p>
+                          <p className={`text-body-sm ${phase === AppPhase.INITIATING_PAYOUT ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}`}>Instructing gateway to cash out RWF</p>
                         </div>
                       </div>
 
@@ -663,7 +663,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                       disabled={!isFormValid}
                       className="w-full mt-4 bg-primary text-on-primary py-4 rounded-2xl font-label-lg disabled:opacity-50 transition-all"
                     >
-                      {isFetchingRate ? 'Loading rates...' : 'Send to MoMo'}
+                      {isFetchingRate ? 'Loading rates...' : 'Cash Out to MoMo'}
                     </button>
                   </>
                 )}

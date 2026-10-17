@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { QrCode, ArrowDownLeft, ArrowUpRight, Coins, Zap, FileText, ChevronDown, Phone, Check, Eye, EyeOff } from 'lucide-react';
@@ -11,7 +11,32 @@ import { MintName } from '../shared/MintName';
 import { fetchCurrentRate } from '../../services/flowServices';
 import { SPREAD } from '../../constants.local';
 import { Skeleton } from '../shared/Skeleton';
+import { registerBottomSheetOpen, registerBottomSheetClose } from '../../hooks/useBottomSheet';
 
+const STORAGE_KEY_RWF = 'bitnotes_cached_rwf_amount';
+const STORAGE_KEY_RATE = 'bitnotes_cached_exchange_rate';
+
+function getCachedFloat(key: string): number | null {
+  try {
+    const val = localStorage.getItem(key);
+    if (val !== null) {
+      const parsed = parseFloat(val);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+  } catch {}
+  return null;
+}
+
+function getCachedInt(key: string): number | null {
+  try {
+    const val = localStorage.getItem(key);
+    if (val !== null) {
+      const parsed = parseInt(val, 10);
+      if (!isNaN(parsed) && parsed >= 0) return parsed;
+    }
+  } catch {}
+  return null;
+}
 
 interface WalletBalanceCardProps {
   balance: number;
@@ -49,7 +74,15 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
 
   const mintUrls = Object.keys(mintBalances || {});
   const [selectedMint, setSelectedMint] = useState<string | null>(() => localStorage.getItem('preferred_mint_url'));
-  const [currentRate, setCurrentRate] = useState<number | null>(null);
+  
+  // Rate & RWF animation states: capture previous amount and smoothly interpolate updates
+  const [currentRate, setCurrentRate] = useState<number | null>(() => getCachedFloat(STORAGE_KEY_RATE));
+  const [isInitialLoadingRate, setIsInitialLoadingRate] = useState<boolean>(true);
+  const [displayedRwf, setDisplayedRwf] = useState<number | null>(() => getCachedInt(STORAGE_KEY_RWF));
+  const [isNumberAnimating, setIsNumberAnimating] = useState<boolean>(false);
+  const currentDisplayRef = useRef<number | null>(displayedRwf);
+  const animationFrameRef = useRef<number | null>(null);
+
   const [hideBalance, setHideBalance] = useState<boolean>(() => localStorage.getItem('hide_balance') === 'true');
 
   const toggleHideBalance = () => {
@@ -62,25 +95,105 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
 
   const activeMint = (selectedMint && mintUrls.includes(selectedMint)) ? selectedMint : (mintUrls.length > 0 ? mintUrls[0] : null);
 
-  React.useEffect(() => {
-    const fetchRate = async () => {
+  // Compute target RWF based on active balance and best available exchange rate
+  const targetRwf = useMemo(() => {
+    const activeRate = currentRate ?? getCachedFloat(STORAGE_KEY_RATE);
+    if (activeRate && activeRate > 0) {
+      const calculated = Math.round(balance / (activeRate * (1 - SPREAD)));
+      return isNaN(calculated) ? 0 : calculated;
+    }
+    return getCachedInt(STORAGE_KEY_RWF);
+  }, [balance, currentRate]);
+
+  // Rate fetching and 5-second polling loop
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchRate = async (isInitial = false) => {
       try {
         const rate = await fetchCurrentRate();
-        setCurrentRate(rate);
+        if (!isMounted) return;
+        if (rate && rate > 0) {
+          setCurrentRate(rate);
+          try {
+            localStorage.setItem(STORAGE_KEY_RATE, rate.toString());
+          } catch {}
+        }
       } catch (e) {
         console.error("Failed to fetch exchange rate", e);
+      } finally {
+        if (isMounted && isInitial) {
+          setIsInitialLoadingRate(false);
+        }
       }
     };
 
-    // Fetch immediately on mount
-    fetchRate();
+    // Initial fetch on mount / page refresh
+    fetchRate(true);
 
-    // Set up polling every 5 seconds
-    const interval = setInterval(fetchRate, 5000);
+    // Silent background polling
+    const interval = setInterval(() => fetchRate(false), 5000);
 
-    // Clean up interval on unmount
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
+
+  // Smooth numeric counter animation when target RWF changes
+  useEffect(() => {
+    if (targetRwf === null) return;
+
+    // Persist to localStorage so the amount is captured across page refreshes
+    try {
+      localStorage.setItem(STORAGE_KEY_RWF, targetRwf.toString());
+    } catch {}
+
+    const startVal = currentDisplayRef.current !== null ? currentDisplayRef.current : 0;
+    const endVal = targetRwf;
+
+    // If start equals end and we already have a display value, no animation needed
+    if (startVal === endVal && currentDisplayRef.current !== null) {
+      return;
+    }
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    setIsNumberAnimating(true);
+    const startTime = performance.now();
+    const duration = 650; // ms
+
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const step = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = easeOutCubic(progress);
+
+      const nextVal = Math.round(startVal + (endVal - startVal) * eased);
+      setDisplayedRwf(nextVal);
+      currentDisplayRef.current = nextVal;
+
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(step);
+      } else {
+        setDisplayedRwf(endVal);
+        currentDisplayRef.current = endVal;
+        setIsNumberAnimating(false);
+        animationFrameRef.current = null;
+      }
+    };
+
+    animationFrameRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [targetRwf]);
 
   React.useEffect(() => {
     if (location.state) {
@@ -95,8 +208,28 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
     }
   }, [location, navigate]);
 
+  React.useEffect(() => {
+    if (showMintDropdown) {
+      registerBottomSheetOpen();
+      return () => {
+        registerBottomSheetClose();
+      };
+    }
+  }, [showMintDropdown]);
+
+  React.useEffect(() => {
+    if (!showMintDropdown) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeMintDropdown();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showMintDropdown]);
+
   return (
-    <section className="flex flex-col gap-4 md:gap-5 relative z-50">
+    <section className={`flex flex-col gap-4 md:gap-5 relative ${showMintDropdown ? 'z-30' : 'z-10'}`}>
       {/* Balance display */}
       <div className="relative p-5 sm:p-6 md:p-8 flex flex-col items-center justify-center min-h-[150px] sm:min-h-[160px] md:min-h-[190px] z-10 bg-[#0c1b14] rounded-[24px] sm:rounded-[28px] border border-[#142d20] shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
         {isLoading ? (
@@ -115,13 +248,32 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
         ) : (
           <>
             {showMintDropdown && (
-              <div className="fixed inset-0 z-10" onClick={closeMintDropdown}></div>
+              <div 
+                className={`fixed inset-0 z-20 cursor-pointer ${
+                  isClosingDropdown ? 'animate-mint-backdrop-out' : 'animate-mint-backdrop-in'
+                }`}
+                onClick={closeMintDropdown}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => {
+                  e.stopPropagation();
+                  if (e.cancelable) e.preventDefault();
+                }}
+                onWheel={(e) => {
+                  e.stopPropagation();
+                  if (e.cancelable) e.preventDefault();
+                }}
+                aria-label="Close mint selector"
+              />
             )}
 
-            <div className="relative z-20 flex flex-col items-center max-w-full">
+            <div className="relative z-30 flex flex-col items-center max-w-full">
               <button
                 onClick={toggleMintDropdown}
-                className="flex items-center gap-2 bg-[#12261d] hover:bg-[#162f24] px-3 sm:px-3.5 py-1.5 rounded-full transition-all mb-3 border border-[#1e3c2e] shadow-sm active:scale-95 max-w-[calc(100vw-64px)] sm:max-w-none"
+                className={`flex items-center gap-2 bg-[#12261d] hover:bg-[#162f24] px-3 sm:px-3.5 py-1.5 rounded-full transition-all mb-3 border shadow-sm active:scale-95 max-w-[calc(100vw-64px)] sm:max-w-none cursor-pointer ${
+                  showMintDropdown && !isClosingDropdown 
+                    ? 'border-primary/50 shadow-[0_0_16px_rgba(242,169,59,0.2)] bg-[#163024]' 
+                    : 'border-[#1e3c2e]'
+                }`}
               >
                 {activeMint ? (
                   <>
@@ -143,10 +295,21 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               </button>
 
               {showMintDropdown && (
-                <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 pointer-events-auto">
-                  <div className={`w-64 max-w-[calc(100vw-48px)] bg-[#0c1b14] rounded-2xl shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] border border-[#1a3829] overflow-hidden flex flex-col max-h-[300px] overflow-y-auto ${
-                    isClosingDropdown ? 'animate-dropdown-collapse' : 'animate-dropdown-expand'
-                  }`}>
+                <div 
+                  data-modal="mint-selector"
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                  className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 pointer-events-auto"
+                >
+                  <div 
+                    className={`w-64 max-w-[calc(100vw-48px)] bg-[#0c1b14]/95 backdrop-blur-xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.06)] border border-[#1e422f] overflow-hidden flex flex-col max-h-[300px] overflow-y-auto overscroll-contain touch-pan-y ${
+                      isClosingDropdown ? 'animate-dropdown-collapse' : 'animate-dropdown-expand'
+                    }`}
+                    style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }}
+                    onWheel={(e) => e.stopPropagation()}
+                  >
+                    {/* Golden top highlight */}
+                    <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-primary/40 to-transparent pointer-events-none" />
                     {mintUrls.map((mint, index) => (
                       <button
                         key={mint}
@@ -157,7 +320,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
                           invoke('set_app_default_mint', { mintUrl: mint }).catch(console.error);
                           closeMintDropdown();
                         }}
-                        className="flex items-center justify-between p-3 sm:p-3.5 hover:bg-[#12261d] transition-colors text-left border-b border-[rgba(247,244,235,0.04)] last:border-b-0 animate-dropdown-item"
+                        className="flex items-center justify-between p-3 sm:p-3.5 hover:bg-[#12261d] transition-colors text-left border-b border-[rgba(247,244,235,0.04)] last:border-b-0 animate-dropdown-item cursor-pointer"
                       >
                         <div className="flex items-center gap-2.5 min-w-0 pr-2">
                           <MintIcon mintUrl={mint} className="w-6 h-6 rounded-full bg-[#183626] border border-[#2b563e] flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
@@ -174,7 +337,9 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               )}
             </div>
 
-            <div className="relative z-10 flex flex-col items-center gap-1.5 max-w-full">
+            <div className={`relative z-10 flex flex-col items-center gap-1.5 max-w-full transition-all duration-200 ${
+              showMintDropdown && !isClosingDropdown ? 'opacity-25 filter blur-[1px]' : 'opacity-100'
+            }`}>
               <div className="flex items-center justify-center gap-2 sm:gap-2.5 max-w-full">
                 <span className="text-[#f2a93b] text-[34px] sm:text-[42px] md:text-[48px] font-extrabold leading-none select-none flex-shrink-0">₿</span>
                 <span
@@ -193,9 +358,24 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
                   {hideBalance ? <EyeOff size={20} className="sm:w-[22px] sm:h-[22px] stroke-[2.25]" /> : <Eye size={20} className="sm:w-[22px] sm:h-[22px] stroke-[2.25]" />}
                 </button>
               </div>
-              {currentRate && (
-                <span className="text-[13px] sm:text-[14px] font-medium text-[#6f887b] mt-0.5 tracking-tight select-none truncate max-w-full">
-                  {hideBalance ? '≈ •••••• RWF' : `≈ ${(balance / (currentRate * (1 - SPREAD))).toLocaleString(undefined, { maximumFractionDigits: 0 })} RWF`}
+              {(displayedRwf !== null || targetRwf !== null || isInitialLoadingRate) && (
+                <span
+                  className={`text-[13px] sm:text-[14px] font-medium mt-0.5 tracking-tight select-none truncate max-w-full transition-all duration-300 animate-rwf-in ${
+                    isInitialLoadingRate
+                      ? 'animate-rwf-shimmer'
+                      : isNumberAnimating
+                      ? 'animate-rwf-updating font-semibold'
+                      : 'text-[#6f887b]'
+                  }`}
+                  title={isInitialLoadingRate ? "Refreshing estimated rate..." : undefined}
+                >
+                  {hideBalance
+                    ? '≈ •••••• RWF'
+                    : displayedRwf !== null
+                    ? `≈ ${displayedRwf.toLocaleString()} RWF`
+                    : targetRwf !== null
+                    ? `≈ ${targetRwf.toLocaleString()} RWF`
+                    : '≈ ••• RWF'}
                 </span>
               )}
             </div>
@@ -251,7 +431,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               }
             },
             {
-              label: 'RWF (Mobile Money)',
+              label: 'Top Up (MoMo)',
               icon: <Phone size={20} />,
               colorClass: 'bg-primary/20 text-primary',
               onClick: () => {
@@ -292,7 +472,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               }
             },
             {
-              label: 'RWF (Mobile Money)',
+              label: 'Cash Out (MoMo)',
               icon: <Phone size={20} />,
               colorClass: 'bg-primary/20 text-primary',
               onClick: () => {
