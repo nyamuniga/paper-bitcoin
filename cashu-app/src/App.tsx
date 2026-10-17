@@ -14,6 +14,7 @@ import { Pay } from './pages/Pay';
 import { TopNav } from './components/navigation/TopNav';
 import { PageTransition } from './components/navigation/PageTransition';
 import { TransactionProcessor } from './hooks/useTransactionProcessor';
+import { AppUpdatePrompt } from './components/shared/AppUpdatePrompt';
 import { useNostr } from './hooks/useNostr';
 import './App.css';
 
@@ -39,6 +40,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <TransactionProcessor />
+      <AppUpdatePrompt />
       <div className="fixed inset-0 texture-overlay z-0 pointer-events-none"></div>
       <div className="min-h-screen bg-background pb-8 relative z-10 flex flex-col">
         <TopNav />

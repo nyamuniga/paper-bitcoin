@@ -73,7 +73,7 @@ export const PendingNwcModal: React.FC<PendingNwcModalProps> = ({ onClose }) => 
           {...dragHandleProps}
           className="w-full flex justify-center pt-0 pb-3 -mt-2 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
         >
-          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
 
         <button

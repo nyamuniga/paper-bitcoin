@@ -28,7 +28,7 @@ export const ActionMenuModal: React.FC<ActionMenuModalProps> = ({ title, options
       <div 
         onClick={e => e.stopPropagation()}
         style={sheetStyle}
-        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-[480px] border-t border-x sm:border border-[#142d20] shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative pb-8 sm:pb-4"
+        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl w-full max-w-[480px] border-t border-x sm:border border-[#142d20] shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative pb-8 sm:pb-4"
       >
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
         
@@ -37,7 +37,7 @@ export const ActionMenuModal: React.FC<ActionMenuModalProps> = ({ title, options
           {...dragHandleProps}
           className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
         >
-          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
         
         {/* Header */}

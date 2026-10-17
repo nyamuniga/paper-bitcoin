@@ -31,7 +31,7 @@ export const NoteVerificationResult: React.FC<NoteVerificationResultProps> = ({
         <button
           onClick={onVerify}
           disabled={loading || verified === true}
-          className={`w-full font-bold py-4 rounded-full transition-all flex justify-center items-center gap-2 ${verified ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-surface-container-highest hover:bg-surface-bright text-on-surface border border-outline-variant/30'}`}
+          className={`w-full font-bold py-4 rounded-2xl transition-all flex justify-center items-center gap-2 cursor-pointer disabled:cursor-not-allowed ${verified ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-surface-container-highest hover:bg-surface-bright text-on-surface border border-outline-variant/30'}`}
         >
           {loading ? <Loader2 className="animate-spin w-5 h-5" /> : verified ? <><CheckCircle className="w-5 h-5" /> Verified</> : 'Verify Cryptographic Proofs'}
         </button>

@@ -190,12 +190,10 @@ export const Pay = () => {
   };
 
   return (
-    <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6 flex flex-col items-center">
-      <div className="w-full max-w-2xl mb-6">
-        <PageHeader title="Pay Invoice" subtitle="Lightning invoice or LNURL" />
-      </div>
+    <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
+      <PageHeader title="Pay Invoice" subtitle="Lightning invoice or LNURL" />
 
-      <div className="w-full max-w-2xl bg-surface-container-high rounded-xl relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] p-card-gap flex flex-col gap-8 border border-outline-variant/30">
+      <div className="w-full max-w-2xl mx-auto bg-surface-container-high rounded-xl relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] p-card-gap flex flex-col gap-8 border border-outline-variant/30">
         <div className="noise-overlay"></div>
         <div className="flex flex-col gap-6 w-full">
           

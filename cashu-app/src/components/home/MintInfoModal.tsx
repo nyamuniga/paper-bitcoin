@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { X, Info, Copy, Check, ChevronDown, ChevronUp, Lock, ArrowDown, ArrowUp, Hash, Globe } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
 import { useMintInfo } from '../../hooks/useMintInfo';
@@ -45,14 +47,16 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
     try {
       await navigator.clipboard.writeText(mintUrl);
       setCopied(true);
+      toast.success('Mint URL copied!');
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy', err);
+      toast.error('Failed to copy');
     }
   };
 
   // Parse NUTs
-  const capabilities = [];
+  const capabilities: string[] = [];
   if (info?.nuts) {
     if (info.nuts['11']?.supported || info.nuts['12']?.supported) {
       capabilities.push('Locked ecash (P2PK · HTLC)');
@@ -69,109 +73,157 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
   const sendMethods = info?.nuts?.['5']?.methods?.map((m: any) => m.method.toUpperCase()) || [];
   const units = info?.nuts?.['4']?.methods?.[0]?.unit || 'sat';
 
-  return (
+  return createPortal(
     <div 
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
       style={backdropStyle}
       onClick={closeWithAnimation}
     >
       <div 
         onClick={e => e.stopPropagation()}
         style={sheetStyle}
-        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[92vh] pb-6 sm:pb-0"
+        className="bg-surface-container-high/98 backdrop-blur-2xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] overflow-hidden flex flex-col relative max-h-[92vh]"
       >
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
 
-        {/* Drag Handle */}
+        {/* Drag Handle for mobile */}
         <div 
           {...dragHandleProps}
           className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
         >
-          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
 
-        {/* Header */}
+        {/* Top Control Bar (No name/title on top) */}
         <div 
           {...dragHandleProps}
-          className="flex justify-between items-center px-6 py-4 border-b border-outline-variant/10 relative z-10 cursor-grab active:cursor-grabbing"
+          className="flex items-center justify-end px-5 pt-2 pb-1 relative z-10"
         >
-          <h2 className="text-headline-sm font-headline-sm text-on-surface flex items-center gap-2">
-            <Info className="text-primary w-5 h-5" /> Mint Info
-          </h2>
-          <button
+          <button 
             onClick={closeWithAnimation}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container/70 text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors border border-outline-variant/20 cursor-pointer"
+            aria-label="Close"
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 flex flex-col gap-6 relative z-10 overflow-y-auto">
+        {/* Scrollable Content */}
+        <div className="px-6 pt-1 flex-1 flex flex-col gap-5 relative z-10 overflow-y-auto pb-4">
+          {/* Hero Section: Centered Mint Icon + Title + Status Pill */}
+          <div className="flex flex-col items-center text-center">
+            <div className="relative mb-3">
+              <MintIcon
+                mintUrl={mintUrl}
+                className="w-16 h-16 shrink-0 rounded-2xl bg-surface-container border border-outline-variant/25 shadow-md flex items-center justify-center"
+                textClassName="text-on-surface text-[24px] font-bold"
+              />
+            </div>
 
-          {/* Hero */}
-          <div className="flex flex-col items-center justify-center gap-4 mt-4 w-full">
-            <MintIcon
-              mintUrl={mintUrl}
-              className="w-24 h-24 shrink-0 rounded-3xl bg-surface-container-high border border-outline-variant/20 shadow-sm"
-              textClassName="text-on-surface text-[32px] font-bold"
-            />
-            <h1 className="text-headline-md font-headline-md font-bold text-center leading-tight text-on-surface break-words w-full px-2">
+            <h1 className="font-display-hero text-2xl sm:text-3xl font-extrabold tracking-tight text-white text-center leading-tight truncate max-w-full px-2">
               {info?.name || formatMintUrl(mintUrl)}
             </h1>
 
-            <div className="flex items-center gap-2 text-on-surface-variant max-w-full px-4">
-              <span className="text-body-md font-body-md truncate">{formatMintUrl(mintUrl)}</span>
-              <button
-                onClick={handleCopy}
-                className="w-8 h-8 shrink-0 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors cursor-pointer"
-              >
-                {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-              </button>
-            </div>
+            {/* Status Pill (right below name) */}
+            <div className="mt-2.5 flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wide border shadow-sm ${
+                error
+                  ? 'bg-rose-950/60 border-rose-500/30 text-rose-400'
+                  : loading
+                  ? 'bg-amber-950/60 border-amber-500/30 text-amber-400'
+                  : 'bg-emerald-950/60 border-emerald-500/30 text-emerald-400'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  error ? 'bg-rose-400' : loading ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'
+                }`} />
+                <span>{error ? 'Offline' : loading ? 'Connecting...' : 'Online'}</span>
+              </span>
 
-            {info?.version && (
-              <div className="bg-surface-container-high px-3.5 py-1.5 rounded-full text-body-sm font-body-sm font-semibold text-on-surface border border-outline-variant/10">
-                {info.version}
-              </div>
-            )}
+              {info?.version && (
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-medium text-on-surface-variant bg-surface-container/70 border border-outline-variant/20">
+                  v{info.version}
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Stats */}
-          <div className="flex flex-col gap-0 border-y border-outline-variant/10 py-2">
-            <div className="flex justify-between items-center py-3.5 border-b border-outline-variant/10">
-              <div className="flex items-center gap-3 text-on-surface-variant">
-                <span className="text-xl">₿</span>
-                <span className="text-body-md font-body-md">Balance</span>
-              </div>
-              <span className="text-body-md font-body-md font-semibold text-on-surface">{balance.toLocaleString()} {units}</span>
-            </div>
-            <div className="flex justify-between items-center py-3.5">
-              <div className="flex items-center gap-3 text-on-surface-variant">
-                <Globe size={20} className="opacity-70" />
-                <span className="text-body-md font-body-md">Connection</span>
-              </div>
-              <span className={`text-body-md font-body-md font-semibold ${error ? 'text-error' : loading ? 'text-on-surface-variant' : 'text-on-surface'}`}>
-                {error ? 'Offline' : loading ? 'Connecting...' : 'Online'}
+          {/* Details Card */}
+          <div className="bg-surface-container/60 rounded-2xl border border-outline-variant/20 p-4 flex flex-col gap-3.5 shadow-sm">
+            {/* Balance */}
+            <div className="flex justify-between items-center gap-4">
+              <span className="text-label-caps font-label-caps text-on-surface-variant flex-shrink-0">BALANCE</span>
+              <span className="font-mono text-body-md font-bold text-white text-right">
+                ₿{balance.toLocaleString()} <span className="text-on-surface-variant font-normal text-xs">{units}</span>
               </span>
             </div>
+
+            <div className="border-b border-outline-variant/15"></div>
+
+            {/* Connection Status */}
+            <div className="flex justify-between items-center gap-4">
+              <span className="text-label-caps font-label-caps text-on-surface-variant flex-shrink-0">STATUS</span>
+              <span className={`text-body-md font-medium text-right ${error ? 'text-rose-400' : loading ? 'text-amber-400' : 'text-emerald-400'}`}>
+                {error ? 'Offline' : loading ? 'Connecting' : 'Connected'}
+              </span>
+            </div>
+
+            {receiveMethods.length > 0 && (
+              <>
+                <div className="border-b border-outline-variant/15"></div>
+                <div className="flex justify-between items-center gap-4">
+                  <span className="text-label-caps font-label-caps text-on-surface-variant flex-shrink-0">RECEIVE</span>
+                  <span className="text-body-md font-medium text-on-surface text-right">{receiveMethods.join(', ')}</span>
+                </div>
+              </>
+            )}
+
+            {sendMethods.length > 0 && (
+              <>
+                <div className="border-b border-outline-variant/15"></div>
+                <div className="flex justify-between items-center gap-4">
+                  <span className="text-label-caps font-label-caps text-on-surface-variant flex-shrink-0">SEND</span>
+                  <span className="text-body-md font-medium text-on-surface text-right">{sendMethods.join(', ')}</span>
+                </div>
+              </>
+            )}
+
+            <div className="border-b border-outline-variant/15"></div>
+
+            {/* Unit */}
+            <div className="flex justify-between items-center gap-4">
+              <span className="text-label-caps font-label-caps text-on-surface-variant flex-shrink-0">UNIT</span>
+              <span className="text-body-md font-mono text-on-surface text-right">{units}</span>
+            </div>
+          </div>
+
+          {/* Mint URL Card */}
+          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/60 border border-outline-variant/20 shadow-sm">
+            <div className="flex flex-col min-w-0 pr-2">
+              <span className="text-[10px] font-semibold tracking-wider text-on-surface-variant uppercase">Mint URL</span>
+              <span className="font-mono text-xs text-on-surface truncate">{mintUrl}</span>
+            </div>
+            <button
+              onClick={handleCopy}
+              className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
+              title="Copy Mint URL"
+            >
+              {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+            </button>
           </div>
 
           {/* About */}
           {info?.description && (
-            <div className="flex flex-col gap-2.5">
-              <h3 className="text-label-caps font-label-caps text-on-surface-variant tracking-wider uppercase">About</h3>
-              <p className="text-body-md font-body-md leading-relaxed text-on-surface">
-                {info.description}
-              </p>
+            <div className="bg-surface-container/60 rounded-2xl border border-outline-variant/20 p-4 flex flex-col gap-2 shadow-sm">
+              <span className="text-label-caps font-label-caps text-on-surface-variant uppercase">ABOUT</span>
+              <p className="text-body-md text-on-surface leading-relaxed">{info.description}</p>
               {info.description_long && (
-                <div className="flex flex-col gap-2">
-                  <p className={`text-body-sm font-body-sm text-on-surface-variant leading-relaxed ${!showFullDesc && 'line-clamp-3'}`}>
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <p className={`text-body-sm text-on-surface-variant leading-relaxed ${!showFullDesc ? 'line-clamp-3' : ''}`}>
                     {info.description_long}
                   </p>
                   <button
                     onClick={() => setShowFullDesc(!showFullDesc)}
-                    className="text-primary font-bold text-body-sm self-start py-0.5 hover:underline cursor-pointer"
+                    className="text-primary font-bold text-xs self-start py-0.5 hover:underline cursor-pointer"
                   >
                     {showFullDesc ? 'Show less' : 'Read more'}
                   </button>
@@ -182,20 +234,20 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
 
           {/* MOTD */}
           {info?.motd && (
-            <div className="flex flex-col gap-2.5">
-              <h3 className="text-label-caps font-label-caps text-on-surface-variant tracking-wider uppercase">Message from the mint</h3>
-              <p className="text-body-md font-body-md text-on-surface leading-relaxed">{info.motd}</p>
+            <div className="bg-surface-container/60 rounded-2xl border border-outline-variant/20 p-4 flex flex-col gap-2 shadow-sm">
+              <span className="text-label-caps font-label-caps text-on-surface-variant uppercase">MESSAGE FROM MINT</span>
+              <p className="text-body-md text-on-surface leading-relaxed italic">"{info.motd}"</p>
             </div>
           )}
 
           {/* Capabilities */}
           {capabilities.length > 0 && (
-            <div className="flex flex-col gap-3.5">
-              <h3 className="text-label-caps font-label-caps text-on-surface-variant tracking-wider uppercase">Capabilities</h3>
-              <div className="flex flex-col gap-3.5">
+            <div className="bg-surface-container/60 rounded-2xl border border-outline-variant/20 p-4 flex flex-col gap-3 shadow-sm">
+              <span className="text-label-caps font-label-caps text-on-surface-variant uppercase">CAPABILITIES</span>
+              <div className="flex flex-col gap-2">
                 {capabilities.map((cap, i) => (
-                  <div key={i} className="flex items-center gap-3.5 text-body-md font-body-md text-on-surface">
-                    <Lock size={18} className="text-on-surface-variant flex-shrink-0" />
+                  <div key={i} className="flex items-center gap-2.5 text-body-md text-on-surface">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary/70 shrink-0" />
                     <span>{cap}</span>
                   </div>
                 ))}
@@ -203,84 +255,51 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
 
               <button
                 onClick={() => setShowTechDetails(!showTechDetails)}
-                className="flex justify-between items-center py-3 text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
+                className="flex justify-between items-center pt-2.5 mt-0.5 border-t border-outline-variant/15 text-xs text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
               >
-                <span className="text-body-md font-body-md font-medium">Technical details</span>
-                {showTechDetails ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                <span className="font-medium">Technical Details (NUTs)</span>
+                {showTechDetails ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
               </button>
 
               {showTechDetails && (
-                <div className="bg-surface-container-high p-4 rounded-xl text-xs font-mono text-on-surface-variant overflow-x-auto border border-outline-variant/10">
+                <div className="bg-surface-container-lowest/80 p-3 rounded-xl text-[11px] font-mono text-on-surface-variant overflow-x-auto border border-outline-variant/15">
                   <pre>{JSON.stringify(info?.nuts, null, 2)}</pre>
                 </div>
               )}
             </div>
           )}
+        </div>
 
-          {/* Payment Methods */}
-          {(receiveMethods.length > 0 || sendMethods.length > 0) && (
-            <div className="flex flex-col gap-0 border-t border-outline-variant/10 pt-5">
-              <h3 className="text-label-caps font-label-caps text-on-surface-variant tracking-wider uppercase mb-1">Payment Methods</h3>
-
-              {receiveMethods.length > 0 && (
-                <div className="flex justify-between items-center py-3.5 border-b border-outline-variant/10">
-                  <div className="flex items-center gap-3.5 text-body-md font-body-md text-on-surface-variant">
-                    <ArrowDown size={18} className="flex-shrink-0" />
-                    <span>Receive</span>
-                  </div>
-                  <span className="text-body-md font-mono text-on-surface">{receiveMethods.join(', ')}</span>
-                </div>
-              )}
-
-              {sendMethods.length > 0 && (
-                <div className="flex justify-between items-center py-3.5">
-                  <div className="flex items-center gap-3.5 text-body-md font-body-md text-on-surface-variant">
-                    <ArrowUp size={18} className="flex-shrink-0" />
-                    <span>Send</span>
-                  </div>
-                  <span className="text-body-md font-mono text-on-surface">{sendMethods.join(', ')}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Details */}
-          <div className="flex flex-col gap-0 border-t border-outline-variant/10 pt-5">
-            <h3 className="text-label-caps font-label-caps text-on-surface-variant tracking-wider uppercase mb-1">Details</h3>
-
-            <div className="flex justify-between items-center py-3.5">
-              <div className="flex items-center gap-3.5 text-body-md font-body-md text-on-surface-variant">
-                <Hash size={18} className="flex-shrink-0" />
-                <span>Units</span>
-              </div>
-              <span className="text-body-md font-mono text-on-surface">{units}</span>
-            </div>
-          </div>
-
-          {/* Action Button */}
-          <div className="mt-6 flex justify-center">
-            {isConnected ? (
+        {/* Action Buttons Sticky Footer */}
+        <div className="px-6 pt-3 pb-6 sm:pb-5 bg-surface-container-high/95 backdrop-blur-xl border-t border-outline-variant/15 relative z-20 flex flex-col gap-2 shadow-[0_-8px_24px_rgba(0,0,0,0.3)]">
+          {isConnected ? (
+            <>
               <button
                 onClick={handleRemoveMint}
                 disabled={balance > 0 || isMintActionLoading}
-                className="text-error text-body-md font-bold py-3.5 px-8 hover:bg-error/10 disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed rounded-full transition-colors cursor-pointer"
+                className="w-full py-3 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 disabled:opacity-40 disabled:hover:bg-rose-500/15 disabled:cursor-not-allowed rounded-xl font-bold text-body-md transition-colors border border-rose-500/25 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
                 title={balance > 0 ? "Cannot remove mint with a non-zero balance" : undefined}
               >
-                {isMintActionLoading ? 'Removing...' : 'Remove mint'}
+                {isMintActionLoading ? 'Removing...' : 'Remove Mint'}
               </button>
-            ) : (
-              <button
-                onClick={handleAddMint}
-                disabled={isMintActionLoading}
-                className="text-primary text-body-md font-bold py-3.5 px-8 hover:bg-primary/10 disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed rounded-full transition-colors cursor-pointer"
-              >
-                {isMintActionLoading ? 'Adding...' : 'Add mint to wallet'}
-              </button>
-            )}
-          </div>
-
+              {balance > 0 && (
+                <p className="text-[11px] text-center text-on-surface-variant font-sans">
+                  Mints with an active balance cannot be removed.
+                </p>
+              )}
+            </>
+          ) : (
+            <button
+              onClick={handleAddMint}
+              disabled={isMintActionLoading}
+              className="w-full py-3 bg-primary/20 hover:bg-primary/30 text-primary disabled:opacity-40 rounded-xl font-bold text-body-md transition-colors border border-primary/30 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
+            >
+              {isMintActionLoading ? 'Adding...' : 'Add Mint to Wallet'}
+            </button>
+          )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

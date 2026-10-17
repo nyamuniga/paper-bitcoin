@@ -108,7 +108,7 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
                         onError={(e) => console.error(e)}
                       />
                     </div>
-                    <button onClick={() => setShowScanner(false)} className="btn-gradient w-full py-4 rounded-full text-label-caps font-label-caps text-on-primary shadow-lg hover:opacity-90 active:scale-[0.98] transition-all">
+                    <button onClick={() => setShowScanner(false)} className="btn-gradient w-full py-4 rounded-2xl text-label-caps font-label-caps text-on-primary shadow-lg hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer">
                       Cancel Scanner
                     </button>
                   </div>
@@ -143,8 +143,8 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
           <button
             onClick={onRedeem}
             disabled={redeeming || (redeemMethod === 'lightning' && (!invoice || isInvalidAmount))}
-            className={`w-full btn-gradient py-4 rounded-full text-on-primary font-headline-lg-mobile text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${
-              redeeming || (redeemMethod === 'lightning' && (!invoice || isInvalidAmount)) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+            className={`w-full btn-gradient py-4 rounded-2xl text-on-primary font-headline-lg-mobile text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${
+              redeeming || (redeemMethod === 'lightning' && (!invoice || isInvalidAmount)) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98] cursor-pointer'
             }`}
           >
             {redeeming ? <Loader2 className="animate-spin w-6 h-6" /> : redeemMethod === 'wallet' ? 'Redeem to Wallet' : 'Pay to Invoice'}

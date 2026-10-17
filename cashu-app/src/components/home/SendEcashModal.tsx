@@ -170,11 +170,21 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
                   </div>
                 ) : (
                   <>
-                    <div className="bg-white p-4 rounded-xl shadow-lg relative min-w-[232px] min-h-[232px] flex items-center justify-center">
+                    <div 
+                      onClick={handleCopy}
+                      className="bg-white p-4 rounded-xl shadow-lg relative min-w-[232px] min-h-[232px] flex items-center justify-center cursor-pointer hover:shadow-[0_0_25px_rgba(255,184,116,0.35)] transition-all active:scale-[0.98]"
+                      title="Click to copy token"
+                    >
                       <SafeQRCode value={currentFrame || (token && token.length < 1500 ? token : '')} size={200} />
                       {isAnimated && (
                         <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-label-caps">
                           {currentFrameIndex + 1}/{totalFrames}
+                        </div>
+                      )}
+                      {copied && (
+                        <div className="absolute inset-0 bg-black/80 rounded-xl flex flex-col items-center justify-center text-emerald-400 gap-1.5 backdrop-blur-[2px]">
+                          <Check size={28} className="stroke-[2.5]" />
+                          <span className="text-xs font-bold font-mono tracking-wide">Copied!</span>
                         </div>
                       )}
                     </div>

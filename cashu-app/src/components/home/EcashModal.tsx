@@ -183,7 +183,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
       <div
         onClick={e => e.stopPropagation()}
         style={sheetStyle}
-        className={`bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-lg border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[96vh] transition-[height,min-height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        className={`bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl w-full max-w-lg border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[96vh] transition-[height,min-height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           activeTab === 'send'
             ? 'h-[96vh] sm:h-auto sm:min-h-[700px] pb-6 sm:pb-4'
             : 'pb-6 sm:pb-0'
@@ -196,7 +196,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
           {...dragHandleProps}
           className="w-full flex justify-center pt-2.5 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
         >
-          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
 
         {/* Header */}
@@ -357,7 +357,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                 <button
                   onClick={handleSend}
                   disabled={sending || !isValid}
-                  className={`btn-gradient w-full py-3.5 sm:py-4 rounded-full text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center mt-1 ${sending || !isValid ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                  className={`btn-gradient w-full py-3.5 sm:py-4 rounded-2xl text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center mt-1 cursor-pointer ${sending || !isValid ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                     }`}
                 >
                   {sending ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Token'}
@@ -412,11 +412,21 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                       </div>
                     ) : (
                       <>
-                        <div className="bg-white p-4 rounded-xl shadow-lg relative min-w-[232px] min-h-[232px] flex items-center justify-center">
+                        <div 
+                          onClick={handleCopy}
+                          className="bg-white p-4 rounded-xl shadow-lg relative min-w-[232px] min-h-[232px] flex items-center justify-center cursor-pointer hover:shadow-[0_0_25px_rgba(255,184,116,0.35)] transition-all active:scale-[0.98]"
+                          title="Click to copy token"
+                        >
                           <SafeQRCode value={currentFrame || (token && token.length < 1500 ? token : '')} size={200} />
                           {isAnimated && (
                             <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-label-caps">
                               {currentFrameIndex + 1}/{totalFrames}
+                            </div>
+                          )}
+                          {copied && (
+                            <div className="absolute inset-0 bg-black/80 rounded-xl flex flex-col items-center justify-center text-emerald-400 gap-1.5 backdrop-blur-[2px]">
+                              <Check size={28} className="stroke-[2.5]" />
+                              <span className="text-xs font-bold font-mono tracking-wide">Copied!</span>
                             </div>
                           )}
                         </div>
@@ -434,7 +444,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                     </div>
                     <button
                       onClick={handleCopy}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20"
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20 cursor-pointer"
                     >
                       {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Token</>}
                     </button>
@@ -455,7 +465,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                 </div>
                 <button
                   onClick={closeWithAnimation}
-                  className="w-full py-4 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20"
+                  className="w-full py-3.5 sm:py-4 rounded-2xl bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20 cursor-pointer"
                 >
                   Done
                 </button>
@@ -524,7 +534,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                   <button
                     onClick={handleReceive}
                     disabled={receiving || !receiveToken.trim() || showScanner}
-                    className={`btn-gradient w-full py-4 rounded-full text-on-primary font-headline-lg-mobile text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${receiving || !receiveToken.trim() || showScanner ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                    className={`btn-gradient w-full py-3.5 sm:py-4 rounded-2xl text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${receiving || !receiveToken.trim() || showScanner ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                       }`}
                   >
                     {receiving ? <Loader2 className="animate-spin w-6 h-6" /> : 'Receive Ecash'}

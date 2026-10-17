@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, Check, Zap, X, User, Loader2, Edit2 } from 'lucide-react';
+import { Copy, Check, Zap, X, Loader2, Edit2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import QRCode from 'react-qr-code';
 import { useNostr } from '../../hooks/useNostr';
@@ -22,8 +22,9 @@ export const LightningAddressModal: React.FC<LightningAddressModalProps> = ({ on
   const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
 
   const [copied, setCopied] = useState(false);
-  const [showUsernameInput, setShowUsernameInput] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   if (!lightningAddress) return null;
 
@@ -55,7 +56,7 @@ export const LightningAddressModal: React.FC<LightningAddressModalProps> = ({ on
 
     const success = await claimUsername(sanitized);
     if (success) {
-      setShowUsernameInput(false);
+      setIsEditing(false);
       setUsernameInput('');
     }
   };
@@ -78,7 +79,7 @@ export const LightningAddressModal: React.FC<LightningAddressModalProps> = ({ on
           {...dragHandleProps}
           className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
         >
-          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
 
         {/* Header */}
@@ -96,7 +97,7 @@ export const LightningAddressModal: React.FC<LightningAddressModalProps> = ({ on
           </div>
           <button
             onClick={closeWithAnimation}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors border border-outline-variant/30"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors border border-outline-variant/30 cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -117,92 +118,116 @@ export const LightningAddressModal: React.FC<LightningAddressModalProps> = ({ on
             </div>
           </div>
 
-          {/* Address */}
-          <div
-            onClick={handleCopy}
-            className="bg-[#101c16] rounded-xl p-3 cursor-pointer hover:border-primary/40 border border-outline-variant/40 transition-colors group"
-          >
-            <p className="text-center text-on-surface font-mono text-sm break-all select-all group-hover:text-primary transition-colors">
-              {lightningAddress}
-            </p>
+          {/* Address with pen on the right & expanding edit background from right to left */}
+          <div className="relative bg-[#101c16] rounded-2xl border border-outline-variant/40 hover:border-primary/40 transition-colors group flex items-center overflow-hidden min-h-[56px]">
+            {/* Base address display */}
+            <div
+              onClick={handleCopy}
+              className="flex-1 min-w-0 py-3.5 pl-4 pr-2 cursor-pointer flex items-center"
+              title="Click to copy address"
+            >
+              <p className="text-on-surface font-mono text-sm break-all select-all group-hover:text-primary transition-colors">
+                {lightningAddress}
+              </p>
+            </div>
+
+            {/* Subtle separating line */}
+            <div className="h-6 w-px bg-outline-variant/30 shrink-0"></div>
+
+            {/* Pen button on the right */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditing(true);
+                setUsernameInput(customUsername || '');
+                setTimeout(() => inputRef.current?.focus(), 150);
+              }}
+              className="p-3.5 px-4 text-on-surface-variant hover:text-primary hover:bg-surface-bright/50 transition-colors cursor-pointer shrink-0 flex items-center justify-center group/pen"
+              title={customUsername ? "Change username" : "Claim custom username"}
+            >
+              <Edit2 size={16} className="text-on-surface-variant group-hover/pen:text-primary transition-colors" />
+            </button>
+
+            {/* Expanding dark background from right to left */}
+            <div
+              className={`absolute inset-y-0 right-0 z-20 flex items-center bg-[#0a1711] border border-primary/50 rounded-2xl transition-all duration-300 ease-out overflow-hidden ${
+                isEditing
+                  ? 'w-full opacity-100 shadow-[0_0_20px_rgba(242,169,59,0.15)]'
+                  : 'w-0 opacity-0 pointer-events-none border-transparent'
+              }`}
+            >
+              <div className="w-full flex items-center min-w-0">
+                {/* Username input directly on dark background (no inner edit box) */}
+                <div className="flex-1 min-w-0 flex items-center pl-4 pr-3 py-3">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value.replace(/[^a-z0-9_-]/gi, '').toLowerCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleClaimUsername();
+                      } else if (e.key === 'Escape') {
+                        setIsEditing(false);
+                        setUsernameInput(customUsername || '');
+                      }
+                    }}
+                    placeholder={customUsername || "username"}
+                    maxLength={20}
+                    className="flex-1 min-w-0 bg-transparent text-sm text-on-surface font-mono outline-none placeholder:text-on-surface-variant/40"
+                  />
+                  <span className="text-on-surface-variant/70 font-mono text-xs pr-1 whitespace-nowrap shrink-0 select-none">
+                    @{NPUB_DOMAIN}
+                  </span>
+                </div>
+
+                {/* Subtle separating line */}
+                <div className="h-6 w-px bg-outline-variant/30 shrink-0"></div>
+
+                {/* Edit and close buttons with comfortable touch spacing */}
+                <div className="flex items-center gap-2.5 pl-2.5 pr-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleClaimUsername}
+                    disabled={claimingUsername || usernameInput.length < 3}
+                    className="p-2 rounded-xl text-primary hover:bg-white/5 active:scale-95 disabled:opacity-30 transition-all cursor-pointer disabled:cursor-not-allowed flex items-center justify-center"
+                    title="Save username"
+                  >
+                    {claimingUsername ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditing(false);
+                      setUsernameInput(customUsername || '');
+                    }}
+                    className="p-2 rounded-xl text-on-surface-variant hover:text-on-surface hover:bg-white/5 active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+                    title="Close"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Validation hint while editing */}
+          {isEditing && usernameInput.length > 0 && usernameInput.length < 3 && (
+            <p className="text-red-400 text-xs px-1 text-center -mt-2">
+              Username must be at least 3 characters
+            </p>
+          )}
 
           {/* Copy Button */}
           <button
             onClick={handleCopy}
-            className="btn-primary w-full flex items-center justify-center gap-2 rounded-xl py-3.5 font-display-hero text-[15px] font-semibold active:scale-[0.98] transition-all"
+            className="btn-primary w-full flex items-center justify-center gap-2 rounded-2xl py-3.5 font-display-hero text-[15px] font-semibold active:scale-[0.98] transition-all cursor-pointer"
           >
             {copied ? <Check size={18} /> : <Copy size={18} />}
             {copied ? 'Copied!' : 'Copy Address'}
           </button>
-
-          {/* Username Section */}
-          <div className="border-t border-outline-variant/30 pt-4">
-            {!showUsernameInput ? (
-              customUsername ? (
-                <div className="flex items-center justify-center gap-2">
-                  <p className="text-center text-on-surface-variant text-xs">
-                    Username: <span className="text-primary font-bold">{customUsername}@{NPUB_DOMAIN}</span>
-                  </p>
-                  <button
-                    onClick={() => setShowUsernameInput(true)}
-                    className="text-primary hover:text-primary/80 p-1 transition-colors"
-                    title="Change username"
-                  >
-                    <Edit2 size={12} />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowUsernameInput(true)}
-                  className="w-full flex items-center justify-center gap-2 text-on-surface-variant hover:text-on-surface text-sm py-2 transition-colors"
-                >
-                  <User size={14} />
-                  Claim a username (e.g. alice@{NPUB_DOMAIN})
-                </button>
-              )
-            ) : (
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="flex-1 flex items-center bg-surface-container-low rounded-lg overflow-hidden border border-outline-variant/30 focus-within:border-primary/50 transition-colors">
-                    <input
-                      type="text"
-                      value={usernameInput}
-                      onChange={(e) => setUsernameInput(e.target.value.replace(/[^a-z0-9_-]/gi, '').toLowerCase())}
-                      placeholder={customUsername || "username"}
-                      maxLength={20}
-                      className="flex-1 min-w-0 bg-transparent px-3 py-2 text-sm text-on-surface outline-none"
-                      autoFocus
-                    />
-                    <span className="text-on-surface-variant text-sm pr-3 whitespace-nowrap shrink-0">@{NPUB_DOMAIN}</span>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <button
-                      onClick={handleClaimUsername}
-                      disabled={claimingUsername || usernameInput.length < 3}
-                      className="flex-1 sm:flex-none bg-primary/15 hover:bg-primary/25 text-primary rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-50 transition-colors flex items-center justify-center"
-                    >
-                      {claimingUsername ? <Loader2 size={14} className="animate-spin" /> : 'Claim'}
-                    </button>
-                    {customUsername && (
-                      <button
-                        onClick={() => {
-                          setShowUsernameInput(false);
-                          setUsernameInput('');
-                        }}
-                        className="flex-1 sm:flex-none text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/50 px-4 py-2 sm:px-2 rounded-lg transition-colors flex items-center justify-center"
-                      >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {usernameInput.length > 0 && usernameInput.length < 3 && (
-                  <p className="text-red-400 text-xs px-1">Username must be at least 3 characters</p>
-                )}
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>,
