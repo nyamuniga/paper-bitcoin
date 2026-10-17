@@ -31,10 +31,13 @@ export const Settings = () => {
   }, []);
 
   return (
-    <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding py-6 flex flex-col gap-6">
-      <PageHeader title="Settings" subtitle="Keys, connections & preferences" />
+    <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6 flex flex-col">
+      <PageHeader 
+        title="Settings" 
+        subtitle="Keys, connections & preferences" 
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start mt-1">
         <div className="flex flex-col gap-6">
           <RecoveryPhraseSection
             isExpanded={activeSection === 'recovery'}
@@ -62,10 +65,17 @@ export const Settings = () => {
       </div>
 
       {appInfo.name && appInfo.version && (
-        <div className="text-center mt-8 pb-4">
+        <div className="text-center mt-8 pb-4 flex flex-col items-center gap-1.5">
           <p className="text-xs text-on-surface-variant/50 font-bold uppercase tracking-wider">
             {appInfo.name} v{appInfo.version}
           </p>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('check_app_update', { detail: { isManual: true } }))}
+            className="text-[11px] text-primary/70 hover:text-primary transition-colors cursor-pointer font-medium hover:underline"
+          >
+            Check for updates
+          </button>
         </div>
       )}
     </main>

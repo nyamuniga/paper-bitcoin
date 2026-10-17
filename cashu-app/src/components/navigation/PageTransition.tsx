@@ -44,13 +44,6 @@ export const PageTransition: React.FC<PageTransitionProps> = ({ children }) => {
     }
   }
 
-  useEffect(() => {
-    if (prevPathRef.current !== location.pathname) {
-      window.scrollTo(0, 0);
-      prevPathRef.current = location.pathname;
-    }
-  }, [location.pathname]);
-
   const animationClass =
     direction === 'forward'
       ? 'animate-page-forward'
@@ -58,11 +51,26 @@ export const PageTransition: React.FC<PageTransitionProps> = ({ children }) => {
       ? 'animate-page-backward'
       : 'animate-page-lift';
 
+  const [activeClass, setActiveClass] = React.useState<string>(animationClass);
+
+  useEffect(() => {
+    setActiveClass(animationClass);
+    const timer = setTimeout(() => {
+      setActiveClass('');
+    }, 300);
+
+    if (prevPathRef.current !== location.pathname) {
+      window.scrollTo(0, 0);
+      prevPathRef.current = location.pathname;
+    }
+
+    return () => clearTimeout(timer);
+  }, [location.pathname, animationClass]);
+
   return (
     <div
       key={location.pathname}
-      className={`w-full flex-1 flex flex-col ${animationClass}`}
-      style={{ overflowX: 'clip' }}
+      className={`w-full flex-1 flex flex-col ${activeClass}`}
     >
       {children}
     </div>

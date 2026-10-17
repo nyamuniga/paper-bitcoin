@@ -11,11 +11,17 @@ export interface MintInfo {
   icon_url?: string;
   time?: number;
   nuts?: any;
+  _cachedAt?: number;
 }
 
 const DEFAULT_CACHED_MINTS: Record<string, MintInfo> = {
   'https://mint.28waves.com': {
     name: '28MINT',
+    pubkey: '0294f53f13f988e3a5bf80f384168bf02c117ee9e81019f7e1b66e1250b5e0ebfa',
+    version: 'Nutshell/0.19.2',
+    description: 'Empowering Africa with Bitcoin and eCash to transact without borders.',
+    description_long: '28MINT is more than just a mint, it’s a step toward Africa’s financial independence. By combining the strength of Bitcoin, the privacy of eCash, and the universal right to freedom, we’re building tools for unstoppable communities. With every sat transacted, we unlock a future where Africans can trade, save, and grow without permission, without borders, and without limits.',
+    motd: 'Africa needs Bitcoin more than anyone!',
     icon_url: 'https://res.cloudinary.com/dymfagnlu/image/upload/v1758210455/28_g3bhgv.png',
   },
 };
@@ -39,7 +45,11 @@ const mintInfoCache: Record<string, MintInfo | null> = getInitialCache();
 export function useMintInfo(mintUrl: string | null) {
   const cleanUrl = mintUrl ? mintUrl.replace(/\/+$/, '') : null;
   const [info, setInfo] = useState<MintInfo | null>(cleanUrl ? mintInfoCache[cleanUrl] || null : null);
-  const [loading, setLoading] = useState<boolean>(!cleanUrl || !mintInfoCache[cleanUrl]);
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (!cleanUrl) return false;
+    const cached = mintInfoCache[cleanUrl];
+    return !cached || !cached.nuts;
+  });
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
@@ -49,14 +59,22 @@ export function useMintInfo(mintUrl: string | null) {
       return;
     }
 
-    if (mintInfoCache[cleanUrl]) {
-      setInfo(mintInfoCache[cleanUrl]);
-      setLoading(false);
-      return;
+    const cached = mintInfoCache[cleanUrl];
+    const hasFullInfo = Boolean(cached && cached.nuts);
+
+    if (cached) {
+      setInfo(cached);
+      // If we already have full info that is recent (under 15 minutes old), we don't need to refetch
+      if (hasFullInfo && cached._cachedAt && Date.now() - cached._cachedAt < 15 * 60 * 1000) {
+        setLoading(false);
+        return;
+      }
     }
 
     let isMounted = true;
-    setLoading(true);
+    if (!hasFullInfo) {
+      setLoading(true);
+    }
 
     const fetchInfo = async () => {
       try {
@@ -72,20 +90,23 @@ export function useMintInfo(mintUrl: string | null) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         
-        mintInfoCache[cleanUrl] = data;
+        const fullData: MintInfo = { ...data, _cachedAt: Date.now() };
+        mintInfoCache[cleanUrl] = fullData;
         try {
           localStorage.setItem('mint_info_cache', JSON.stringify(mintInfoCache));
         } catch {}
         
         if (isMounted) {
-          setInfo(data);
+          setInfo(fullData);
           setError(null);
         }
       } catch (err: any) {
         if (isMounted) {
           setError(err);
-          // Set to null to indicate failed fetch
-          mintInfoCache[cleanUrl] = null;
+          // Only invalidate cache if we had no working cached info at all
+          if (!mintInfoCache[cleanUrl]) {
+            mintInfoCache[cleanUrl] = null;
+          }
         }
       } finally {
         if (isMounted) {

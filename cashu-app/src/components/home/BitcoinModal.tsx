@@ -213,7 +213,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
       <div
         onClick={e => e.stopPropagation()}
         style={sheetStyle}
-        className={`bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-lg border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[96vh] transition-[height,min-height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${activeTab === 'receive'
+        className={`bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl w-full max-w-lg border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[96vh] transition-[height,min-height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${activeTab === 'receive'
             ? 'h-[96vh] sm:h-auto sm:min-h-[700px] pb-6 sm:pb-4'
             : 'pb-6 sm:pb-0'
           }`}
@@ -225,7 +225,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
           {...dragHandleProps}
           className="w-full flex justify-center pt-2.5 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
         >
-          <div className="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
 
         {/* Header */}
@@ -392,7 +392,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       <button
                         onClick={handlePayLightning}
                         disabled={paying || !destinationInput || isInsufficient}
-                        className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${paying || !destinationInput || isInsufficient ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                        className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${paying || !destinationInput || isInsufficient ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                           }`}
                       >
                         {paying ? <Loader2 className="animate-spin w-6 h-6" /> : <><Zap className="w-5 h-5 mr-2" /> Pay Invoice</>}
@@ -401,7 +401,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       <button
                         onClick={handleNextFromInput}
                         disabled={parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay' && parsedInput.type !== 'onchain'}
-                        className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay' && parsedInput.type !== 'onchain') ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                        className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${(parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay' && parsedInput.type !== 'onchain') ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                           }`}
                       >
                         {isFetchingLnurl ? <Loader2 className="animate-spin w-6 h-6" /> : 'Next'}
@@ -430,7 +430,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <button
                       onClick={handleNextFromAmount}
                       disabled={!parseInt(lnurlSendAmount) || parseInt(lnurlSendAmount) > availableBalance || requesting || isFetchingLnurl}
-                      className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center ${(!parseInt(lnurlSendAmount) || parseInt(lnurlSendAmount) > availableBalance || requesting || isFetchingLnurl) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${(!parseInt(lnurlSendAmount) || parseInt(lnurlSendAmount) > availableBalance || requesting || isFetchingLnurl) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                         }`}
                     >
                       {isFetchingLnurl || requesting ? <Loader2 className="animate-spin w-6 h-6" /> : parsedInput.type === 'onchain' ? 'Send via ASP' : 'Pay Lightning'}
@@ -475,7 +475,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       <button
                         onClick={handleConfirmOnchain}
                         disabled={paying}
-                        className="w-full bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary py-4 rounded-full font-bold text-[16px] tracking-wide transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] shadow-lg"
+                        className="w-full bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary py-4 rounded-2xl font-bold text-[16px] tracking-wide transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] shadow-lg cursor-pointer"
                       >
                         {paying ? (
                           <>
@@ -503,7 +503,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   </div>
                   <button
                     onClick={onClose}
-                    className="w-full py-4 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20"
+                    className="w-full py-3.5 sm:py-4 rounded-2xl bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20 cursor-pointer"
                   >
                     Done
                   </button>
@@ -533,13 +533,13 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleCopy(receiveInvoice)}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20"
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20 cursor-pointer"
                       >
                         {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Invoice</>}
                       </button>
                       <button
                         onClick={() => setReceiveInvoice(null)}
-                        className="px-6 py-3 rounded-full bg-surface-container-highest text-on-surface-variant font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20"
+                        className="px-6 py-3 rounded-2xl bg-surface-container-highest text-on-surface-variant font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20 cursor-pointer"
                       >
                         Back
                       </button>
@@ -574,13 +574,13 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleCopy(boardingAddress)}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-full bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20"
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20 cursor-pointer"
                       >
                         {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Address</>}
                       </button>
                       <button
                         onClick={() => setBoardingAddress(null)}
-                        className="px-6 py-3 rounded-full bg-surface-container-highest text-on-surface-variant font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20"
+                        className="px-6 py-3 rounded-2xl bg-surface-container-highest text-on-surface-variant font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20 cursor-pointer"
                       >
                         Back
                       </button>
@@ -641,7 +641,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <button
                       onClick={handleRequestInvoice}
                       disabled={requesting || (receiveMode === 'lightning' && parsedReceiveAmount <= 0)}
-                      className={`bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] w-full py-3.5 sm:py-4 rounded-full shadow-lg transition-all duration-200 flex justify-center items-center mt-1 ${requesting || (receiveMode === 'lightning' && parsedReceiveAmount <= 0) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      className={`bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] w-full py-3.5 sm:py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center mt-1 cursor-pointer ${requesting || (receiveMode === 'lightning' && parsedReceiveAmount <= 0) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                         }`}
                     >
                       {requesting ? <Loader2 className="animate-spin w-6 h-6" /> : receiveMode === 'onchain' ? 'Get Boarding Address' : 'Create Invoice'}

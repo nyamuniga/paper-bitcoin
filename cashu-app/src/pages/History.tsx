@@ -96,9 +96,13 @@ export default function History() {
               }
             }}
             disabled={isSyncingBark}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isSyncingBark ? 'bg-surface-container-highest text-on-surface-variant opacity-50 cursor-not-allowed' : 'bg-surface-container-high text-on-surface hover:bg-surface-bright'}`}
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all active:scale-95 border cursor-pointer ${
+              isSyncingBark
+                ? 'bg-[#12261d] text-[#627d70] border-[#1e3c2e] opacity-50 cursor-not-allowed'
+                : 'bg-[#0c1b14] hover:bg-[#12261d] text-[#8b9e94] hover:text-[#f7f4eb] border-[#1e3c2e] shadow-sm'
+            }`}
           >
-            <RefreshCw className={`w-5 h-5 ${isSyncingBark ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${isSyncingBark ? 'animate-spin text-primary' : ''}`} />
           </button>
         }
       />
