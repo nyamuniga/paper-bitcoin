@@ -41,12 +41,19 @@ export const useEcash = (mintUrl?: string) => {
     };
   }, [currentTxId, isClaimed]);
 
-  const sendEcash = async (amount: number, overrideMintUrl?: string, pubkey?: string) => {
+  const sendEcash = async (
+    amount: number, 
+    overrideMintUrl?: string, 
+    pubkey?: string,
+    opts?: { silent?: boolean; onError?: (msg: string) => void }
+  ) => {
     if (isSendingRef.current) return null;
     
     const targetMint = overrideMintUrl || mintUrl;
     if (!targetMint) {
-      toast.error('No mint specified for sending');
+      const err = 'No mint specified for sending';
+      if (!opts?.silent) toast.error(err);
+      opts?.onError?.(err);
       return null;
     }
 
@@ -62,7 +69,9 @@ export const useEcash = (mintUrl?: string) => {
       await refreshWallet();
       return result;
     } catch (e: any) {
-      toast.error(`Send failed: ${e}`);
+      const err = String(e?.message ?? e);
+      if (!opts?.silent) toast.error(`Send failed: ${err}`);
+      opts?.onError?.(err);
       return null;
     } finally {
       setSending(false);
@@ -70,7 +79,10 @@ export const useEcash = (mintUrl?: string) => {
     }
   };
 
-  const receiveEcash = async (token: string) => {
+  const receiveEcash = async (
+    token: string,
+    opts?: { silent?: boolean; onError?: (msg: string) => void }
+  ) => {
     if (isReceivingRef.current) return null;
     isReceivingRef.current = true;
     setReceiving(true);
@@ -81,10 +93,12 @@ export const useEcash = (mintUrl?: string) => {
         nostrKey: nostrKey || undefined,
       });
       await refreshWallet();
-      toast.success(`Received ₿${amount.toLocaleString()} sats!`);
+      if (!opts?.silent) toast.success(`Received ₿${amount.toLocaleString()} sats!`);
       return amount;
     } catch (e: any) {
-      toast.error(`Receive failed: ${e}`);
+      const err = String(e?.message ?? e);
+      if (!opts?.silent) toast.error(`Receive failed: ${err}`);
+      opts?.onError?.(err);
       return null;
     } finally {
       setReceiving(false);

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Loader2, Zap } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet';
 import { useBitcoin } from '../../hooks/useBitcoin';
+import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
@@ -14,6 +15,8 @@ interface PayInvoiceModalProps {
 
 export const PayInvoiceModal: React.FC<PayInvoiceModalProps> = ({ mintUrl, onClose }) => {
   const [invoice, setInvoice] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState<StampPaymentStatus | null>(null);
+  const [paymentErrorMessage, setPaymentErrorMessage] = useState('');
   const { paying, payInvoice } = useBitcoin(mintUrl);
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const availableBalance = mintBalances[mintUrl] || 0;
@@ -45,9 +48,17 @@ export const PayInvoiceModal: React.FC<PayInvoiceModalProps> = ({ mintUrl, onClo
 
   const handlePay = async () => {
     if (!invoice || isInsufficient) return;
-    const success = await payInvoice(invoice);
+    setPaymentErrorMessage('');
+    let mintError = '';
+    const success = await payInvoice(invoice, undefined, {
+      silent: true,
+      onError: (message) => { mintError = message; },
+    });
     if (success) {
-      onClose();
+      setPaymentStatus('success');
+    } else {
+      setPaymentErrorMessage(mintError || 'The mint could not complete this payment.');
+      setPaymentStatus('failed');
     }
   };
 
@@ -117,8 +128,21 @@ export const PayInvoiceModal: React.FC<PayInvoiceModalProps> = ({ mintUrl, onClo
         </div>
       </div>
       {paying && (
-        <FullScreenLoader title="Sending Bitcoin..." message="Paying the lightning invoice." />
+        <FullScreenLoader title="Sending Payment..." message="Routing payment through the Lightning network..." />
       )}
+      <SovereignStampOverlay
+        status={paymentStatus}
+        amountSats={invoiceAmount || undefined}
+        errorMessage={paymentErrorMessage}
+        onDismiss={() => {
+          if (paymentStatus === 'success') {
+            onClose();
+          } else {
+            setPaymentStatus(null);
+          }
+        }}
+        onRetry={handlePay}
+      />
     </div>,
     document.body
   );

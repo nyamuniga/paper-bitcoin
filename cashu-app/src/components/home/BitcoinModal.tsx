@@ -7,6 +7,7 @@ import { useWalletStore } from '../../store/wallet';
 import { useBitcoin } from '../../hooks/useBitcoin';
 import { useHistory } from '../../hooks/useHistory';
 
+import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
@@ -68,6 +69,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   // Receive state
   const [receiveMode, setReceiveMode] = useState<ReceiveMode>('lightning');
   const [receiveAmount, setReceiveAmount] = useState('');
+  const parsedReceiveAmount = parseInt(receiveAmount) || 0;
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [receiveInvoice, setReceiveInvoice] = useState<string | null>(null);
   const [boardingAddress, setBoardingAddress] = useState<string | null>(null);
@@ -88,14 +90,45 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const currentTx = quoteId ? transactions.find(t => t.id === quoteId) : null;
   const receiveSuccess = currentTx?.status === 'Success';
 
+  const [paymentStatus, setPaymentStatus] = useState<StampPaymentStatus | null>(null);
+  const [paymentErrorMessage, setPaymentErrorMessage] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState<number | undefined>(undefined);
+  const [paymentRecipient, setPaymentRecipient] = useState<string | undefined>(undefined);
+  const [paymentTitle, setPaymentTitle] = useState<string | undefined>(undefined);
+  const [lastPayAction, setLastPayAction] = useState<(() => void) | undefined>(undefined);
+  const [hasTriggeredReceiveCelebration, setHasTriggeredReceiveCelebration] = useState(false);
+
+  // Trigger sovereign stamp celebration when an incoming invoice is settled
+  useEffect(() => {
+    if (receiveSuccess && !hasTriggeredReceiveCelebration) {
+      setHasTriggeredReceiveCelebration(true);
+      setPaymentTitle('Payment received');
+      setPaymentAmount(parsedReceiveAmount || currentTx?.amount);
+      setPaymentStatus('success');
+    }
+  }, [receiveSuccess, hasTriggeredReceiveCelebration, parsedReceiveAmount, currentTx]);
+
   const isInsufficient = (parsedInput.type === 'lightning' && parsedInput.amountSats !== null)
     ? parsedInput.amountSats > availableBalance
     : false;
 
   const handlePayLightning = async () => {
     if (parsedInput.type !== 'lightning' || !parsedInput.addressOrInvoice || isInsufficient) return;
-    const success = await payInvoice(parsedInput.addressOrInvoice);
-    if (success) onClose();
+    setPaymentErrorMessage('');
+    setPaymentAmount(parsedInput.amountSats || undefined);
+    setPaymentTitle('Payment sent');
+    setLastPayAction(() => handlePayLightning);
+    let mintErr = '';
+    const success = await payInvoice(parsedInput.addressOrInvoice, undefined, {
+      silent: true,
+      onError: (msg) => { mintErr = msg; }
+    });
+    if (success) {
+      setPaymentStatus('success');
+    } else {
+      setPaymentErrorMessage(mintErr || 'The mint could not complete this payment.');
+      setPaymentStatus('failed');
+    }
   };
 
   const handleNextFromInput = async () => {
@@ -138,14 +171,27 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
 
     if (lnurlParams) {
       setIsFetchingLnurl(true);
+      setPaymentErrorMessage('');
+      setPaymentAmount(amt);
+      setPaymentRecipient(parsedInput.addressOrInvoice);
+      setPaymentTitle('Payment sent');
+      setLastPayAction(() => handleNextFromAmount);
       try {
         const invoiceData = await fetchLnurlPayInvoice(lnurlParams.callback, amt * 1000);
-        const success = await payInvoice(invoiceData.pr);
+        let mintErr = '';
+        const success = await payInvoice(invoiceData.pr, undefined, {
+          silent: true,
+          onError: (msg) => { mintErr = msg; }
+        });
         if (success) {
-          onClose();
+          setPaymentStatus('success');
+        } else {
+          setPaymentErrorMessage(mintErr || 'The mint could not complete this payment.');
+          setPaymentStatus('failed');
         }
       } catch (e: any) {
-        toast.error(`LNURL Error: ${e.message}`);
+        setPaymentErrorMessage(e?.message || 'LNURL payment failed.');
+        setPaymentStatus('failed');
       } finally {
         setIsFetchingLnurl(false);
       }
@@ -155,11 +201,24 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
 
   const handleConfirmOnchain = async () => {
     if (!onchainEstimate || !parsedInput.addressOrInvoice) return;
-    const success = await executeOnChain(onchainEstimate, parsedInput.addressOrInvoice);
-    if (success) onClose();
+    setPaymentErrorMessage('');
+    setPaymentAmount(onchainEstimate.amount);
+    setPaymentRecipient(parsedInput.addressOrInvoice);
+    setPaymentTitle('Payment sent');
+    setLastPayAction(() => handleConfirmOnchain);
+    try {
+      const success = await executeOnChain(onchainEstimate, parsedInput.addressOrInvoice);
+      if (success) {
+        setPaymentStatus('success');
+      } else {
+        setPaymentErrorMessage('On-chain transaction execution failed.');
+        setPaymentStatus('failed');
+      }
+    } catch (e: any) {
+      setPaymentErrorMessage(e?.message || 'On-chain transaction failed.');
+      setPaymentStatus('failed');
+    }
   };
-
-  const parsedReceiveAmount = parseInt(receiveAmount) || 0;
 
   const handleRequestInvoice = async () => {
     if (receiveMode === 'onchain') {
@@ -649,9 +708,30 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
             )}
           </div>
         </div>
-        {paying ? (
-          <FullScreenLoader title="Sending Bitcoin..." message="Executing transaction." />
-        ) : null}
+        {isFetchingLnurl && (
+          <FullScreenLoader title="Generating Invoice..." message="Resolving address and fetching Lightning invoice..." />
+        )}
+        {requesting && (
+          <FullScreenLoader title="Generating Invoice..." message="Requesting Lightning invoice from mint..." />
+        )}
+        {paying && (
+          <FullScreenLoader title="Sending Payment..." message="Routing payment through the Lightning network..." />
+        )}
+        <SovereignStampOverlay
+          status={paymentStatus}
+          amountSats={paymentAmount}
+          recipient={paymentRecipient}
+          title={paymentTitle}
+          errorMessage={paymentErrorMessage}
+          onDismiss={() => {
+            if (paymentStatus === 'success') {
+              onClose();
+            } else {
+              setPaymentStatus(null);
+            }
+          }}
+          onRetry={lastPayAction}
+        />
       </div>
     </div>,
     document.body

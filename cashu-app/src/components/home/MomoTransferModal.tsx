@@ -7,6 +7,7 @@ import { useWalletStore } from '../../store/wallet';
 import { useTransactionStore } from '../../store/transactionStore';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
+import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
 import { createPortal } from 'react-dom';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
 
@@ -21,9 +22,22 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   onClose,
   mintUrl: initialMintUrl = ''
 }) => {
-  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
   const { activeTransaction, error, setError, updateTransactionPhase, setActiveTransaction } = useTransactionStore();
   const phase = activeTransaction?.currentPhase || AppPhase.IDLE;
+
+  const isProcessPhase =
+    phase !== AppPhase.IDLE &&
+    phase !== AppPhase.READY_TO_CLAIM &&
+    phase !== AppPhase.PAYOUT_COMPLETE &&
+    phase !== AppPhase.PAYMENT_FAILED &&
+    phase !== AppPhase.PAYOUT_FAILED &&
+    phase !== AppPhase.RETRYABLE_ERROR &&
+    phase !== AppPhase.EXPIRED;
+
+  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({
+    onClose,
+    disabled: isProcessPhase,
+  });
 
   const initialDerivedTab = activeTransaction
     ? (activeTransaction.direction === 'RWF_TO_SATS' ? 'receive' : 'send')
@@ -32,6 +46,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   const [activeTab, setActiveTab] = useState<'send' | 'receive'>(initialDerivedTab);
   const [amount, setAmount] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [stampDismissed, setStampDismissed] = useState(false);
 
   const [mintUrl, setMintUrl] = useState(initialMintUrl);
   const [showMintDropdown, setShowMintDropdown] = useState(false);
@@ -138,13 +153,24 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
 
   const isFormValid = amount && phoneNumber && !amountError && !phoneError && !isFetchingRate && phase === AppPhase.IDLE;
 
+  const isSuccess = phase === AppPhase.READY_TO_CLAIM || phase === AppPhase.PAYOUT_COMPLETE;
+  const isFailed = phase === AppPhase.PAYMENT_FAILED || phase === AppPhase.PAYOUT_FAILED;
+
+  const stampStatus: StampPaymentStatus | null = (!stampDismissed && isSuccess)
+    ? 'success'
+    : (!stampDismissed && isFailed)
+      ? 'failed'
+      : null;
+
   const handleReceiveFromMomo = async () => {
     setError(null);
+    setStampDismissed(false);
     await calculateQuote(amount, phoneNumber, 'ecash', mintUrl);
   };
 
   const handleSendToMomo = async () => {
     setError(null);
+    setStampDismissed(false);
     await calculateSendQuote(amount, phoneNumber, 'ecash', mintUrl);
   };
 
@@ -154,33 +180,48 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
     setAmount('');
     setPhoneNumber('');
     setError(null);
+    setStampDismissed(false);
     if (phase === AppPhase.RETRYABLE_ERROR) {
       setActiveTransaction(null);
     }
   };
 
   const handleClose = () => {
-    const isProcessPhase = phase !== AppPhase.IDLE &&
-      phase !== AppPhase.READY_TO_CLAIM &&
-      phase !== AppPhase.PAYMENT_FAILED &&
-      phase !== AppPhase.RETRYABLE_ERROR;
-
     if (isProcessPhase) {
       return;
     }
 
-    if (phase === AppPhase.READY_TO_CLAIM || phase === AppPhase.PAYMENT_FAILED || phase === AppPhase.RETRYABLE_ERROR) {
+    if (
+      phase === AppPhase.READY_TO_CLAIM ||
+      phase === AppPhase.PAYOUT_COMPLETE ||
+      phase === AppPhase.PAYMENT_FAILED ||
+      phase === AppPhase.PAYOUT_FAILED ||
+      phase === AppPhase.RETRYABLE_ERROR
+    ) {
       setActiveTransaction(null);
       setError(null);
+      setStampDismissed(false);
     }
     closeWithAnimation();
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isProcessPhase) {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isProcessPhase]);
 
   return createPortal(
     <div
       className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
       style={backdropStyle}
-      onClick={handleClose}
+      onClick={() => {
+        if (!isProcessPhase) handleClose();
+      }}
     >
       <div
         onClick={e => e.stopPropagation()}
@@ -191,8 +232,10 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
 
         {/* Drag Handle */}
         <div
-          {...dragHandleProps}
-          className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
+          {...(isProcessPhase ? {} : dragHandleProps)}
+          className={`w-full flex justify-center pt-3 pb-1 relative z-10 sm:hidden ${
+            isProcessPhase ? 'cursor-default pointer-events-none opacity-30' : 'cursor-grab active:cursor-grabbing'
+          }`}
         >
           <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
@@ -672,6 +715,33 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           </div>
         </div>
       </div>
+      <SovereignStampOverlay
+        status={stampStatus}
+        amountValue={activeTransaction?.rwfAmount || (amount ? parseInt(amount, 10) : undefined)}
+        currency="RWF"
+        currencyPosition="suffix"
+        title={stampStatus === 'success'
+          ? (activeTab === 'receive' ? 'Top Up Complete' : 'Cash Out Complete')
+          : (activeTab === 'receive' ? 'Top Up Failed' : 'Cash Out Failed')
+        }
+        subtitle={stampStatus === 'success'
+          ? (activeTab === 'receive' ? 'Funds added to your wallet balance.' : 'RWF sent to your mobile money account.')
+          : (error || 'The mobile money transfer failed.')
+        }
+        badgeLabel={stampStatus === 'success'
+          ? (activeTab === 'receive' ? 'Topped Up' : 'Cashed Out')
+          : 'Failed'
+        }
+        errorMessage={stampStatus === 'failed' ? (error || undefined) : undefined}
+        onDismiss={() => {
+          setStampDismissed(true);
+          handleClose();
+        }}
+        onRetry={stampStatus === 'failed' ? () => {
+          setStampDismissed(false);
+          updateTransactionPhase(activeTab === 'receive' ? AppPhase.VERIFYING_PAYMENT : AppPhase.AWAITING_INVOICE_PAYMENT);
+        } : undefined}
+      />
     </div>,
     document.body
   );
