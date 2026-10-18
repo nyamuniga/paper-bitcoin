@@ -59,7 +59,7 @@ export const useAuth = () => {
     }).catch(e => triggerError(String(e)));
   }, []);
 
-  const unlockWallet = async (passphrase: string, rememberMe: boolean) => {
+  const unlockWallet = async (passphrase: string, rememberMe: boolean, onUnlocked?: () => void) => {
     setLoading(true);
     handleClearError();
     try {
@@ -70,7 +70,17 @@ export const useAuth = () => {
         localStorage.removeItem('rememberMe');
       }
       window.history.replaceState(null, '', '/');
+
+      // Trigger the unlock animation (lock snaps open!)
+      if (onUnlocked) {
+        onUnlocked();
+      }
+
       try { await initBarkWallet(); } catch (e) { console.error("Failed to init Bark:", e); }
+
+      // Brief delay so the user experiences the satisfying open lock animation
+      await new Promise(resolve => setTimeout(resolve, 450));
+
       await refreshWallet();
       return true;
     } catch (e: any) {

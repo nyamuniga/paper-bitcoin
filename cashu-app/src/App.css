@@ -796,3 +796,92 @@ section,
   animation: rwf-fade-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+.hero-italic {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: #f2a93b;
+  text-shadow: 0 0 24px rgba(242, 169, 59, 0.35);
+}
+
+/* ── Mobile Keyboard & Short Viewport Adaptation for Auth Screen ── */
+@media (max-height: 580px) and (max-width: 640px) {
+  .auth-hero-desc {
+    display: none !important;
+  }
+  .auth-hero-title {
+    font-size: 20px !important;
+    line-height: 1.15 !important;
+    margin-bottom: 6px !important;
+  }
+  .auth-hero-logo {
+    margin-bottom: 6px !important;
+  }
+  .auth-hero-logo > div {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  .auth-hero-section {
+    padding-top: 8px !important;
+    padding-bottom: 4px !important;
+    justify-content: flex-end !important;
+  }
+}
+
+@media (max-height: 440px) and (max-width: 640px) {
+  .auth-hero-section {
+    display: none !important;
+  }
+}
+
+/* ── Vault Lock Animations for Unlock Button ── */
+@keyframes vaultLockPulse {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.26);
+  }
+  60% {
+    transform: scale(1.05);
+  }
+  80% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes vaultUnlockPop {
+  0% {
+    transform: scale(1) translateY(0);
+  }
+  30% {
+    transform: scale(1.38) translateY(-4px);
+  }
+  55% {
+    transform: scale(1.16) translateY(-1px);
+  }
+  75% {
+    transform: scale(1.26) translateY(-3px);
+  }
+  100% {
+    transform: scale(1.2) translateY(-2px);
+  }
+}
+
+.animate-vault-pulse {
+  animation: vaultLockPulse 0.95s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  transform-origin: center;
+}
+
+.animate-vault-unlock {
+  animation: vaultUnlockPop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) forwards;
+  transform-origin: center bottom;
+}
+
+
+
+
