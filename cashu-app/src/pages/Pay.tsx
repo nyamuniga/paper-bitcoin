@@ -4,6 +4,7 @@ import { Loader2, Zap, QrCode } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { useWalletStore } from '../store/wallet';
 import { useBitcoin } from '../hooks/useBitcoin';
+import { SovereignStampOverlay, StampPaymentStatus } from '../components/shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../components/shared/FullScreenLoader';
 import { PageHeader } from '../components/shared/PageHeader';
 import { formatMintUrl } from '../utils/format';
@@ -35,6 +36,8 @@ export const Pay = () => {
   const [lnurlParams, setLnurlParams] = useState<LnurlParams | null>(null);
   const [lnurlAmount, setLnurlAmount] = useState<string>('');
   const [fetchingInvoice, setFetchingInvoice] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<StampPaymentStatus | null>(null);
+  const [paymentErrorMessage, setPaymentErrorMessage] = useState('');
 
   // Process input to detect LNURL / Lightning Address
   useEffect(() => {
@@ -150,43 +153,43 @@ export const Pay = () => {
 
   const isInvalidAmount = isInsufficient || isZeroAmount || isOutOflnurlBounds;
 
+  const failWith = (message: string) => {
+    setPaymentErrorMessage(message);
+    setPaymentStatus('failed');
+  };
+
   const handlePay = async () => {
+    let bolt11 = invoice;
+
     if (lnurlParams) {
       const amtSats = parseInt(lnurlAmount);
       if (!amtSats || amtSats <= 0 || isInvalidAmount) return;
-      
+      setPaymentErrorMessage('');
+      setPaymentStatus('pending');
+      setFetchingInvoice(true);
       try {
-        setFetchingInvoice(true);
         const res = await fetch(`${lnurlParams.callback}${lnurlParams.callback.includes('?') ? '&' : '?'}amount=${amtSats * 1000}`);
         const data = await res.json();
-        
-        if (data.status === 'ERROR') {
-          toast.error(data.reason || 'Failed to fetch invoice from LNURL provider');
-          setFetchingInvoice(false);
-          return;
-        }
-        
-        if (data.pr) {
-          const success = await payInvoice(data.pr);
-          if (success) {
-            navigate('/');
-          }
-        } else {
-          toast.error('Invalid response from LNURL provider');
-        }
-      } catch (e) {
-        toast.error('Failed to fetch invoice');
+        if (data.status === 'ERROR') return failWith(data.reason || 'The LNURL provider rejected the request.');
+        if (!data.pr) return failWith('The LNURL provider returned an invalid response.');
+        bolt11 = data.pr;
+      } catch (e: any) {
+        return failWith(e?.message || 'Could not reach the LNURL provider.');
       } finally {
         setFetchingInvoice(false);
       }
-      return;
+    } else {
+      if (!invoice || isInvalidAmount) return;
+      setPaymentErrorMessage('');
     }
-    
-    if (!invoice || isInvalidAmount) return;
-    const success = await payInvoice(invoice);
-    if (success) {
-      navigate('/');
-    }
+
+    let mintError = '';
+    const success = await payInvoice(bolt11, undefined, {
+      silent: true,
+      onError: (message) => { mintError = message; },
+    });
+    if (success) setPaymentStatus('success');
+    else failWith(mintError || 'The mint could not complete this payment.');
   };
 
   return (
@@ -333,9 +336,23 @@ export const Pay = () => {
           </div>
         </div>
       </div>
-      {(paying || fetchingInvoice) && (
-        <FullScreenLoader title={fetchingInvoice ? "Resolving LNURL..." : "Sending Bitcoin..."} message={fetchingInvoice ? "Getting lightning invoice from provider." : "Paying the lightning invoice."} />
+      {fetchingInvoice && (
+        <FullScreenLoader title="Generating Invoice..." message="Requesting Lightning invoice from address..." />
       )}
+      {paying && (
+        <FullScreenLoader title="Sending Payment..." message="Routing payment through the Lightning network..." />
+      )}
+      <SovereignStampOverlay
+        status={paymentStatus}
+        amountSats={invoiceAmount || undefined}
+        recipient={lnurlParams ? (invoice.includes('@') ? invoice.trim() : lnurlParams.domain) : undefined}
+        errorMessage={paymentErrorMessage}
+        onDismiss={() => {
+          if (paymentStatus === 'success') navigate('/');
+          else setPaymentStatus(null);
+        }}
+        onRetry={handlePay}
+      />
     </main>
   );
 };

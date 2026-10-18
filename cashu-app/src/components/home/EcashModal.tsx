@@ -12,6 +12,7 @@ import { AmountDisplay } from '../shared/AmountDisplay';
 import { NumberPad } from '../shared/NumberPad';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
+import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { extractMintFromToken } from '../../utils/format';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
@@ -62,6 +63,16 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   const [showScanner, setShowScanner] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState<number | null>(null);
 
+  // Overlay state
+  const [paymentStatus, setPaymentStatus] = useState<StampPaymentStatus | null>(null);
+  const [paymentErrorMessage, setPaymentErrorMessage] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState<number | undefined>(undefined);
+  const [paymentTitle, setPaymentTitle] = useState<string | undefined>(undefined);
+  const [paymentSubtitle, setPaymentSubtitle] = useState<string | undefined>(undefined);
+  const [paymentBadgeLabel, setPaymentBadgeLabel] = useState<string | undefined>(undefined);
+  const [lastAction, setLastAction] = useState<(() => void) | undefined>(undefined);
+  const [hasCelebratedClaim, setHasCelebratedClaim] = useState(false);
+
   const { sending, receiving, isClaimed, setIsClaimed, sendEcash, receiveEcash } = useEcash(mintUrl);
 
   const urDecoder = useUrDecoder();
@@ -96,6 +107,18 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   const isInsufficient = parsedAmount > availableBalance;
   const isValid = parsedAmount > 0 && !isInsufficient;
 
+  // Celebrate with Sovereign Stamp only when the recipient claims the eCash token
+  React.useEffect(() => {
+    if (isClaimed && !hasCelebratedClaim && token) {
+      setHasCelebratedClaim(true);
+      setPaymentAmount(paymentAmount || parsedAmount);
+      setPaymentTitle('eCash Claimed');
+      setPaymentSubtitle('The recipient has claimed your eCash token.');
+      setPaymentBadgeLabel('Claimed');
+      setPaymentStatus('success');
+    }
+  }, [isClaimed, hasCelebratedClaim, token, paymentAmount, parsedAmount]);
+
   const handleSend = async () => {
     if (!isValid) return;
 
@@ -121,12 +144,20 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
       }
     }
 
-    const result = await sendEcash(parsedAmount, undefined, targetPubkey || undefined);
+    setPaymentAmount(parsedAmount);
+    let mintErr = '';
+    const result = await sendEcash(parsedAmount, undefined, targetPubkey || undefined, {
+      silent: true,
+      onError: (msg) => { mintErr = msg; }
+    });
     if (result) {
       setToken(result.token);
       setTokenV3(result.token_v3 || result.token);
       setTokenV4(result.token_v4 || result.token);
       setFormatVersion('v3');
+      setHasCelebratedClaim(false);
+    } else {
+      toast.error(mintErr || 'Could not create eCash token from mint.');
     }
   };
 
@@ -145,9 +176,36 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   const handleReceive = async () => {
     const trimmed = receiveToken.trim();
     if (!trimmed) return;
-    const amount = await receiveEcash(trimmed);
+    setPaymentErrorMessage('');
+    setLastAction(() => handleReceive);
+
+    let mintErr = '';
+    const amount = await receiveEcash(trimmed, {
+      silent: true,
+      onError: (msg) => { mintErr = msg; }
+    });
     if (amount !== null) {
       setReceivedAmount(amount);
+      setPaymentAmount(amount);
+      setPaymentTitle('eCash Received');
+      setPaymentSubtitle('Tokens claimed and balance settled to your wallet.');
+      setPaymentBadgeLabel('Received');
+      setPaymentStatus('success');
+    } else {
+      const lower = (mintErr || '').toLowerCase();
+      const isAlreadySpent = lower.includes('already spent') || lower.includes('already signed') || lower.includes('already issued') || lower.includes('already redeemed') || lower.includes('could not be recovered');
+      if (isAlreadySpent) {
+        setPaymentTitle('Token Already Used');
+        setPaymentSubtitle('This eCash voucher has already been claimed or redeemed.');
+        setPaymentErrorMessage(mintErr || 'Tokens are already spent and cannot be claimed again.');
+        setPaymentBadgeLabel('Already Spent');
+      } else {
+        setPaymentTitle('Claim Failed');
+        setPaymentSubtitle(mintErr || 'Failed to claim eCash token.');
+        setPaymentErrorMessage(mintErr || 'The mint rejected this token proof.');
+        setPaymentBadgeLabel('Failed');
+      }
+      setPaymentStatus('failed');
     }
   };
 
@@ -159,6 +217,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
     setFormatVersion('v3');
     setCopied(false);
     setIsClaimed(false);
+    setHasCelebratedClaim(false);
   };
 
   const resetReceive = () => {
@@ -503,9 +562,6 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                       >
                         Cancel Scanner
                       </button>
-                      {receiving && (
-                        <FullScreenLoader title="Receiving eCash..." message="Claiming tokens to your wallet." />
-                      )}
                     </div>
                   ) : (
                     <div className="relative">
@@ -543,11 +599,31 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
         </div>
       </div>
       {sending && (
-        <FullScreenLoader title="Sending eCash..." message="Creating your tokens." />
+        <FullScreenLoader title="Creating eCash Token..." message="Preparing your tokens for sending." />
       )}
       {receiving && (
         <FullScreenLoader title="Receiving eCash..." message="Claiming tokens to your wallet." />
       )}
+      <SovereignStampOverlay
+        status={paymentStatus}
+        amountSats={paymentAmount}
+        title={paymentTitle}
+        subtitle={paymentSubtitle}
+        badgeLabel={paymentBadgeLabel}
+        errorMessage={paymentErrorMessage}
+        onDismiss={() => {
+          if (paymentStatus === 'success') {
+            if (activeTab === 'receive') {
+              onClose();
+            } else {
+              setPaymentStatus(null);
+            }
+          } else {
+            setPaymentStatus(null);
+          }
+        }}
+        onRetry={lastAction}
+      />
     </div>,
     document.body
   );

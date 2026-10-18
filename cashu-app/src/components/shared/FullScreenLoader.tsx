@@ -1,8 +1,9 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { AlertCircle } from 'lucide-react';
 import { AnimatedMedallion } from './AnimatedMedallion';
 
-interface FullScreenLoaderProps {
+export interface FullScreenLoaderProps {
   title?: string;
   message?: string;
   error?: string | null;
@@ -15,9 +16,11 @@ export const FullScreenLoader: React.FC<FullScreenLoaderProps> = ({
   error, 
   onBack 
 }) => {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-6 w-full max-w-sm bg-surface-container-high p-8 rounded-3xl border border-outline-variant/20 shadow-xl relative overflow-hidden animate-in fade-in zoom-in duration-200">
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4 bg-background/85 backdrop-blur-md select-none">
+      <div className="flex flex-col items-center gap-6 w-full max-w-sm bg-surface-container-high p-8 rounded-3xl border border-outline-variant/20 shadow-2xl relative overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="absolute inset-0 texture-overlay opacity-30 pointer-events-none"></div>
         
         {error ? (
@@ -46,12 +49,13 @@ export const FullScreenLoader: React.FC<FullScreenLoaderProps> = ({
         {error && onBack && (
           <button
             onClick={onBack}
-            className="relative z-10 mt-4 w-full py-3.5 rounded-full bg-surface-container-highest text-on-surface font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20"
+            className="relative z-10 mt-4 w-full py-3.5 rounded-2xl bg-surface-container-highest text-on-surface font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20 cursor-pointer"
           >
             Go Back
           </button>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
