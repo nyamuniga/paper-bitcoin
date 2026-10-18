@@ -235,7 +235,7 @@ const SwipeableMintCard: React.FC<SwipeableMintCardProps> = ({
           </div>
         </div>
         <div className="flex items-baseline gap-1 flex-shrink-0 whitespace-nowrap pointer-events-none">
-          <span className="text-body-md font-body-md font-bold text-primary">₿{amt.toLocaleString()}</span>
+          <span className="text-body-md font-body-md font-bold text-white">₿{amt.toLocaleString()}</span>
         </div>
       </div>
     </div>

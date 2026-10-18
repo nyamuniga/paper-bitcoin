@@ -5,6 +5,7 @@ import { WalletManagementSection } from '../components/settings/WalletManagement
 import { NostrSection } from '../components/settings/NostrSection';
 import { LockedEcashSection } from '../components/settings/LockedEcashSection';
 import { NWCSection } from '../components/settings/NWCSection';
+import { LearnSection } from '../components/settings/LearnSection';
 import { PageHeader } from '../components/shared/PageHeader';
 
 export const Settings = () => {
@@ -39,6 +40,10 @@ export const Settings = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start mt-1">
         <div className="flex flex-col gap-6">
+          <LearnSection
+            isExpanded={activeSection === 'learn'}
+            onToggle={() => toggleSection('learn')}
+          />
           <RecoveryPhraseSection
             isExpanded={activeSection === 'recovery'}
             onToggle={() => toggleSection('recovery')}
