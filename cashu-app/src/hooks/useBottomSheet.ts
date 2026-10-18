@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 interface UseBottomSheetOptions {
   onClose: () => void;
   dismissThreshold?: number;
+  disabled?: boolean;
 }
 
 let openBottomSheetCount = 0;
@@ -23,7 +24,7 @@ export function registerBottomSheetClose() {
   }
 }
 
-export function useBottomSheet({ onClose, dismissThreshold = 60 }: UseBottomSheetOptions) {
+export function useBottomSheet({ onClose, dismissThreshold = 60, disabled = false }: UseBottomSheetOptions) {
   const [isOpen, setIsOpen] = useState(false);
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -50,33 +51,33 @@ export function useBottomSheet({ onClose, dismissThreshold = 60 }: UseBottomShee
   }, []);
 
   const closeWithAnimation = useCallback(() => {
-    if (isClosing) return;
+    if (disabled || isClosing) return;
     setIsClosing(true);
     // Wait for the slide down transition to complete before unmounting
     setTimeout(() => {
       onClose();
     }, 280);
-  }, [isClosing, onClose]);
+  }, [disabled, isClosing, onClose]);
 
   const handleStart = useCallback((clientY: number) => {
-    if (isClosing) return;
+    if (disabled || isClosing) return;
     startYRef.current = clientY;
     currentYRef.current = clientY;
     startTimeRef.current = Date.now();
     setIsDragging(true);
-  }, [isClosing]);
+  }, [disabled, isClosing]);
 
   const handleMove = useCallback((clientY: number) => {
-    if (!startYRef.current || isClosing) return;
+    if (disabled || !startYRef.current || isClosing) return;
     const deltaY = clientY - startYRef.current;
     if (deltaY > 0) {
       currentYRef.current = clientY;
       setDragY(deltaY);
     }
-  }, [isClosing]);
+  }, [disabled, isClosing]);
 
   const handleEnd = useCallback(() => {
-    if (!startYRef.current || isClosing) return;
+    if (disabled || !startYRef.current || isClosing) return;
     const deltaY = currentYRef.current - startYRef.current;
     const timeDelta = Date.now() - startTimeRef.current;
     const velocity = timeDelta > 0 ? deltaY / timeDelta : 0;
@@ -90,7 +91,7 @@ export function useBottomSheet({ onClose, dismissThreshold = 60 }: UseBottomShee
     } else {
       setDragY(0);
     }
-  }, [dismissThreshold, closeWithAnimation, isClosing]);
+  }, [disabled, dismissThreshold, closeWithAnimation, isClosing]);
 
   const onTouchStart = useCallback(
     (e: React.TouchEvent) => {
@@ -175,13 +176,17 @@ export function useBottomSheet({ onClose, dismissThreshold = 60 }: UseBottomShee
     willChange: 'opacity',
   };
 
-  const dragHandleProps = {
-    onTouchStart,
-    onTouchMove,
-    onTouchEnd,
-    onMouseDown,
-    style: { touchAction: 'none' as const, userSelect: 'none' as const },
-  };
+  const dragHandleProps = disabled
+    ? {
+        style: { touchAction: 'auto' as const, userSelect: 'auto' as const },
+      }
+    : {
+        onTouchStart,
+        onTouchMove,
+        onTouchEnd,
+        onMouseDown,
+        style: { touchAction: 'none' as const, userSelect: 'none' as const },
+      };
 
   return {
     dragHandleProps,

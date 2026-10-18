@@ -9,6 +9,7 @@ import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
 import { AmountDisplay } from '../shared/AmountDisplay';
 import { NumberPad } from '../shared/NumberPad';
+import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 
 interface SendEcashModalProps {
@@ -24,6 +25,8 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
   const [tokenV4, setTokenV4] = useState<string | null>(null);
   const [formatVersion, setFormatVersion] = useState<'v3' | 'v4'>('v3');
   const [copied, setCopied] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<StampPaymentStatus | null>(null);
+  const [hasCelebratedClaim, setHasCelebratedClaim] = useState(false);
   const { sending, isClaimed, sendEcash } = useEcash(mintUrl);
 
   const mintBalances = useWalletStore((s) => s.mintBalances);
@@ -60,14 +63,28 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
       }
     }
     
-    const result = await sendEcash(parsedAmount, undefined, targetPubkey || undefined);
+    let mintErr = '';
+    const result = await sendEcash(parsedAmount, undefined, targetPubkey || undefined, {
+      silent: true,
+      onError: (msg) => { mintErr = msg; }
+    });
     if (result) {
       setToken(result.token);
       setTokenV3(result.token_v3 || result.token);
       setTokenV4(result.token_v4 || result.token);
       setFormatVersion('v3');
+      setHasCelebratedClaim(false);
+    } else {
+      toast.error(mintErr || 'Could not create eCash token from mint.');
     }
   };
+
+  React.useEffect(() => {
+    if (isClaimed && !hasCelebratedClaim && token) {
+      setHasCelebratedClaim(true);
+      setPaymentStatus('success');
+    }
+  }, [isClaimed, hasCelebratedClaim, token]);
 
   const handleCopy = async () => {
     if (!token) return;
@@ -264,6 +281,14 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
       {sending && (
         <FullScreenLoader title="Creating eCash Token..." message="Preparing your tokens for sending." />
       )}
+      <SovereignStampOverlay
+        status={paymentStatus}
+        amountSats={parsedAmount}
+        title="eCash Claimed"
+        subtitle="The recipient has claimed your eCash token."
+        badgeLabel="Claimed"
+        onDismiss={() => setPaymentStatus(null)}
+      />
     </div>
   );
 };

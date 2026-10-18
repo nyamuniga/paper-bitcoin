@@ -12,10 +12,15 @@ export const useBitcoin = (mintUrl?: string) => {
   const isPayingRef = useRef(false);
   const isRequestingRef = useRef(false);
 
-  const payInvoice = async (invoice: string, overrideMintUrl?: string) => {
+  const payInvoice = async (
+    invoice: string,
+    overrideMintUrl?: string,
+    opts?: { silent?: boolean; onError?: (message: string) => void }
+  ) => {
     if (isPayingRef.current) return false;
     const targetMint = overrideMintUrl || mintUrl;
     
+    isPayingRef.current = true;
     setPaying(true);
     try {
       if (targetMint) {
@@ -23,11 +28,13 @@ export const useBitcoin = (mintUrl?: string) => {
       } else {
         await invoke('pay_invoice', { invoice });
       }
-      toast.success('Invoice paid successfully!');
+      if (!opts?.silent) toast.success('Invoice paid successfully!');
       await refreshWallet();
       return true;
     } catch (e: any) {
-      toast.error(`Payment failed: ${e}`);
+      const message = String(e?.message ?? e);
+      if (!opts?.silent) toast.error(`Payment failed: ${message}`);
+      opts?.onError?.(message);
       return false;
     } finally {
       setPaying(false);

@@ -1,10 +1,12 @@
+import { useState, useEffect } from 'react';
 import { Info, CheckCircle } from 'lucide-react';
 import { ScanNoteForm } from '../components/scan/ScanNoteForm';
 import { NoteVerificationResult } from '../components/scan/NoteVerificationResult';
 import { RedeemNoteForm } from '../components/scan/RedeemNoteForm';
-import { RedeemLoadingStep } from '../components/scan/RedeemLoadingStep';
 import { PageHeader } from '../components/shared/PageHeader';
 import { useScan } from '../hooks/useScan';
+import { SovereignStampOverlay, StampPaymentStatus } from '../components/shared/SovereignStampOverlay';
+import { FullScreenLoader } from '../components/shared/FullScreenLoader';
 
 export const Scan = () => {
   const {
@@ -29,16 +31,26 @@ export const Scan = () => {
     handleRedeem
   } = useScan();
 
-  const isRedeemingProcess = redeeming || (verified && error && !redeemSuccess);
+  const [stampStatus, setStampStatus] = useState<StampPaymentStatus | null>(null);
+  const [stampError, setStampError] = useState<string | null>(null);
 
-  if (isRedeemingProcess) {
-    return (
-      <RedeemLoadingStep
-        error={error}
-        onBack={() => setError(null)}
-      />
-    );
-  }
+  useEffect(() => {
+    if (redeemSuccess) {
+      setStampStatus('success');
+    } else if (error) {
+      setStampStatus('failed');
+      setStampError(error);
+    }
+  }, [redeemSuccess, error]);
+
+  const handleDismissStamp = () => {
+    setStampStatus(null);
+    if (error) {
+      setError(null);
+    }
+  };
+
+  const voucherAmount = noteInfo?.amount ?? verifyResult?.proof_total_sats ?? 0;
 
   return (
     <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
@@ -78,7 +90,7 @@ export const Scan = () => {
                 onVerify={handleVerify}
               />
 
-              {verified && noteInfo.type === 'full' && !isRedeemingProcess && !redeemSuccess && (
+              {verified && noteInfo.type === 'full' && !redeemSuccess && (
                 <RedeemNoteForm 
                   invoice={invoice}
                   setInvoice={setInvoice}
@@ -104,6 +116,37 @@ export const Scan = () => {
           </div>
         )}
       </div>
+      {redeeming && (
+        <FullScreenLoader title="Redeeming Voucher..." message="Sweeping note proofs into your wallet..." />
+      )}
+      <SovereignStampOverlay
+        status={stampStatus}
+        amountSats={voucherAmount}
+        title={
+          stampStatus === 'success'
+            ? 'Voucher Redeemed'
+            : (stampError || '').toLowerCase().includes('already spent') || (stampError || '').toLowerCase().includes('already redeemed')
+              ? 'Voucher Already Redeemed'
+              : 'Redemption Failed'
+        }
+        subtitle={
+          stampStatus === 'success'
+            ? 'Tokens claimed and balance settled to your wallet.'
+            : (stampError || '').toLowerCase().includes('already spent') || (stampError || '').toLowerCase().includes('already redeemed')
+              ? 'This physical voucher has already been claimed by another wallet.'
+              : (stampError || 'Failed to redeem voucher.')
+        }
+        badgeLabel={
+          stampStatus === 'success'
+            ? 'Redeemed'
+            : (stampError || '').toLowerCase().includes('already spent') || (stampError || '').toLowerCase().includes('already redeemed')
+              ? 'Already Spent'
+              : 'Failed'
+        }
+        errorMessage={stampError || undefined}
+        onDismiss={handleDismissStamp}
+        onRetry={handleRedeem}
+      />
     </main>
   );
 };
