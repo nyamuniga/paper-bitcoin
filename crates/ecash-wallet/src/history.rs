@@ -90,6 +90,7 @@ pub enum TransactionDiff {
     },
     ReceiveLightningSuccess(Vec<ecash_core::types::Proof>),
     ReceiveLightningRestore(String), // mint_url
+    RedeemSuccessRestore(Vec<String>), // mint_urls
 }
 
 pub async fn check_transaction_network(
@@ -241,7 +242,56 @@ pub async fn check_transaction_network(
             }
             Ok(TransactionDiff::NoChange)
         },
-        _ => Err(anyhow!("Cannot check status for this transaction type")),
+        TransactionType::Redeem(redeem_data) => {
+            let mut mint_urls: Vec<String> = redeem_data
+                .public_data
+                .entries
+                .iter()
+                .map(|e| e.mint.clone())
+                .collect();
+            mint_urls.sort();
+            mint_urls.dedup();
+
+            match ecash_verifier::OfflineVerifier::check_spend_state(&redeem_data.public_data).await {
+                Ok(ecash_verifier::SpentStatus::Spent) => {
+                    let is_direct = redeem_data.external_invoice.is_empty() 
+                        || redeem_data.external_invoice == "Direct Wallet Redeem";
+                    if is_direct {
+                        Ok(TransactionDiff::RedeemSuccessRestore(mint_urls))
+                    } else {
+                        Ok(TransactionDiff::StatusOnly(TransactionStatus::Success))
+                    }
+                }
+                Ok(ecash_verifier::SpentStatus::PartiallySpent) => {
+                    let is_direct = redeem_data.external_invoice.is_empty() 
+                        || redeem_data.external_invoice == "Direct Wallet Redeem";
+                    if is_direct {
+                        Ok(TransactionDiff::RedeemSuccessRestore(mint_urls))
+                    } else {
+                        Ok(TransactionDiff::StatusOnly(TransactionStatus::Success))
+                    }
+                }
+                Ok(ecash_verifier::SpentStatus::Unspent) => {
+                    Ok(TransactionDiff::StatusOnly(TransactionStatus::Failed))
+                }
+                Err(e) => {
+                    tracing::warn!("Could not check spend state of redeemed note: {}", e);
+                    Ok(TransactionDiff::NoChange)
+                }
+            }
+        },
+        TransactionType::Mint(mint_data) => {
+            let qv_res = client.http.get(format!("{}/v1/mint/quote/bolt11/{}", client.url, mint_data.quote_id)).send().await;
+            if let Ok(resp) = qv_res {
+                if let Ok(qv) = resp.json::<serde_json::Value>().await {
+                    let state_str = qv["state"].as_str().unwrap_or("");
+                    if state_str == "PAID" || state_str == "ISSUED" {
+                        return Ok(TransactionDiff::StatusOnly(TransactionStatus::Success));
+                    }
+                }
+            }
+            Ok(TransactionDiff::NoChange)
+        },
     }
 }
 
@@ -362,6 +412,13 @@ pub async fn apply_transaction_diff(
         TransactionDiff::IssueFailedSweepAndRestore { .. } => {
             // Not implemented in diff path
             TransactionStatus::Failed
+        },
+        TransactionDiff::RedeemSuccessRestore(mints) => {
+            let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, mints, None).await;
+            if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                t.status = TransactionStatus::Success;
+            }
+            TransactionStatus::Success
         }
     };
 
@@ -434,5 +491,10 @@ pub async fn check_transaction_status_legacy(state: &mut WalletState, wallet_pat
         return Ok(new_status);
     }
 
-    Err(anyhow!("Use new check_transaction_network API"))
+    let trusted_keys = state.trusted_keys.get(&tx.mint_url).cloned();
+    let diff = check_transaction_network(&tx, trusted_keys.as_ref()).await?;
+    apply_transaction_diff(state, wallet_path, passphrase, tx_id, diff).await
 }
+
+pub use check_transaction_status_legacy as check_transaction_status;
+

@@ -303,6 +303,14 @@ pub async fn check_token_spend_status(
                 return Err(CommandError("Note is not fully minted yet".to_string()));
             }
         }
+        ecash_core::types::TransactionType::Redeem(data) => {
+            match ecash_verifier::OfflineVerifier::check_spend_state(&data.public_data).await {
+                Ok(ecash_verifier::SpentStatus::Spent) => return Ok("Spent".to_string()),
+                Ok(ecash_verifier::SpentStatus::PartiallySpent) => return Ok("Partially Spent".to_string()),
+                Ok(ecash_verifier::SpentStatus::Unspent) => return Ok("Unspent".to_string()),
+                Err(e) => return Err(CommandError(format!("Failed to check spend status: {}", e))),
+            }
+        }
         _ => {
             return Err(CommandError(
                 "Can only check status of outgoing transactions".to_string(),
