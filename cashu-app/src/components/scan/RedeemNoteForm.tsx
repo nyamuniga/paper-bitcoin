@@ -148,7 +148,7 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
 
           {isSpent && (
             <div className="p-4 rounded-xl bg-error/10 border border-error/30 text-error text-center font-bold text-sm">
-              ⚠️ This voucher has already been redeemed and the tokens are spent. It cannot be claimed again.
+              ⚠️ This note has already been redeemed and the tokens are spent. It cannot be claimed again.
             </div>
           )}
 
@@ -159,7 +159,7 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
               isSpent || redeeming || (redeemMethod === 'lightning' && (!invoice || isInvalidAmount)) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98] cursor-pointer'
             }`}
           >
-            {redeeming ? <Loader2 className="animate-spin w-6 h-6" /> : isSpent ? 'Voucher Already Spent' : redeemMethod === 'wallet' ? 'Redeem to Wallet' : 'Pay to Invoice'}
+            {redeeming ? <Loader2 className="animate-spin w-6 h-6" /> : isSpent ? 'Note Already Spent' : redeemMethod === 'wallet' ? 'Redeem to Wallet' : 'Pay to Invoice'}
           </button>
         </div>
     </div>
