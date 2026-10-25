@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { QrCode, ArrowDownLeft, ArrowUpRight, Coins, Zap, FileText, ChevronDown, Phone, Check, Eye, EyeOff } from 'lucide-react';
+import { QrCode, ArrowDownLeft, ArrowUpRight, Coins, Bitcoin, Banknote, ChevronDown, Phone, Check, Eye, EyeOff } from 'lucide-react';
 import { ActionMenuModal } from './ActionMenuModal';
 import { EcashModal } from './EcashModal';
 import { BitcoinModal } from './BitcoinModal';
@@ -23,7 +23,7 @@ function getCachedFloat(key: string): number | null {
       const parsed = parseFloat(val);
       if (!isNaN(parsed) && parsed > 0) return parsed;
     }
-  } catch {}
+  } catch { }
   return null;
 }
 
@@ -34,7 +34,7 @@ function getCachedInt(key: string): number | null {
       const parsed = parseInt(val, 10);
       if (!isNaN(parsed) && parsed >= 0) return parsed;
     }
-  } catch {}
+  } catch { }
   return null;
 }
 
@@ -74,7 +74,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
 
   const mintUrls = Object.keys(mintBalances || {});
   const [selectedMint, setSelectedMint] = useState<string | null>(() => localStorage.getItem('preferred_mint_url'));
-  
+
   // Rate & RWF animation states: capture previous amount and smoothly interpolate updates
   const [currentRate, setCurrentRate] = useState<number | null>(() => getCachedFloat(STORAGE_KEY_RATE));
   const [isInitialLoadingRate, setIsInitialLoadingRate] = useState<boolean>(true);
@@ -117,7 +117,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
           setCurrentRate(rate);
           try {
             localStorage.setItem(STORAGE_KEY_RATE, rate.toString());
-          } catch {}
+          } catch { }
         }
       } catch (e) {
         console.error("Failed to fetch exchange rate", e);
@@ -147,7 +147,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
     // Persist to localStorage so the amount is captured across page refreshes
     try {
       localStorage.setItem(STORAGE_KEY_RWF, targetRwf.toString());
-    } catch {}
+    } catch { }
 
     const startVal = currentDisplayRef.current !== null ? currentDisplayRef.current : 0;
     const endVal = targetRwf;
@@ -236,22 +236,21 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
           <div className="flex flex-col items-center justify-center py-2 w-full select-none">
             {/* Mint pill badge skeleton */}
             <Skeleton className="h-7 w-32 sm:w-36 rounded-full mb-3.5 sm:mb-4 opacity-80" />
-            
+
             {/* Big balance placeholder skeleton */}
             <div className="flex items-center justify-center my-1 sm:my-2">
               <Skeleton className="h-10 sm:h-12 md:h-14 w-44 sm:w-56 md:w-64 rounded-2xl" />
             </div>
-            
+
             {/* Fiat subtitle skeleton */}
             <Skeleton className="h-3.5 sm:h-4 w-20 sm:w-24 rounded-md mt-1.5 opacity-60" />
           </div>
         ) : (
           <>
             {showMintDropdown && (
-              <div 
-                className={`fixed inset-0 z-20 cursor-pointer ${
-                  isClosingDropdown ? 'animate-mint-backdrop-out' : 'animate-mint-backdrop-in'
-                }`}
+              <div
+                className={`fixed inset-0 z-20 cursor-pointer ${isClosingDropdown ? 'animate-mint-backdrop-out' : 'animate-mint-backdrop-in'
+                  }`}
                 onClick={closeMintDropdown}
                 onTouchStart={(e) => e.stopPropagation()}
                 onTouchMove={(e) => {
@@ -269,11 +268,10 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
             <div className="relative z-30 flex flex-col items-center max-w-full">
               <button
                 onClick={toggleMintDropdown}
-                className={`flex items-center gap-2 bg-[#12261d] hover:bg-[#162f24] px-3 sm:px-3.5 py-1.5 rounded-full transition-all mb-3 border shadow-sm active:scale-95 max-w-[calc(100vw-64px)] sm:max-w-none cursor-pointer ${
-                  showMintDropdown && !isClosingDropdown 
-                    ? 'border-primary/50 shadow-[0_0_16px_rgba(242,169,59,0.2)] bg-[#163024]' 
-                    : 'border-[#1e3c2e]'
-                }`}
+                className={`flex items-center gap-2 bg-[#12261d] hover:bg-[#162f24] px-3 sm:px-3.5 py-1.5 rounded-full transition-all mb-3 border shadow-sm active:scale-95 max-w-[calc(100vw-64px)] sm:max-w-none cursor-pointer ${showMintDropdown && !isClosingDropdown
+                  ? 'border-primary/50 shadow-[0_0_16px_rgba(242,169,59,0.2)] bg-[#163024]'
+                  : 'border-[#1e3c2e]'
+                  }`}
               >
                 {activeMint ? (
                   <>
@@ -286,25 +284,23 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
                 ) : (
                   <span className="font-mono text-[10px] sm:text-[11px] font-bold text-primary px-1 tracking-wider uppercase">ALL MINTS</span>
                 )}
-                <ChevronDown 
-                  size={14} 
-                  className={`flex-shrink-0 transition-transform duration-300 ease-out ${
-                    showMintDropdown && !isClosingDropdown ? 'rotate-180 text-primary' : 'text-[#8b9e94]'
-                  }`} 
+                <ChevronDown
+                  size={14}
+                  className={`flex-shrink-0 transition-transform duration-300 ease-out ${showMintDropdown && !isClosingDropdown ? 'rotate-180 text-primary' : 'text-[#8b9e94]'
+                    }`}
                 />
               </button>
 
               {showMintDropdown && (
-                <div 
+                <div
                   data-modal="mint-selector"
                   onTouchStart={(e) => e.stopPropagation()}
                   onTouchMove={(e) => e.stopPropagation()}
                   className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 pointer-events-auto"
                 >
-                  <div 
-                    className={`w-64 max-w-[calc(100vw-48px)] bg-[#0c1b14]/95 backdrop-blur-xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.06)] border border-[#1e422f] overflow-hidden flex flex-col max-h-[300px] overflow-y-auto overscroll-contain touch-pan-y ${
-                      isClosingDropdown ? 'animate-dropdown-collapse' : 'animate-dropdown-expand'
-                    }`}
+                  <div
+                    className={`w-64 max-w-[calc(100vw-48px)] bg-[#0c1b14]/95 backdrop-blur-xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.06)] border border-[#1e422f] overflow-hidden flex flex-col max-h-[300px] overflow-y-auto overscroll-contain touch-pan-y ${isClosingDropdown ? 'animate-dropdown-collapse' : 'animate-dropdown-expand'
+                      }`}
                     style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }}
                     onWheel={(e) => e.stopPropagation()}
                   >
@@ -337,9 +333,8 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               )}
             </div>
 
-            <div className={`relative z-10 flex flex-col items-center gap-1.5 max-w-full transition-all duration-200 ${
-              showMintDropdown && !isClosingDropdown ? 'opacity-25 filter blur-[1px]' : 'opacity-100'
-            }`}>
+            <div className={`relative z-10 flex flex-col items-center gap-1.5 max-w-full transition-all duration-200 ${showMintDropdown && !isClosingDropdown ? 'opacity-25 filter blur-[1px]' : 'opacity-100'
+              }`}>
               <div className="flex items-center justify-center gap-2 sm:gap-2.5 max-w-full">
                 <span className="text-[#f2a93b] text-[34px] sm:text-[42px] md:text-[48px] font-extrabold leading-none select-none flex-shrink-0">₿</span>
                 <span
@@ -360,22 +355,21 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               </div>
               {(displayedRwf !== null || targetRwf !== null || isInitialLoadingRate) && (
                 <span
-                  className={`text-[13px] sm:text-[14px] font-medium mt-0.5 tracking-tight select-none truncate max-w-full transition-all duration-300 animate-rwf-in ${
-                    isInitialLoadingRate
-                      ? 'animate-rwf-shimmer'
-                      : isNumberAnimating
+                  className={`text-[13px] sm:text-[14px] font-medium mt-0.5 tracking-tight select-none truncate max-w-full transition-all duration-300 animate-rwf-in ${isInitialLoadingRate
+                    ? 'animate-rwf-shimmer'
+                    : isNumberAnimating
                       ? 'animate-rwf-updating font-semibold'
                       : 'text-[#6f887b]'
-                  }`}
+                    }`}
                   title={isInitialLoadingRate ? "Refreshing estimated rate..." : undefined}
                 >
                   {hideBalance
                     ? '≈ •••••• RWF'
                     : displayedRwf !== null
-                    ? `≈ ${displayedRwf.toLocaleString()} RWF`
-                    : targetRwf !== null
-                    ? `≈ ${targetRwf.toLocaleString()} RWF`
-                    : '≈ ••• RWF'}
+                      ? `≈ ${displayedRwf.toLocaleString()} RWF`
+                      : targetRwf !== null
+                        ? `≈ ${targetRwf.toLocaleString()} RWF`
+                        : '≈ ••• RWF'}
                 </span>
               )}
             </div>
@@ -423,7 +417,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
             },
             {
               label: 'Bitcoin',
-              icon: <Zap size={20} />,
+              icon: <Bitcoin size={25} />,
               colorClass: 'bg-primary/20 text-primary',
               onClick: () => {
                 if (!activeMint && mintUrls.length === 0) return;
@@ -449,7 +443,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
           options={[
             {
               label: 'Issue Note',
-              icon: <FileText size={20} />,
+              icon: <Banknote size={22} />,
               colorClass: 'bg-primary/20 text-primary',
               onClick: () => { navigate('/issue'); }
             },
@@ -464,7 +458,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
             },
             {
               label: 'Bitcoin',
-              icon: <Zap size={20} />,
+              icon: <Bitcoin size={25} />,
               colorClass: 'bg-primary/20 text-primary',
               onClick: () => {
                 if (!activeMint && mintUrls.length === 0) return;

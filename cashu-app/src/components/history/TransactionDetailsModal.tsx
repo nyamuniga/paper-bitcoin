@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ArrowDownLeft, ArrowUpRight, FileText, CheckCircle, AlertCircle, XCircle, Copy, Check, Clock, Download } from 'lucide-react';
+import { X, ArrowDownLeft, ArrowUpRight, Banknote, CheckCircle, AlertCircle, XCircle, Copy, Check, Clock, Download } from 'lucide-react';
 import { Transaction } from './TransactionCard';
 import { toast } from 'react-hot-toast';
 import { SafeQRCode } from '../shared/SafeQRCode';
@@ -169,7 +169,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               ) : isInflow ? (
                 <ArrowDownLeft className="w-7 h-7 stroke-[2.25]" />
               ) : isIssue ? (
-                <FileText className="w-7 h-7 stroke-[2]" />
+                <Banknote className="w-7 h-7 stroke-[2]" />
               ) : (
                 <ArrowUpRight className="w-7 h-7 stroke-[2.25]" />
               )}

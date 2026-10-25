@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowDownLeft, ArrowUpRight, FileText, ChevronRight, Clock, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Banknote, ChevronRight, Clock, X } from 'lucide-react';
 import { useHistory } from '../../hooks/useHistory';
 import { Transaction } from '../history/TransactionCard';
 import { TransactionDetailsModal } from '../history/TransactionDetailsModal';
@@ -60,7 +60,7 @@ export const RecentTransactions: React.FC = () => {
       return <ArrowDownLeft className="w-4 h-4 text-[#34d399] stroke-[2.5]" />;
     }
     if ('Issue' in tx.tx_type) {
-      return <FileText className="w-4 h-4 text-[#627d70] stroke-[2]" />;
+      return <Banknote className="w-4 h-4 text-[#627d70] stroke-[2]" />;
     }
     return <ArrowUpRight className="w-4 h-4 text-[#627d70] stroke-[2.25]" />;
   };
