@@ -385,6 +385,20 @@ async fn redeem_note_legacy(
             let entry = entry.clone();
             let hub_mint_str = hub_mint_str.clone();
             quote_futures.push(async move {
+                let entry_client = MintClient::new(&entry.mint);
+                // Check if entry's proofs are already spent (e.g. from a prior aborted attempt)
+                let ys: Vec<String> = entry.proofs.iter().map(|p| {
+                    let pt = ecash_core::dhke::hash_to_curve(p.secret.as_bytes());
+                    ecash_core::dhke::point_to_hex(&pt)
+                }).collect();
+                if let Ok(states) = entry_client.check_state(&ys).await {
+                    let all_spent = !states.is_empty() && states.values().all(|s| s == "SPENT");
+                    if all_spent {
+                        tracing::warn!("Child mint {} proofs are already spent. Skipping consolidation.", entry.mint);
+                        return Ok::<_, anyhow::Error>(None);
+                    }
+                }
+
                 let amt: u64 = entry.proofs.iter().map(|p| p.amount).sum();
                 let fee_estimate = estimate_routing_fee_from_info(&entry.mint, amt).await;
                 let buffer = std::cmp::max(5, fee_estimate / 2);
@@ -399,7 +413,6 @@ async fn redeem_note_legacy(
                 let hub_client = MintClient::new(&hub_mint_str);
                 let (qid, inv) = hub_client.request_mint_quote(transfer_amt).await?;
 
-                let entry_client = MintClient::new(&entry.mint);
                 let entry_keyset = entry_client.fetch_keyset().await?;
                 
                 Ok(Some((entry, amt, safe_fee, transfer_amt, qid, inv, entry_keyset)))
@@ -504,23 +517,24 @@ async fn redeem_note_legacy(
 
                 // Now mint tokens on the Hub using the mint quote (retry with backoff if settlement is processing)
                 let mut hub_sigs = None;
-                for _ in 0..6 {
+                for attempt in 0..45 {
                     match hub_client.mint_tokens(&qid_clone, hub_change_outputs.clone()).await {
                         Ok(sigs) => {
                             hub_sigs = Some(sigs);
                             break;
                         }
                         Err(e) => {
-                            let err_msg = e.to_string();
-                            if err_msg.contains("not paid") || err_msg.contains("UNPAID") || err_msg.contains("pending") {
-                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            let err_msg = e.to_string().to_lowercase();
+                            if err_msg.contains("not paid") || err_msg.contains("unpaid") || err_msg.contains("pending") {
+                                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
                             } else {
+                                tracing::warn!("Hub mint attempt {} failed with non-pending error: {}", attempt, e);
                                 return Err(e);
                             }
                         }
                     }
                 }
-                let hub_sigs = hub_sigs.ok_or_else(|| anyhow!("Hub mint failed to issue proofs for quote {}", qid_clone))?;
+                let hub_sigs = hub_sigs.ok_or_else(|| anyhow!("Hub mint failed to issue proofs for quote {} (timed out waiting for Lightning settlement)", qid_clone))?;
 
                 let mut new_hub_proofs = Vec::new();
                 let mut hub_sessions = hub_change_sessions;
@@ -567,17 +581,30 @@ async fn redeem_note_legacy(
 
         // Wait for all child melts to complete
         let results = futures::future::join_all(execution_futures).await;
+        let mut first_err = None;
         for res in results {
-            let (mint, reclaimed, new_hub) = res?;
-            if !reclaimed.is_empty() {
-                state.proofs.entry(mint).or_default().extend(reclaimed);
+            match res {
+                Ok((mint, reclaimed, new_hub)) => {
+                    if !reclaimed.is_empty() {
+                        state.proofs.entry(mint).or_default().extend(reclaimed);
+                    }
+                    hub_proofs.extend(new_hub);
+                }
+                Err(e) => {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
             }
-            hub_proofs.extend(new_hub);
         }
 
         // Advance derivation index after all sessions
         state.derivation_index = deriv.index;
         state.save_encrypted(wallet_path, passphrase)?;
+
+        if let Some(e) = first_err {
+            return Err(e);
+        }
     }
 
     // Step 3: Now melt the consolidated Hub proofs to the final invoice
@@ -616,10 +643,29 @@ async fn redeem_note_legacy(
             desired_amounts,
             change_amounts,
             None,
-        ).await?
+        ).await.map_err(|e| {
+            let msg = e.to_string();
+            if msg.to_lowercase().contains("already spent") {
+                anyhow!("This note has already been redeemed. The tokens are already spent.")
+            } else {
+                e
+            }
+        })?
     } else {
         hub_proofs
     };
+    
+    // Synchronize deriv with state.derivation_index (which was updated by swap_proofs)
+    let max_proof_idx = state
+        .proofs
+        .values()
+        .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
+        .max()
+        .unwrap_or(0);
+    if max_proof_idx > 0 && state.derivation_index <= max_proof_idx {
+        state.derivation_index = max_proof_idx + 1;
+    }
+    deriv.index = state.derivation_index;
 
     // Prepare change outputs for the final melt to receive fee reserve returns (NUT-08)
     let change_denoms = if fee_reserve > 0 {
@@ -634,7 +680,7 @@ async fn redeem_note_legacy(
         let sess = BlindingSession::new(&secret);
         let index = deriv.index - 1;
         outputs.push(serde_json::json!({
-            "amount": d,
+            "amount": 0,
             "id": hub_keyset.id,
             "B_": sess.b_prime_hex()
         }));
@@ -662,27 +708,71 @@ async fn redeem_note_legacy(
     state.transactions.push(pending_tx);
     state.save_encrypted(wallet_path, passphrase).ok();
 
-    // Send the final melt
-    let melt_result = hub_client.melt_tokens(&melt_proofs, external_invoice, Some(&quote_id), Some(outputs)).await;
+    // Send the final melt with retry on output collision
+    let mut melt_attempts = 0;
+    let (paid, _preimage, change_sigs) = loop {
+        melt_attempts += 1;
+        let melt_result = hub_client.melt_tokens(
+            &melt_proofs,
+            external_invoice,
+            Some(&quote_id),
+            if outputs.is_empty() { None } else { Some(outputs.clone()) },
+        ).await;
 
-    let (paid, _preimage, change_sigs) = match melt_result {
-        Ok(res) => res,
-        Err(e) => {
-            let err_str = e.to_string();
-            if err_str.contains("proofs could not be verified") {
+        match melt_result {
+            Ok(res) => break res,
+            Err(e) => {
+                let err_str = e.to_string();
+                let err_lower = err_str.to_lowercase();
+                if (err_lower.contains("already signed")
+                    || err_lower.contains("already been signed")
+                    || err_lower.contains("outputs already"))
+                    && melt_attempts < 5
+                {
+                    tracing::warn!("Melt change collision detected on {}. Advancing derivation index by 25 and retrying (attempt {}/5)...", hub_mint, melt_attempts);
+                    state.derivation_index += 25;
+                    deriv.index = state.derivation_index;
+
+                    outputs.clear();
+                    sessions.clear();
+                    for &d in &change_denoms {
+                        let secret = deriv.next_secret();
+                        let sess = BlindingSession::new(&secret);
+                        let index = deriv.index - 1;
+                        outputs.push(serde_json::json!({
+                            "amount": 0,
+                            "id": hub_keyset.id,
+                            "B_": sess.b_prime_hex()
+                        }));
+                        sessions.push((d, sess, index));
+                    }
+                    state.derivation_index = deriv.index;
+                    state.save_encrypted(wallet_path, passphrase)?;
+                    continue;
+                }
+
+                if err_lower.contains("already spent") {
+                    if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                        tx.status = TransactionStatus::Failed;
+                    }
+                    state.save_encrypted(wallet_path, passphrase).ok();
+                    return Err(anyhow!("This note has already been redeemed. The tokens are already spent."));
+                }
+                if err_str.contains("proofs could not be verified") {
+                    if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                        tx.status = TransactionStatus::FailedMintError;
+                    }
+                    state.save_encrypted(wallet_path, passphrase).ok();
+                    return Err(anyhow!("Mint rejected the proofs as invalid/corrupt. The transaction was marked as FailedMintError."));
+                }
+                // Re-insert melt_proofs on other errors so funds aren't lost
+                state.proofs.entry(hub_mint.clone()).or_default().extend(melt_proofs);
                 if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
-                    tx.status = TransactionStatus::FailedMintError;
+                    tx.status = TransactionStatus::Failed;
                 }
                 state.save_encrypted(wallet_path, passphrase).ok();
-                return Err(anyhow!("Mint rejected the proofs as invalid/corrupt. The transaction was marked as FailedMintError."));
+                return Err(anyhow!("Payment failed: {}", e));
             }
-            // Re-insert melt_proofs on other errors so funds aren't lost
-            state.proofs.entry(hub_mint.clone()).or_default().extend(melt_proofs);
-            if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
-                tx.status = TransactionStatus::Failed;
-            }
-            state.save_encrypted(wallet_path, passphrase).ok();
-            return Err(anyhow!("Payment failed: {}", e));
         }
     };
 
@@ -782,6 +872,22 @@ pub async fn redeem_note(
     master_seed_hex: &str,
     external_invoice: &str,
 ) -> Result<u64> {
+    // 0. Check idempotency
+    if state.transactions.iter().any(|t| {
+        if let TransactionType::Redeem(r) = &t.tx_type {
+            r.public_data.validation_hash == public_data.validation_hash && t.status == TransactionStatus::Success
+        } else {
+            false
+        }
+    }) {
+        return Err(anyhow!("This note has already been redeemed into your wallet."));
+    }
+
+    // 0b. Pre-flight check online spend status
+    if let Ok(ecash_verifier::SpentStatus::Spent) = ecash_verifier::OfflineVerifier::check_spend_state(public_data).await {
+        return Err(anyhow!("This note has already been redeemed. The tokens are already spent."));
+    }
+
     let redeem_tx_id = format!("tx_redeem_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
     let pending_tx = Transaction {
         id: redeem_tx_id.clone(),

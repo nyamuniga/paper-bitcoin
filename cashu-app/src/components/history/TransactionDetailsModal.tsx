@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ArrowDownLeft, ArrowUpRight, FileText, CheckCircle, AlertCircle, XCircle, Copy, Check, Clock } from 'lucide-react';
+import { X, ArrowDownLeft, ArrowUpRight, Banknote, CheckCircle, AlertCircle, XCircle, Copy, Check, Clock, Download } from 'lucide-react';
 import { Transaction } from './TransactionCard';
 import { toast } from 'react-hot-toast';
 import { SafeQRCode } from '../shared/SafeQRCode';
@@ -15,6 +15,9 @@ interface TransactionDetailsModalProps {
   onRecover?: () => void;
   onCheckClaimed?: () => void;
   onRetryReceiveEcash?: () => void;
+  onRetryMint?: (txId: string) => void;
+  onCheckIssue?: (txId: string) => void;
+  onDownloadNote?: (txId: string, amount: number, serial?: string) => void;
 }
 
 export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ 
@@ -22,7 +25,10 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   onClose, 
   onRecover, 
   onCheckClaimed, 
-  onRetryReceiveEcash 
+  onRetryReceiveEcash,
+  onRetryMint,
+  onCheckIssue,
+  onDownloadNote
 }) => {
   const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
   const isMint = 'Mint' in tx.tx_type;
@@ -99,8 +105,9 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   };
 
   const hasActions = Boolean(
-    (tx.status === 'Pending' && onRecover) ||
-    (tx.status !== 'Pending' && (isSend || isIssue) && onCheckClaimed) ||
+    (tx.status === 'Pending' && (onRecover || (isMint && onRetryMint) || (isIssue && onCheckIssue))) ||
+    (isIssue && tx.status === 'Success' && onDownloadNote) ||
+    (tx.status !== 'Pending' && (isSend || isIssue || isRedeem) && onCheckClaimed) ||
     (tx.status === 'Failed' && isReceiveEcash && onRetryReceiveEcash)
   );
 
@@ -162,7 +169,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               ) : isInflow ? (
                 <ArrowDownLeft className="w-7 h-7 stroke-[2.25]" />
               ) : isIssue ? (
-                <FileText className="w-7 h-7 stroke-[2]" />
+                <Banknote className="w-7 h-7 stroke-[2]" />
               ) : (
                 <ArrowUpRight className="w-7 h-7 stroke-[2.25]" />
               )}
@@ -191,6 +198,19 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 <span>{tx.status === 'FailedMintError' ? 'Mint Error' : tx.status}</span>
               </span>
             </div>
+
+            {/* Mint Settlement Error Explanation Box */}
+            {tx.status === 'FailedMintError' && (
+              <div className="mt-3.5 bg-rose-500/10 border border-rose-500/25 p-4 rounded-2xl flex flex-col gap-1.5 text-left w-full shadow-sm">
+                <div className="flex items-center gap-2 text-rose-300 font-semibold text-xs uppercase tracking-wider">
+                  <AlertCircle size={15} className="text-rose-400 flex-shrink-0" />
+                  <span>Mint Settlement Issue</span>
+                </div>
+                <p className="text-xs text-rose-200/90 leading-relaxed font-sans">
+                  The mint marked your proofs as spent, but the external Lightning invoice was not confirmed as paid. Please contact the mint operator with the Quote ID or Invoice below.
+                </p>
+              </div>
+            )}
 
             {/* QR Code for Sent eCash (right below status label) */}
             {isSend && tokenString && (
@@ -321,13 +341,15 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             {quoteId && (
               <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/60 border border-outline-variant/20 shadow-sm">
                 <div className="flex flex-col min-w-0 pr-2">
-                  <span className="text-[10px] font-semibold tracking-wider text-on-surface-variant uppercase">Quote ID</span>
+                  <span className="text-[10px] font-semibold tracking-wider text-on-surface-variant uppercase">
+                    {quoteId.startsWith('lnbc') || quoteId.startsWith('lntb') ? 'Invoice' : 'Quote ID'}
+                  </span>
                   <span className="font-mono text-xs text-on-surface truncate">{quoteId}</span>
                 </div>
                 <button
-                  onClick={() => copyToClipboard(quoteId, 'Quote ID copied')}
+                  onClick={() => copyToClipboard(quoteId, quoteId.startsWith('lnbc') || quoteId.startsWith('lntb') ? 'Invoice copied' : 'Quote ID copied')}
                   className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
-                  title="Copy Quote ID"
+                  title="Copy"
                 >
                   <Copy size={14} />
                 </button>
@@ -339,23 +361,61 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
         {/* Action Buttons Sticky Footer (Always visible at the bottom) */}
         {hasActions && (
           <div className="px-6 pt-3 pb-6 sm:pb-5 bg-surface-container-high/95 backdrop-blur-xl border-t border-outline-variant/15 relative z-20 flex flex-col gap-2 shadow-[0_-8px_24px_rgba(0,0,0,0.3)]">
-            {tx.status === 'Pending' && onRecover && (
+            {isIssue && tx.status === 'Success' && onDownloadNote && (
+              <button
+                onClick={() => onDownloadNote(tx.id, tx.amount, tx.tx_type?.Issue?.note?.serial)}
+                className="w-full py-3 bg-surface-container-highest hover:bg-surface-bright text-primary rounded-xl font-bold text-body-md transition-colors border border-outline-variant/30 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
+              >
+                <Download className="w-4 h-4" />
+                Download SVG / PDF
+              </button>
+            )}
+
+            {isMint && tx.status === 'Pending' && onRetryMint && (
+              <button
+                onClick={() => onRetryMint(tx.id)}
+                className="w-full py-3 bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 rounded-xl font-bold text-body-md transition-colors border border-teal-500/30 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
+              >
+                <Clock className="w-4 h-4" />
+                Retry Mint
+              </button>
+            )}
+
+            {isIssue && tx.status === 'Pending' && onCheckIssue && (
+              <button
+                onClick={() => onCheckIssue(tx.id)}
+                className="w-full py-3 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-bold text-body-md transition-colors border border-primary/30 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Check Status & Resume
+              </button>
+            )}
+
+            {tx.status === 'Pending' && onRecover && !isMint && !isIssue && (
               <button
                 onClick={onRecover}
                 className="w-full py-3 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-bold text-body-md transition-colors border border-primary/30 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
               >
                 <CheckCircle className="w-4 h-4" />
-                {isReceiveEcash ? 'Check Status & Claim' : 'Check Status & Recover'}
+                {isReceiveEcash
+                  ? 'Check Status & Claim'
+                  : isReceiveLightning
+                  ? 'Check Status'
+                  : isRedeem
+                  ? 'Check Status & Recover'
+                  : isMelt
+                  ? 'Check Status & Refund'
+                  : 'Check Status & Recover'}
               </button>
             )}
 
-            {tx.status !== 'Pending' && (isSend || isIssue) && onCheckClaimed && (
+            {tx.status !== 'Pending' && (isSend || isIssue || isRedeem) && onCheckClaimed && (
               <button
                 onClick={onCheckClaimed}
                 className="w-full py-3 bg-surface-container-highest hover:bg-surface-bright text-on-surface rounded-xl font-bold text-body-md transition-colors border border-outline-variant/20 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
               >
                 <CheckCircle className="w-4 h-4 text-emerald-400" />
-                Check if Claimed
+                {isRedeem ? 'Check Note Spend Status' : isIssue ? 'Check if Note Claimed' : 'Check if Claimed'}
               </button>
             )}
 

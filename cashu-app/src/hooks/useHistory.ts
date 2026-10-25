@@ -130,9 +130,27 @@ export const useHistory = () => {
   const handleRetryReceiveEcash = async (txId: string, tokenString: string) => {
     try {
       toast.loading('Retrying claim...', { id: txId });
-      const nostrKey = getGlobalNostrPrivateKey();
+      let cleanToken = tokenString.trim();
+      if (cleanToken.toLowerCase().startsWith('cashu://')) {
+        cleanToken = cleanToken.substring(8).trim();
+      } else if (cleanToken.toLowerCase().startsWith('cashu:')) {
+        cleanToken = cleanToken.substring(6).trim();
+      }
+
+      let nostrKey = getGlobalNostrPrivateKey();
+      if (!nostrKey) {
+        try {
+          const custom = await invoke<string | null>('get_custom_nostr_key');
+          if (custom) {
+            nostrKey = custom;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       await invoke('receive_ecash', { 
-        tokenString,
+        tokenString: cleanToken,
         nostrKey: nostrKey || undefined,
       });
       toast.success('Successfully claimed eCash!', { id: txId });

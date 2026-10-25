@@ -29,3 +29,5 @@ pub fn decode_qr_payload(payload: &str) -> anyhow::Result<Vec<u8>> {
         Ok(decoded)
     }
 }
+
+

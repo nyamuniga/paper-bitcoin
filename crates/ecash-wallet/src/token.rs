@@ -99,8 +99,15 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
     let mut total_amount: u64 = 0;
     let mint_url: String;
 
-    if token_string.starts_with("cashuA") {
-        let token_body = token_string.strip_prefix("cashuA").unwrap();
+    let mut clean_token = token_string.trim();
+    if clean_token.to_ascii_lowercase().starts_with("cashu://") {
+        clean_token = clean_token[8..].trim();
+    } else if clean_token.to_ascii_lowercase().starts_with("cashu:") {
+        clean_token = clean_token[6..].trim();
+    }
+
+    if clean_token.starts_with("cashuA") {
+        let token_body = clean_token.strip_prefix("cashuA").unwrap();
         let json_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
             .decode(token_body)
             .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(token_body))
@@ -119,56 +126,55 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
             return Err(anyhow!("Token contains no entries"));
         }
 
-        let entry = &token_array[0];
-        mint_url = entry
+        mint_url = token_array[0]
             .get("mint")
             .and_then(|m| m.as_str())
             .ok_or_else(|| anyhow!("Token missing mint URL"))?
             .to_string();
 
-        let proofs_json = entry
-            .get("proofs")
-            .and_then(|p| p.as_array())
-            .ok_or_else(|| anyhow!("Token missing proofs"))?;
+        for entry in token_array {
+            if let Some(proofs_json) = entry.get("proofs").and_then(|p| p.as_array()) {
+                for pj in proofs_json {
+                    let amount = pj
+                        .get("amount")
+                        .and_then(|a| a.as_u64())
+                        .ok_or_else(|| anyhow!("Proof missing amount"))?;
+                    let id = pj
+                        .get("id")
+                        .and_then(|i| i.as_str())
+                        .ok_or_else(|| anyhow!("Proof missing id"))?
+                        .to_string();
+                    let secret = pj
+                        .get("secret")
+                        .and_then(|s| s.as_str())
+                        .ok_or_else(|| anyhow!("Proof missing secret"))?
+                        .to_string();
+                    let c = pj
+                        .get("C")
+                        .or_else(|| pj.get("c"))
+                        .and_then(|c| c.as_str())
+                        .ok_or_else(|| anyhow!("Proof missing C"))?
+                        .to_string();
 
-        for pj in proofs_json {
-            let amount = pj
-                .get("amount")
-                .and_then(|a| a.as_u64())
-                .ok_or_else(|| anyhow!("Proof missing amount"))?;
-            let id = pj
-                .get("id")
-                .and_then(|i| i.as_str())
-                .ok_or_else(|| anyhow!("Proof missing id"))?
-                .to_string();
-            let secret = pj
-                .get("secret")
-                .and_then(|s| s.as_str())
-                .ok_or_else(|| anyhow!("Proof missing secret"))?
-                .to_string();
-            let c = pj
-                .get("C")
-                .and_then(|c| c.as_str())
-                .ok_or_else(|| anyhow!("Proof missing C"))?
-                .to_string();
+                    let witness = pj.get("witness").cloned();
 
-            let witness = pj.get("witness").cloned();
-
-            input_proofs.push(Proof {
-                amount,
-                id,
-                secret,
-                c,
-                c_prime: None,
-                b_prime: None,
-                witness,
-                dleq: None,
-                derivation_index: 0,
-            });
-            total_amount += amount;
+                    input_proofs.push(Proof {
+                        amount,
+                        id,
+                        secret,
+                        c,
+                        c_prime: None,
+                        b_prime: None,
+                        witness,
+                        dleq: None,
+                        derivation_index: 0,
+                    });
+                    total_amount += amount;
+                }
+            }
         }
-    } else if token_string.starts_with("cashuB") {
-        let token_body = token_string.strip_prefix("cashuB").unwrap();
+    } else if clean_token.starts_with("cashuB") {
+        let token_body = clean_token.strip_prefix("cashuB").unwrap();
         let cbor_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
             .decode(token_body)
             .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(token_body))
@@ -230,7 +236,15 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
                 let amount: u64 = amount_int.try_into().unwrap_or(0);
 
                 let secret = get_val(p_map, "s")
-                    .and_then(|v| bytes_to_hex(v).or_else(|| v.as_text().map(|s| s.to_string())))
+                    .and_then(|v| {
+                        if let Some(s) = v.as_text() {
+                            Some(s.to_string())
+                        } else if let Some(b) = v.as_bytes() {
+                            Some(String::from_utf8(b.to_vec()).unwrap_or_else(|_| hex::encode(b)))
+                        } else {
+                            None
+                        }
+                    })
                     .ok_or_else(|| anyhow!("Proof missing secret"))?;
 
                 let c = get_val(p_map, "c")
@@ -296,11 +310,23 @@ mod tests {
         assert_eq!(mint3, "https://mint.example.com");
         assert_eq!(amt3, 21);
 
+        // Test with cashu: URI prefix
+        let uri_v3 = format!("cashu:{}", v3);
+        let (mint3_uri, _p3_uri, amt3_uri) = decode_token_string(&uri_v3).unwrap();
+        assert_eq!(mint3_uri, "https://mint.example.com");
+        assert_eq!(amt3_uri, 21);
+
         let v4 = encode_token_v4("https://mint.example.com", &proofs, Some("sat")).unwrap();
         println!("V4: {}", v4);
         let (mint4, _p4, amt4) = decode_token_string(&v4).unwrap();
         assert_eq!(mint4, "https://mint.example.com");
         assert_eq!(amt4, 21);
+
+        // Test with cashu:// URI prefix
+        let uri_v4 = format!("cashu://{}", v4);
+        let (mint4_uri, _p4_uri, amt4_uri) = decode_token_string(&uri_v4).unwrap();
+        assert_eq!(mint4_uri, "https://mint.example.com");
+        assert_eq!(amt4_uri, 21);
     }
 
     #[test]

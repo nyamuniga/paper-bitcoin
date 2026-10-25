@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Copy, Check, Loader2, Zap, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
+import { X, Copy, Check, Loader2, Zap, Bitcoin, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
 import { initBarkWallet, OnchainSendEstimate } from '../../services/barkService';
 
 import { toast } from 'react-hot-toast';
@@ -290,7 +290,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
           className="flex justify-between items-center px-5 sm:px-6 py-3 sm:py-4 border-b border-outline-variant/10 relative z-10 cursor-grab active:cursor-grabbing"
         >
           <h2 className="text-headline-sm font-headline-sm text-on-surface flex items-center gap-2">
-            <Zap className="text-primary w-5 h-5" /> Bitcoin
+            <Bitcoin className="text-primary w-5 h-5" /> Bitcoin
           </h2>
           <button
             onClick={closeWithAnimation}

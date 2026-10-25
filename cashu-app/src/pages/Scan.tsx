@@ -50,11 +50,11 @@ export const Scan = () => {
     }
   };
 
-  const voucherAmount = noteInfo?.amount ?? verifyResult?.proof_total_sats ?? 0;
+  const noteAmount = noteInfo?.amount ?? verifyResult?.proof_total_sats ?? 0;
 
   return (
     <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
-      <PageHeader title="Scan" subtitle="Redeem ecash voucher" />
+      <PageHeader title="Scan" subtitle="Scan notes, eCash tokens, or Lightning invoices" />
 
       <div className="w-full max-w-2xl mx-auto flex flex-col items-center">
         {!noteInfo ? (
@@ -100,6 +100,7 @@ export const Scan = () => {
                   redeemMethod={redeemMethod}
                   setRedeemMethod={setRedeemMethod}
                   hasExtraProofs={verifyResult ? verifyResult.proof_total_sats > verifyResult.face_value_sats : false}
+                  isSpent={verifyResult?.spend_state === 'spent'}
                 />
               )}
 
@@ -117,24 +118,24 @@ export const Scan = () => {
         )}
       </div>
       {redeeming && (
-        <FullScreenLoader title="Redeeming Voucher..." message="Sweeping note proofs into your wallet..." />
+        <FullScreenLoader title="Redeeming Note..." message="Sweeping note proofs into your wallet..." />
       )}
       <SovereignStampOverlay
         status={stampStatus}
-        amountSats={voucherAmount}
+        amountSats={noteAmount}
         title={
           stampStatus === 'success'
-            ? 'Voucher Redeemed'
+            ? 'Note Redeemed'
             : (stampError || '').toLowerCase().includes('already spent') || (stampError || '').toLowerCase().includes('already redeemed')
-              ? 'Voucher Already Redeemed'
+              ? 'Note Already Redeemed'
               : 'Redemption Failed'
         }
         subtitle={
           stampStatus === 'success'
             ? 'Tokens claimed and balance settled to your wallet.'
             : (stampError || '').toLowerCase().includes('already spent') || (stampError || '').toLowerCase().includes('already redeemed')
-              ? 'This physical voucher has already been claimed by another wallet.'
-              : (stampError || 'Failed to redeem voucher.')
+              ? 'This physical note has already been claimed by another wallet.'
+              : (stampError || 'Failed to redeem note.')
         }
         badgeLabel={
           stampStatus === 'success'

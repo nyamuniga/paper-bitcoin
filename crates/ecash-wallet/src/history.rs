@@ -90,6 +90,52 @@ pub enum TransactionDiff {
     },
     ReceiveLightningSuccess(Vec<ecash_core::types::Proof>),
     ReceiveLightningRestore(String), // mint_url
+    RedeemSuccessRestore(Vec<String>), // mint_urls
+}
+
+async fn check_bolt11_mint_quote(
+    client: &MintClient,
+    quote_id: &str,
+    tx_timestamp: u64,
+) -> (bool, bool) {
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let qv_res = client.http.get(format!("{}/v1/mint/quote/bolt11/{}", client.url, quote_id)).send().await;
+    match qv_res {
+        Ok(resp) => {
+            if resp.status() == reqwest::StatusCode::NOT_FOUND {
+                // The mint purged this quote because it expired
+                return (false, now_secs.saturating_sub(tx_timestamp) > 900);
+            }
+            if let Ok(qv) = resp.json::<serde_json::Value>().await {
+                let state_str = qv["state"].as_str().unwrap_or("").to_uppercase();
+                if state_str == "PAID" || state_str == "ISSUED" {
+                    return (true, false);
+                }
+                if state_str == "EXPIRED" {
+                    return (false, true);
+                }
+                let expiry_secs = qv.get("expiry")
+                    .and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())))
+                    .unwrap_or(0);
+                if expiry_secs > 0 && now_secs > expiry_secs {
+                    return (false, true);
+                }
+                if now_secs.saturating_sub(tx_timestamp) > 86400 {
+                    return (false, true);
+                }
+                return (false, false);
+            }
+            (false, now_secs.saturating_sub(tx_timestamp) > 86400)
+        }
+        Err(e) => {
+            tracing::warn!("Failed to query mint quote {}: {}", quote_id, e);
+            (false, now_secs.saturating_sub(tx_timestamp) > 86400 * 7)
+        }
+    }
 }
 
 pub async fn check_transaction_network(
@@ -179,16 +225,7 @@ pub async fn check_transaction_network(
             return Err(anyhow!("Network check for Issue not supported lock-free yet"));
         },
         TransactionType::ReceiveLightning(recv_data) => {
-            let qv_res = client.http.get(format!("{}/v1/mint/quote/bolt11/{}", client.url, recv_data.quote_id)).send().await;
-            let mut paid = false;
-            if let Ok(resp) = qv_res {
-                if let Ok(qv) = resp.json::<serde_json::Value>().await {
-                    let state_str = qv["state"].as_str().unwrap_or("");
-                    if state_str == "PAID" || state_str == "ISSUED" {
-                        paid = true;
-                    }
-                }
-            }
+            let (paid, expired) = check_bolt11_mint_quote(&client, &recv_data.quote_id, tx.timestamp).await;
             if paid {
                 if !recv_data.outputs.is_empty() {
                     match client.mint_tokens(&recv_data.quote_id, recv_data.outputs.clone()).await {
@@ -239,9 +276,61 @@ pub async fn check_transaction_network(
                     return Ok(TransactionDiff::ReceiveLightningRestore(tx.mint_url.clone()));
                 }
             }
+
+            if expired {
+                return Ok(TransactionDiff::StatusOnly(TransactionStatus::Failed));
+            }
+
             Ok(TransactionDiff::NoChange)
         },
-        _ => Err(anyhow!("Cannot check status for this transaction type")),
+        TransactionType::Redeem(redeem_data) => {
+            let mut mint_urls: Vec<String> = redeem_data
+                .public_data
+                .entries
+                .iter()
+                .map(|e| e.mint.clone())
+                .collect();
+            mint_urls.sort();
+            mint_urls.dedup();
+
+            match ecash_verifier::OfflineVerifier::check_spend_state(&redeem_data.public_data).await {
+                Ok(ecash_verifier::SpentStatus::Spent) => {
+                    let is_direct = redeem_data.external_invoice.is_empty() 
+                        || redeem_data.external_invoice == "Direct Wallet Redeem";
+                    if is_direct {
+                        Ok(TransactionDiff::RedeemSuccessRestore(mint_urls))
+                    } else {
+                        Ok(TransactionDiff::StatusOnly(TransactionStatus::Success))
+                    }
+                }
+                Ok(ecash_verifier::SpentStatus::PartiallySpent) => {
+                    let is_direct = redeem_data.external_invoice.is_empty() 
+                        || redeem_data.external_invoice == "Direct Wallet Redeem";
+                    if is_direct {
+                        Ok(TransactionDiff::RedeemSuccessRestore(mint_urls))
+                    } else {
+                        Ok(TransactionDiff::StatusOnly(TransactionStatus::Success))
+                    }
+                }
+                Ok(ecash_verifier::SpentStatus::Unspent) => {
+                    Ok(TransactionDiff::StatusOnly(TransactionStatus::Failed))
+                }
+                Err(e) => {
+                    tracing::warn!("Could not check spend state of redeemed note: {}", e);
+                    Ok(TransactionDiff::NoChange)
+                }
+            }
+        },
+        TransactionType::Mint(mint_data) => {
+            let (paid, expired) = check_bolt11_mint_quote(&client, &mint_data.quote_id, tx.timestamp).await;
+            if paid {
+                return Ok(TransactionDiff::StatusOnly(TransactionStatus::Success));
+            }
+            if expired {
+                return Ok(TransactionDiff::StatusOnly(TransactionStatus::Failed));
+            }
+            Ok(TransactionDiff::NoChange)
+        },
     }
 }
 
@@ -362,6 +451,13 @@ pub async fn apply_transaction_diff(
         TransactionDiff::IssueFailedSweepAndRestore { .. } => {
             // Not implemented in diff path
             TransactionStatus::Failed
+        },
+        TransactionDiff::RedeemSuccessRestore(mints) => {
+            let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, mints, None).await;
+            if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                t.status = TransactionStatus::Success;
+            }
+            TransactionStatus::Success
         }
     };
 
@@ -434,5 +530,10 @@ pub async fn check_transaction_status_legacy(state: &mut WalletState, wallet_pat
         return Ok(new_status);
     }
 
-    Err(anyhow!("Use new check_transaction_network API"))
+    let trusted_keys = state.trusted_keys.get(&tx.mint_url).cloned();
+    let diff = check_transaction_network(&tx, trusted_keys.as_ref()).await?;
+    apply_transaction_diff(state, wallet_path, passphrase, tx_id, diff).await
 }
+
+pub use check_transaction_status_legacy as check_transaction_status;
+
