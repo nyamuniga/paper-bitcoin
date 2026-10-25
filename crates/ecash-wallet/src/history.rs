@@ -93,6 +93,51 @@ pub enum TransactionDiff {
     RedeemSuccessRestore(Vec<String>), // mint_urls
 }
 
+async fn check_bolt11_mint_quote(
+    client: &MintClient,
+    quote_id: &str,
+    tx_timestamp: u64,
+) -> (bool, bool) {
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let qv_res = client.http.get(format!("{}/v1/mint/quote/bolt11/{}", client.url, quote_id)).send().await;
+    match qv_res {
+        Ok(resp) => {
+            if resp.status() == reqwest::StatusCode::NOT_FOUND {
+                // The mint purged this quote because it expired
+                return (false, now_secs.saturating_sub(tx_timestamp) > 900);
+            }
+            if let Ok(qv) = resp.json::<serde_json::Value>().await {
+                let state_str = qv["state"].as_str().unwrap_or("").to_uppercase();
+                if state_str == "PAID" || state_str == "ISSUED" {
+                    return (true, false);
+                }
+                if state_str == "EXPIRED" {
+                    return (false, true);
+                }
+                let expiry_secs = qv.get("expiry")
+                    .and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())))
+                    .unwrap_or(0);
+                if expiry_secs > 0 && now_secs > expiry_secs {
+                    return (false, true);
+                }
+                if now_secs.saturating_sub(tx_timestamp) > 86400 {
+                    return (false, true);
+                }
+                return (false, false);
+            }
+            (false, now_secs.saturating_sub(tx_timestamp) > 86400)
+        }
+        Err(e) => {
+            tracing::warn!("Failed to query mint quote {}: {}", quote_id, e);
+            (false, now_secs.saturating_sub(tx_timestamp) > 86400 * 7)
+        }
+    }
+}
+
 pub async fn check_transaction_network(
     tx: &ecash_core::types::Transaction,
     trusted_keys: Option<&std::collections::HashMap<u64, String>>
@@ -180,16 +225,7 @@ pub async fn check_transaction_network(
             return Err(anyhow!("Network check for Issue not supported lock-free yet"));
         },
         TransactionType::ReceiveLightning(recv_data) => {
-            let qv_res = client.http.get(format!("{}/v1/mint/quote/bolt11/{}", client.url, recv_data.quote_id)).send().await;
-            let mut paid = false;
-            if let Ok(resp) = qv_res {
-                if let Ok(qv) = resp.json::<serde_json::Value>().await {
-                    let state_str = qv["state"].as_str().unwrap_or("");
-                    if state_str == "PAID" || state_str == "ISSUED" {
-                        paid = true;
-                    }
-                }
-            }
+            let (paid, expired) = check_bolt11_mint_quote(&client, &recv_data.quote_id, tx.timestamp).await;
             if paid {
                 if !recv_data.outputs.is_empty() {
                     match client.mint_tokens(&recv_data.quote_id, recv_data.outputs.clone()).await {
@@ -240,6 +276,11 @@ pub async fn check_transaction_network(
                     return Ok(TransactionDiff::ReceiveLightningRestore(tx.mint_url.clone()));
                 }
             }
+
+            if expired {
+                return Ok(TransactionDiff::StatusOnly(TransactionStatus::Failed));
+            }
+
             Ok(TransactionDiff::NoChange)
         },
         TransactionType::Redeem(redeem_data) => {
@@ -281,14 +322,12 @@ pub async fn check_transaction_network(
             }
         },
         TransactionType::Mint(mint_data) => {
-            let qv_res = client.http.get(format!("{}/v1/mint/quote/bolt11/{}", client.url, mint_data.quote_id)).send().await;
-            if let Ok(resp) = qv_res {
-                if let Ok(qv) = resp.json::<serde_json::Value>().await {
-                    let state_str = qv["state"].as_str().unwrap_or("");
-                    if state_str == "PAID" || state_str == "ISSUED" {
-                        return Ok(TransactionDiff::StatusOnly(TransactionStatus::Success));
-                    }
-                }
+            let (paid, expired) = check_bolt11_mint_quote(&client, &mint_data.quote_id, tx.timestamp).await;
+            if paid {
+                return Ok(TransactionDiff::StatusOnly(TransactionStatus::Success));
+            }
+            if expired {
+                return Ok(TransactionDiff::StatusOnly(TransactionStatus::Failed));
             }
             Ok(TransactionDiff::NoChange)
         },

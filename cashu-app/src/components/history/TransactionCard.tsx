@@ -175,6 +175,13 @@ export const TransactionCard = ({ tx, onRetryMint, onCheckMelt, onCheckIssue, on
                     >
                       Check Status & Claim
                     </button>
+                  ) : isReceiveLightning ? (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onCheckMelt(tx.id); }} 
+                      className="w-full md:w-auto flex items-center justify-center px-4 py-2 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors border border-primary/30 text-label-caps font-label-caps cursor-pointer"
+                    >
+                      Check Status
+                    </button>
                   ) : isRedeem ? (
                     <button 
                       onClick={(e) => { e.stopPropagation(); onCheckMelt(tx.id); }} 
