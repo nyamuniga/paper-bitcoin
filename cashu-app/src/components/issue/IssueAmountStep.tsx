@@ -16,7 +16,7 @@ export const IssueAmountStep: React.FC<IssueAmountStepProps> = ({ sats, setSats,
 
   return (
     <main className="flex-grow w-full max-w-[480px] md:max-w-[600px] mx-auto px-container-padding pt-6 pb-0 -mb-8 flex flex-col">
-      <PageHeader title="Issue Note" subtitle="Step 1 of 3" />
+      <PageHeader title="Enter Amount" subtitle="Step 1 of 3" />
 
       <div className="flex-1 flex flex-col justify-center pb-6">
         {/* Amount display */}
