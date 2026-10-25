@@ -100,7 +100,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
 
   const hasActions = Boolean(
     (tx.status === 'Pending' && onRecover) ||
-    (tx.status !== 'Pending' && (isSend || isIssue) && onCheckClaimed) ||
+    (tx.status !== 'Pending' && (isSend || isIssue || isRedeem) && onCheckClaimed) ||
     (tx.status === 'Failed' && isReceiveEcash && onRetryReceiveEcash)
   );
 
@@ -349,13 +349,13 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               </button>
             )}
 
-            {tx.status !== 'Pending' && (isSend || isIssue) && onCheckClaimed && (
+            {tx.status !== 'Pending' && (isSend || isIssue || isRedeem) && onCheckClaimed && (
               <button
                 onClick={onCheckClaimed}
                 className="w-full py-3 bg-surface-container-highest hover:bg-surface-bright text-on-surface rounded-xl font-bold text-body-md transition-colors border border-outline-variant/20 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
               >
                 <CheckCircle className="w-4 h-4 text-emerald-400" />
-                Check if Claimed
+                {isRedeem ? 'Check Note Spend Status' : 'Check if Claimed'}
               </button>
             )}
 
