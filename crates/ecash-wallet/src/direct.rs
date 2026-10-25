@@ -215,6 +215,22 @@ pub async fn redeem_direct_note(
     public_data: &ecash_core::types::PublicNoteData,
     master_seed_hex: &str,
 ) -> Result<u64> {
+    // 0. Check idempotency
+    if state.transactions.iter().any(|t| {
+        if let TransactionType::Redeem(r) = &t.tx_type {
+            r.public_data.validation_hash == public_data.validation_hash && t.status == TransactionStatus::Success
+        } else {
+            false
+        }
+    }) {
+        return Err(anyhow!("This note has already been redeemed into your wallet."));
+    }
+
+    // 0b. Pre-flight check online spend status
+    if let Ok(ecash_verifier::SpentStatus::Spent) = ecash_verifier::OfflineVerifier::check_spend_state(public_data).await {
+        return Err(anyhow!("This note has already been redeemed. The tokens are already spent."));
+    }
+
     // 1. Reconstruct token from note
     let token = crate::melt::reconstruct_token(public_data, master_seed_hex).await?;
     if token.token.is_empty() {
@@ -231,13 +247,12 @@ pub async fn redeem_direct_note(
         if proofs.is_empty() { continue; }
         
         let mint_amt: u64 = proofs.iter().map(|p| p.amount).sum();
-        total_amount += mint_amt;
 
         // Perform swap
         let desired_amounts = ecash_core::types::split_into_powers_of_2(mint_amt);
         
         // Use swap_proofs from swap.rs
-        let new_proofs = crate::swap::swap_proofs(
+        let new_proofs = match crate::swap::swap_proofs(
             state,
             wallet_path,
             passphrase,
@@ -246,13 +261,31 @@ pub async fn redeem_direct_note(
             desired_amounts,
             vec![], // no change needed
             None,
-        ).await.map_err(|e| anyhow!("Failed to receive ecash from {}: {}", mint_url, e))?;
+        ).await {
+            Ok(p) => {
+                total_amount += mint_amt;
+                p
+            },
+            Err(e) => {
+                let err_msg = e.to_string();
+                if err_msg.to_lowercase().contains("already spent") {
+                    tracing::warn!("The tokens on {} are already spent. Skipping.", mint_url);
+                    continue;
+                }
+                return Err(anyhow!("Failed to receive ecash from {}: {}", mint_url, e));
+            }
+        };
 
         // Add to wallet
         state.proofs.entry(mint_url.clone()).or_default().extend(new_proofs);
         if !state.mints.contains(mint_url) {
             state.mints.push(mint_url.clone());
         }
+        state.save_encrypted(wallet_path, passphrase)?;
+    }
+
+    if total_amount == 0 {
+        return Err(anyhow!("This note has already been redeemed. The tokens are already spent."));
     }
 
     // 3. Record transaction

@@ -34,7 +34,15 @@ pub async fn redeem_note(
         &note.private_data.master_seed_hex,
         &invoice,
     )
-    .await?;
+    .await
+    .map_err(|e| {
+        let msg = e.to_string();
+        if msg.to_lowercase().contains("already spent") || msg.to_lowercase().contains("already redeemed") {
+            crate::error::CommandError("This note has already been redeemed and cannot be claimed again.".to_string())
+        } else {
+            crate::error::CommandError(format!("Failed to redeem note: {}", e))
+        }
+    })?;
 
     Ok(true)
 }
@@ -69,7 +77,14 @@ pub async fn redeem_note_direct(
         &note.private_data.master_seed_hex,
     )
     .await
-    .map_err(|e| crate::error::CommandError(format!("Failed to redeem note: {}", e)))?;
+    .map_err(|e| {
+        let msg = e.to_string();
+        if msg.to_lowercase().contains("already spent") || msg.to_lowercase().contains("already redeemed") {
+            crate::error::CommandError("This note has already been redeemed and cannot be claimed again.".to_string())
+        } else {
+            crate::error::CommandError(format!("Failed to redeem note: {}", e))
+        }
+    })?;
 
     Ok(true)
 }

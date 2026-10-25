@@ -24,13 +24,31 @@ pub async fn swap_proofs(
     wallet_path: &PathBuf,
     passphrase: &str,
     mint_url: &str,
-    inputs: Vec<Proof>,
+    mut inputs: Vec<Proof>,
     desired_amounts: Vec<u64>,
     change_amounts: Vec<u64>,
     target_pubkey: Option<String>,
 ) -> Result<Vec<Proof>> {
     let client = MintClient::new(mint_url);
     let keyset = client.fetch_keyset().await?;
+    let all_keysets = client.fetch_keysets().await.unwrap_or_default();
+
+    // Resolve short keyset IDs (s_id) per NUT-00 v4
+    // If an input proof has an 8-byte / 16-hex short keyset ID (especially starting with "01"),
+    // expand it to the matching full 33-byte / 66-hex keyset ID known by the mint.
+    for p in &mut inputs {
+        if p.id.starts_with("01") && p.id.len() < 66 {
+            if let Some(matching) = all_keysets.iter().find(|ks| ks.id.starts_with(&p.id)) {
+                p.id = matching.id.clone();
+            } else if keyset.id.starts_with(&p.id) {
+                p.id = keyset.id.clone();
+            }
+        } else if p.id.len() < 16 {
+            if let Some(matching) = all_keysets.iter().find(|ks| ks.id.starts_with(&p.id)) {
+                p.id = matching.id.clone();
+            }
+        }
+    }
 
     // Create inputs JSON
     let mut input_json = Vec::new();
@@ -143,8 +161,15 @@ pub async fn swap_proofs(
                         ));
                     }
 
-                    let sig: k256::schnorr::Signature = signing_key.sign(p.secret.as_bytes());
-                    let sig_hex = hex::encode(sig.to_bytes());
+                    // Compute BIP-340 Schnorr signature on SHA-256 hash (NUT-11 specification)
+                    use k256::sha2::{Sha256, Digest};
+                    let msg_hash = Sha256::digest(p.secret.as_bytes());
+                    let sig_hash: k256::schnorr::Signature = signing_key.sign(&msg_hash);
+                    let sig_hash_hex = hex::encode(sig_hash.to_bytes());
+
+                    // Also compute raw secret signature for compatibility with mints that sign raw
+                    let sig_raw: k256::schnorr::Signature = signing_key.sign(p.secret.as_bytes());
+                    let sig_raw_hex = hex::encode(sig_raw.to_bytes());
 
                     // Preserve existing signatures from witness if present, and append our signature
                     let mut signatures = Vec::new();
@@ -168,8 +193,11 @@ pub async fn swap_proofs(
                         }
                     }
 
-                    if !signatures.contains(&sig_hex) {
-                        signatures.push(sig_hex);
+                    if !signatures.contains(&sig_hash_hex) {
+                        signatures.push(sig_hash_hex);
+                    }
+                    if !signatures.contains(&sig_raw_hex) {
+                        signatures.push(sig_raw_hex);
                     }
 
                     if signatures.len() < n_sigs {
@@ -291,11 +319,20 @@ pub async fn swap_proofs(
     let mut change_proofs = Vec::new();
 
     for (i, sig_val) in sigs.iter().enumerate() {
-        let amt = sig_val["amount"].as_u64().unwrap();
-        let sig_id = sig_val["id"].as_str().unwrap().to_string();
-        let c_prime = point_from_hex(sig_val["C_"].as_str().unwrap()).unwrap();
+        let amt = sig_val["amount"].as_u64().ok_or_else(|| anyhow!("Mint signature missing amount"))?;
+        let sig_id = sig_val["id"].as_str().ok_or_else(|| anyhow!("Mint signature missing id"))?.to_string();
+        let c_prime_str = sig_val["C_"].as_str().ok_or_else(|| anyhow!("Mint signature missing C_"))?;
+        let c_prime = point_from_hex(c_prime_str).map_err(|e| anyhow!("Invalid C_ in signature: {}", e))?;
 
-        let mint_pk = point_from_hex(keyset.keys.get(&amt).unwrap()).unwrap();
+        let mint_pk_hex = match keyset.keys.get(&amt) {
+            Some(k) => k.clone(),
+            None => {
+                let fallback_ks = client.fetch_keyset_by_id(&sig_id).await?;
+                fallback_ks.keys.get(&amt).cloned()
+                    .ok_or_else(|| anyhow!("Mint keyset does not have key for denomination {}", amt))?
+            }
+        };
+        let mint_pk = point_from_hex(&mint_pk_hex).map_err(|e| anyhow!("Invalid mint pubkey for amount {}: {}", amt, e))?;
         let (_, ref sess, idx, is_desired) = sessions[i];
 
         let dleq = crate::melt::parse_dleq(sig_val);

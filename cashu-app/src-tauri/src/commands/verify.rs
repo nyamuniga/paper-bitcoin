@@ -135,6 +135,7 @@ pub async fn verify_note(
             match ecash_verifier::OfflineVerifier::check_spend_state(&pub_data).await {
                 Ok(ecash_verifier::SpentStatus::Unspent) => "unspent",
                 Ok(ecash_verifier::SpentStatus::Spent) => "spent",
+                Ok(ecash_verifier::SpentStatus::PartiallySpent) => "partially_spent",
                 Err(_) => "unknown",
             }
         }

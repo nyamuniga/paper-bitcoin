@@ -174,8 +174,13 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   };
 
   const handleReceive = async () => {
-    const trimmed = receiveToken.trim();
+    let trimmed = receiveToken.trim();
     if (!trimmed) return;
+    if (trimmed.toLowerCase().startsWith('cashu://')) {
+      trimmed = trimmed.substring(8).trim();
+    } else if (trimmed.toLowerCase().startsWith('cashu:')) {
+      trimmed = trimmed.substring(6).trim();
+    }
     setPaymentErrorMessage('');
     setLastAction(() => handleReceive);
 
@@ -196,7 +201,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
       const isAlreadySpent = lower.includes('already spent') || lower.includes('already signed') || lower.includes('already issued') || lower.includes('already redeemed') || lower.includes('could not be recovered');
       if (isAlreadySpent) {
         setPaymentTitle('Token Already Used');
-        setPaymentSubtitle('This eCash voucher has already been claimed or redeemed.');
+        setPaymentSubtitle('This eCash token has already been claimed or redeemed.');
         setPaymentErrorMessage(mintErr || 'Tokens are already spent and cannot be claimed again.');
         setPaymentBadgeLabel('Already Spent');
       } else {

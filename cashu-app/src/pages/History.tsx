@@ -72,9 +72,7 @@ export default function History() {
   });
 
   const handleCardClick = (tx: Transaction) => {
-    if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
-      setSelectedTx(tx);
-    }
+    setSelectedTx(tx);
   };
 
   return (
@@ -123,11 +121,7 @@ export default function History() {
             <TransactionCard 
               key={tx.id} 
               tx={tx} 
-              onRetryMint={handleRetryMint}
-              onCheckMelt={handleRecoverPendingTransaction}
-              onCheckIssue={(txId) => handleCheckIssue(txId, navigate)}
-              onDownloadNote={handleDownloadNote}
-              onClick={'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type ? () => handleCardClick(tx) : undefined}
+              onClick={() => handleCardClick(tx)}
             />
           ))}
         </div>
@@ -144,6 +138,9 @@ export default function History() {
               ? () => handleRetryReceiveEcash(selectedTx.id, selectedTx.tx_type.ReceiveEcash.token_string)
               : undefined
           }
+          onRetryMint={handleRetryMint}
+          onCheckIssue={(txId) => handleCheckIssue(txId, navigate)}
+          onDownloadNote={handleDownloadNote}
         />
       )}
     </main>

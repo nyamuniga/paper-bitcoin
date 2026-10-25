@@ -42,7 +42,21 @@ impl MintClient {
         
         let ks_array = v.get("keysets").and_then(|k| k.as_array()).ok_or_else(|| anyhow!("Missing keysets in response: {:?}", v))?;
         if ks_array.is_empty() { return Err(anyhow!("Mint returned empty keysets")); }
-        let ks = &ks_array[0];
+        
+        // Prioritize active keyset with unit "sat", then active keyset, then first keyset
+        let ks = ks_array.iter()
+            .find(|k| {
+                let is_sat = k.get("unit").and_then(|u| u.as_str()).map(|u| u.eq_ignore_ascii_case("sat")).unwrap_or(true);
+                let is_active = k.get("active").and_then(|a| a.as_bool()).unwrap_or(true);
+                is_sat && is_active
+            })
+            .or_else(|| {
+                ks_array.iter().find(|k| k.get("unit").and_then(|u| u.as_str()).map(|u| u.eq_ignore_ascii_case("sat")).unwrap_or(false))
+            })
+            .or_else(|| {
+                ks_array.iter().find(|k| k.get("active").and_then(|a| a.as_bool()).unwrap_or(false))
+            })
+            .unwrap_or(&ks_array[0]);
         
         let id = ks.get("id").and_then(|i| i.as_str()).ok_or_else(|| anyhow!("Missing keyset id"))?.to_string();
         let mut keys = HashMap::new();
@@ -53,19 +67,79 @@ impl MintClient {
         Ok(KeysetInfo { id, keys })
     }
 
-    pub async fn fetch_keyset_by_id(&self, keyset_id: &str) -> Result<KeysetInfo> {
-        let resp = self.http.get(format!("{}/v1/keys/{}", self.url, keyset_id)).send().await?;
-        
+    pub async fn fetch_keysets(&self) -> Result<Vec<KeysetSummary>> {
+        let resp = self.http.get(format!("{}/v1/keysets", self.url)).send().await?;
         if !resp.status().is_success() {
-            return Err(anyhow!("Mint does not have keyset {}", keyset_id));
+            return Ok(Vec::new());
+        }
+        let v: serde_json::Value = resp.json().await?;
+        check_api_error(&v, "Mint")?;
+
+        let ks_array = match v.get("keysets").and_then(|k| k.as_array()) {
+            Some(arr) => arr,
+            None => return Ok(Vec::new()),
+        };
+
+        let mut summaries = Vec::new();
+        for ks in ks_array {
+            if let Some(id) = ks.get("id").and_then(|i| i.as_str()) {
+                let unit = ks.get("unit").and_then(|u| u.as_str()).unwrap_or("sat").to_string();
+                let active = ks.get("active").and_then(|a| a.as_bool()).unwrap_or(true);
+                let input_fee_ppk = ks.get("input_fee_ppk").and_then(|f| f.as_u64()).unwrap_or(0);
+                summaries.push(KeysetSummary {
+                    id: id.to_string(),
+                    unit,
+                    active,
+                    input_fee_ppk,
+                });
+            }
+        }
+        Ok(summaries)
+    }
+
+    pub async fn fetch_keyset_by_id(&self, keyset_id: &str) -> Result<KeysetInfo> {
+        let mut actual_id = keyset_id.to_string();
+        if (actual_id.starts_with("01") && actual_id.len() == 16) || actual_id.len() != 66 {
+            if let Ok(keysets) = self.fetch_keysets().await {
+                if let Some(matching) = keysets.iter().find(|ks| {
+                    ks.id == actual_id || (actual_id.starts_with("01") && ks.id.starts_with(&actual_id))
+                }) {
+                    actual_id = matching.id.clone();
+                }
+            }
         }
 
-        let v: serde_json::Value = resp.json().await?;
+        let resp = self.http.get(format!("{}/v1/keys/{}", self.url, actual_id)).send().await?;
+        
+        let v: serde_json::Value = if !resp.status().is_success() {
+            // As fallback, query /v1/keysets and look for a matching keyset
+            let mut found_val = None;
+            if let Ok(keysets) = self.fetch_keysets().await {
+                if let Some(matching) = keysets.iter().find(|ks| {
+                    ks.id == keyset_id || ks.id.starts_with(keyset_id) || keyset_id.starts_with(&ks.id)
+                }) {
+                    if let Ok(r2) = self.http.get(format!("{}/v1/keys/{}", self.url, matching.id)).send().await {
+                        if r2.status().is_success() {
+                            actual_id = matching.id.clone();
+                            found_val = r2.json().await.ok();
+                        }
+                    }
+                }
+            }
+            found_val.ok_or_else(|| anyhow!("Mint does not have keyset {}", keyset_id))?
+        } else {
+            resp.json().await?
+        };
+
         check_api_error(&v, "Mint")?;
 
         let ks_obj = if let Some(ks_arr) = v.get("keysets").and_then(|k| k.as_array()) {
             ks_arr.iter()
-                .find(|k| k.get("id").and_then(|i| i.as_str()) == Some(keyset_id))
+                .find(|k| {
+                    let id_str = k.get("id").and_then(|i| i.as_str());
+                    id_str == Some(&actual_id) || id_str == Some(keyset_id)
+                })
+                .or_else(|| ks_arr.first())
                 .ok_or_else(|| anyhow!("Keyset {} not found in response", keyset_id))?
                 .as_object()
                 .ok_or_else(|| anyhow!("Keyset entry is not a JSON object"))?
@@ -75,7 +149,7 @@ impl MintClient {
 
         let id = ks_obj.get("id")
             .and_then(|i| i.as_str())
-            .ok_or_else(|| anyhow!("Missing keyset id"))?
+            .unwrap_or(&actual_id)
             .to_string();
 
         let mut keys = HashMap::new();
@@ -172,6 +246,12 @@ impl MintClient {
             qv["quote"].as_str().ok_or_else(|| anyhow!("No quote returned"))?.to_string()
         };
 
+        let keysets = self.fetch_keysets().await.unwrap_or_default();
+        let id_mapping: HashMap<String, String> = keysets.into_iter()
+            .filter(|ks| ks.id.starts_with("01") && ks.id.len() == 66)
+            .map(|ks| (ks.id[..16].to_string(), ks.id))
+            .collect();
+
         let mut inputs = Vec::new();
         for p in proofs {
             let mut val = serde_json::to_value(p)?;
@@ -180,6 +260,11 @@ impl MintClient {
                 obj.remove("B_");
                 obj.remove("C_");
                 obj.remove("dleq");
+                if let Some(id_val) = obj.get("id").and_then(|i| i.as_str()) {
+                    if let Some(full_id) = id_mapping.get(id_val) {
+                        obj.insert("id".to_string(), serde_json::Value::String(full_id.clone()));
+                    }
+                }
             }
             inputs.push(val);
         }
@@ -371,25 +456,25 @@ impl MintClient {
         Ok((quote, fee_reserve, amount + fee_reserve)) // total required
     }
     /// Request a melt quote for a specific amount (for MPP).
+    /// Per NUT-15, options.mpp.amount is in millisatoshis (msat).
     /// Returns (quote_id, fee_reserve, total_required_for_this_amount).
     pub async fn request_melt_quote_with_amount(&self, invoice: &str, amount_sats: u64) -> Result<(String, u64, u64)> {
-        // Convert to msat (multiply by 1000)
-        let amount_msat = amount_sats * 1000;
+        let amount_msat = amount_sats.saturating_mul(1000);
         let qv: serde_json::Value = self.http.post(format!("{}/v1/melt/quote/bolt11", self.url))
             .json(&serde_json::json!({ 
                 "request": invoice, 
                 "unit": "sat",
                 "options": {
-            "mpp": {
-                "amount": amount_msat
-            }
-        }
+                    "mpp": {
+                        "amount": amount_msat
+                    }
+                }
             })).send().await?.json().await?;
         check_api_error(&qv, "Melt quote")?;
         
         let quote = qv["quote"].as_str().ok_or_else(|| anyhow!("No quote returned"))?.to_string();
         let fee_reserve = qv["fee_reserve"].as_u64().unwrap_or(0);
-        let amount = qv["amount"].as_u64().unwrap_or(0);
+        let amount = qv["amount"].as_u64().unwrap_or(amount_sats);
         Ok((quote, fee_reserve, amount + fee_reserve))
     }
 }
@@ -451,6 +536,16 @@ fn extract_json_number(value: &serde_json::Value, key: &str) -> Option<u64> {
         }
         _ => None,
     }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct KeysetSummary {
+    pub id: String,
+    pub unit: String,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub input_fee_ppk: u64,
 }
 
 #[derive(Clone)]
