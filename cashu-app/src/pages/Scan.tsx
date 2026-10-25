@@ -100,6 +100,7 @@ export const Scan = () => {
                   redeemMethod={redeemMethod}
                   setRedeemMethod={setRedeemMethod}
                   hasExtraProofs={verifyResult ? verifyResult.proof_total_sats > verifyResult.face_value_sats : false}
+                  isSpent={verifyResult?.spend_state === 'spent'}
                 />
               )}
 

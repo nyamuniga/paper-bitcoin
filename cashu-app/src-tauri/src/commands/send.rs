@@ -261,8 +261,50 @@ pub async fn receive_ecash(
         }
     }
 
-    let (mint_url, input_proofs, total_amount) = ecash_wallet::decode_token_string(&token_string)
+    let (mint_url, mut input_proofs, total_amount) = ecash_wallet::decode_token_string(&token_string)
         .map_err(|e| crate::error::CommandError(format!("Failed to parse token: {}", e)))?;
+
+    // Query mint keysets to resolve any short keyset IDs and calculate input fees
+    let client = ecash_wallet::client::MintClient::new(&mint_url);
+    let all_keysets = client.fetch_keysets().await.unwrap_or_default();
+
+    // Resolve short keyset IDs in input_proofs
+    for p in &mut input_proofs {
+        if p.id.starts_with("01") && p.id.len() < 66 {
+            if let Some(matching) = all_keysets.iter().find(|ks| ks.id.starts_with(&p.id)) {
+                p.id = matching.id.clone();
+            }
+        } else if p.id.len() < 16 {
+            if let Some(matching) = all_keysets.iter().find(|ks| ks.id.starts_with(&p.id)) {
+                p.id = matching.id.clone();
+            }
+        }
+    }
+
+    // Calculate mint input fees per NUT-02:
+    // fee = ceil(sum(input_fee_ppk) / 1000) = (sum(input_fee_ppk) + 999) / 1000
+    let mut total_fee_ppk: u64 = 0;
+    for p in &input_proofs {
+        let fee_ppk = all_keysets.iter()
+            .find(|ks| ks.id == p.id)
+            .map(|ks| ks.input_fee_ppk)
+            .unwrap_or(0);
+        total_fee_ppk += fee_ppk;
+    }
+    let fee = if total_fee_ppk > 0 {
+        (total_fee_ppk + 999) / 1000
+    } else {
+        0
+    };
+
+    if fee >= total_amount {
+        return Err(crate::error::CommandError(format!(
+            "Token amount ({} sat) cannot cover the mint input fee ({} sat)",
+            total_amount, fee
+        )));
+    }
+
+    let net_amount = total_amount - fee;
 
     // Record pending transaction before swap
     let tx_id = format!(
@@ -278,8 +320,8 @@ pub async fn receive_ecash(
         tx_type: TransactionType::ReceiveEcash(ReceiveEcashTransactionData {
             token_string: token_string.clone(),
         }),
-        amount: total_amount,
-        fee: 0,
+        amount: net_amount,
+        fee,
         status: TransactionStatus::Pending,
         timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -291,7 +333,7 @@ pub async fn receive_ecash(
     w_state.save_encrypted(&path, &passphrase)?;
 
     // Swap proofs with the mint to re-blind them (prevents sender tracking)
-    let desired_amounts = split_into_powers_of_2(total_amount);
+    let desired_amounts = split_into_powers_of_2(net_amount);
     let swap_result = swap_proofs(
         &mut w_state,
         &path,
@@ -325,6 +367,7 @@ pub async fn receive_ecash(
                 if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
                     if total_restored > 0 {
                         tx.status = TransactionStatus::Success;
+                        tx.amount = total_restored;
                         w_state.save_encrypted(&path, &passphrase).ok();
                         return Ok(total_restored);
                     } else {
@@ -372,5 +415,5 @@ pub async fn receive_ecash(
     }
     w_state.save_encrypted(&path, &passphrase)?;
 
-    Ok(total_amount)
+    Ok(net_amount)
 }

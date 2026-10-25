@@ -11,10 +11,11 @@ interface RedeemNoteFormProps {
   redeemMethod: 'lightning' | 'wallet';
   setRedeemMethod: (method: 'lightning' | 'wallet') => void;
   hasExtraProofs: boolean;
+  isSpent?: boolean;
 }
 
 export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({ 
-  invoice, setInvoice, redeeming, onRedeem, noteAmount, redeemMethod, setRedeemMethod, hasExtraProofs
+  invoice, setInvoice, redeeming, onRedeem, noteAmount, redeemMethod, setRedeemMethod, hasExtraProofs, isSpent
 }) => {
   const [showScanner, setShowScanner] = useState(false);
 
@@ -58,33 +59,36 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
           <label className="block text-label-caps font-label-caps text-on-surface-variant tracking-widest mt-2">REDEEM METHOD</label>
           <div className="grid grid-cols-2 gap-3 mb-2">
             <button
-              onClick={() => setRedeemMethod('wallet')}
-              className={`p-4 md:p-5 rounded-2xl border cursor-pointer transition-all duration-200 flex flex-col items-center text-center gap-2 ${
-                redeemMethod === 'wallet'
-                  ? 'bg-primary/10 border-primary/50 shadow-[0_0_15px_rgba(255,184,116,0.15)] text-primary'
-                  : 'bg-surface-container-high border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40'
+              onClick={() => !isSpent && setRedeemMethod('wallet')}
+              disabled={isSpent}
+              className={`p-4 md:p-5 rounded-2xl border transition-all duration-200 flex flex-col items-center text-center gap-2 ${
+                isSpent
+                  ? 'bg-surface-container-low border-outline-variant/10 text-on-surface-variant/40 cursor-not-allowed'
+                  : redeemMethod === 'wallet'
+                  ? 'bg-primary/10 border-primary/50 shadow-[0_0_15px_rgba(255,184,116,0.15)] text-primary cursor-pointer'
+                  : 'bg-surface-container-high border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40 cursor-pointer'
               }`}
             >
-              <Wallet size={20} className={redeemMethod === 'wallet' ? 'text-primary' : 'text-on-surface-variant'} />
+              <Wallet size={20} className={isSpent ? 'text-on-surface-variant/40' : redeemMethod === 'wallet' ? 'text-primary' : 'text-on-surface-variant'} />
               <div className="font-bold text-[14px]">Local Wallet</div>
               <div className="text-[11px] opacity-80 leading-tight">Zero fees. Instant transfer.</div>
             </button>
 
             <button
-              onClick={() => hasExtraProofs && setRedeemMethod('lightning')}
-              disabled={!hasExtraProofs}
+              onClick={() => hasExtraProofs && !isSpent && setRedeemMethod('lightning')}
+              disabled={!hasExtraProofs || isSpent}
               className={`p-4 md:p-5 rounded-2xl border transition-all duration-200 flex flex-col items-center text-center gap-2 relative group ${
-                !hasExtraProofs
+                !hasExtraProofs || isSpent
                   ? 'bg-surface-container-low border-outline-variant/10 text-on-surface-variant/40 cursor-not-allowed'
                   : redeemMethod === 'lightning'
                   ? 'bg-primary/10 border-primary/50 shadow-[0_0_15px_rgba(255,184,116,0.15)] text-primary cursor-pointer'
                   : 'bg-surface-container-high border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40 cursor-pointer'
               }`}
             >
-              <Zap size={20} className={!hasExtraProofs ? 'text-on-surface-variant/40' : redeemMethod === 'lightning' ? 'text-primary' : 'text-on-surface-variant'} />
+              <Zap size={20} className={!hasExtraProofs || isSpent ? 'text-on-surface-variant/40' : redeemMethod === 'lightning' ? 'text-primary' : 'text-on-surface-variant'} />
               <div className="font-bold text-[14px]">Lightning</div>
               <div className="text-[11px] opacity-80 leading-tight">Pay to external LN wallet.</div>
-              {!hasExtraProofs && (
+              {!hasExtraProofs && !isSpent && (
                 <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-[180px] bg-surface-container-highest text-on-surface text-[10px] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg z-10 border border-outline-variant/20">
                   This note doesn't contain enough routing fees for Lightning payments.
                 </div>
@@ -118,13 +122,15 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
                 <textarea
                   value={invoice}
                   onChange={(e) => setInvoice(e.target.value)}
-                  className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 h-[80px] ${isInvalidAmount ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`}
+                  disabled={isSpent}
+                  className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 h-[80px] ${isInvalidAmount ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'} ${isSpent ? 'opacity-50 cursor-not-allowed' : ''}`}
                   placeholder="Paste lnbc..."
                   spellCheck="false"
                 />
                 <button 
-                  onClick={() => setShowScanner(true)}
-                  className="absolute right-3 top-3 p-2 bg-surface-container-highest rounded-lg text-primary hover:bg-surface-bright transition-colors"
+                  onClick={() => !isSpent && setShowScanner(true)}
+                  disabled={isSpent}
+                  className="absolute right-3 top-3 p-2 bg-surface-container-highest rounded-lg text-primary hover:bg-surface-bright transition-colors disabled:opacity-50"
                   title="Scan QR Code"
                 >
                   <QrCode size={20} />
@@ -140,14 +146,20 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
             </div>
           )}
 
+          {isSpent && (
+            <div className="p-4 rounded-xl bg-error/10 border border-error/30 text-error text-center font-bold text-sm">
+              ⚠️ This voucher has already been redeemed and the tokens are spent. It cannot be claimed again.
+            </div>
+          )}
+
           <button
             onClick={onRedeem}
-            disabled={redeeming || (redeemMethod === 'lightning' && (!invoice || isInvalidAmount))}
+            disabled={isSpent || redeeming || (redeemMethod === 'lightning' && (!invoice || isInvalidAmount))}
             className={`w-full btn-gradient py-4 rounded-2xl text-on-primary font-headline-lg-mobile text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${
-              redeeming || (redeemMethod === 'lightning' && (!invoice || isInvalidAmount)) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98] cursor-pointer'
+              isSpent || redeeming || (redeemMethod === 'lightning' && (!invoice || isInvalidAmount)) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98] cursor-pointer'
             }`}
           >
-            {redeeming ? <Loader2 className="animate-spin w-6 h-6" /> : redeemMethod === 'wallet' ? 'Redeem to Wallet' : 'Pay to Invoice'}
+            {redeeming ? <Loader2 className="animate-spin w-6 h-6" /> : isSpent ? 'Voucher Already Spent' : redeemMethod === 'wallet' ? 'Redeem to Wallet' : 'Pay to Invoice'}
           </button>
         </div>
     </div>
