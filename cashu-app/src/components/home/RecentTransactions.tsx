@@ -8,19 +8,22 @@ import { RecentTransactionsSkeleton } from '../shared/Skeleton';
 
 export const RecentTransactions: React.FC = () => {
   const navigate = useNavigate();
-  const { transactions, loading, handleCheckIssue, handleRecoverPendingTransaction, handleCheckTokenSpendStatus, handleRetryReceiveEcash } = useHistory();
+  const { 
+    transactions, 
+    loading, 
+    handleCheckIssue, 
+    handleRecoverPendingTransaction, 
+    handleCheckTokenSpendStatus, 
+    handleRetryReceiveEcash,
+    handleRetryMint,
+    handleDownloadNote
+  } = useHistory();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
   const recentTxs = transactions.slice(0, 4);
 
-
-
-  const handleRowClick = async (tx: Transaction) => {
-    if (tx.status === 'Pending' && 'Issue' in tx.tx_type) {
-      await handleCheckIssue(tx.id, navigate);
-    } else if ('Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type) {
-      setSelectedTx(tx);
-    }
+  const handleRowClick = (tx: Transaction) => {
+    setSelectedTx(tx);
   };
 
   const getTxLabel = (tx: Transaction) => {
@@ -133,30 +136,27 @@ export const RecentTransactions: React.FC = () => {
           </div>
         ) : (
           <div className="relative z-10 divide-y divide-[rgba(247,244,235,0.03)]">
-            {recentTxs.map((tx) => {
-              const isClickable = (tx.status === 'Pending' && 'Issue' in tx.tx_type) || 'Melt' in tx.tx_type || 'Redeem' in tx.tx_type || 'Send' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type;
-              return (
-                <div
-                  key={tx.id}
-                  onClick={() => handleRowClick(tx)}
-                  className={`flex items-center gap-3.5 py-3.5 hover:bg-[#12261d]/50 transition-colors ${isClickable ? 'cursor-pointer active:scale-[0.99]' : ''}`}
-                >
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center border flex-shrink-0 shadow-sm ${getTxIconBg(tx)}`}>
-                    {getTxIcon(tx)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-display-hero text-[14px] md:text-[15px] font-semibold text-[#f7f4eb] truncate">{getTxLabel(tx)}</p>
-                    <p className="text-[12px] text-[#627d70] font-sans mt-0.5 md:hidden">{formatTime(tx.timestamp)}</p>
-                    <p className="text-[12px] text-[#627d70] font-sans mt-0.5 hidden md:block">{formatFullDate(tx.timestamp)}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <span className={`font-mono text-[14px] md:text-[15px] ${getTxAmountColor(tx)}`}>
-                      {getTxSign(tx)}₿{tx.amount.toLocaleString()}
-                    </span>
-                  </div>
+            {recentTxs.map((tx) => (
+              <div
+                key={tx.id}
+                onClick={() => handleRowClick(tx)}
+                className="flex items-center gap-3.5 py-3.5 hover:bg-[#12261d]/50 transition-colors cursor-pointer active:scale-[0.99]"
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border flex-shrink-0 shadow-sm ${getTxIconBg(tx)}`}>
+                  {getTxIcon(tx)}
                 </div>
-              );
-            })}
+                <div className="flex-1 min-w-0">
+                  <p className="font-display-hero text-[14px] md:text-[15px] font-semibold text-[#f7f4eb] truncate">{getTxLabel(tx)}</p>
+                  <p className="text-[12px] text-[#627d70] font-sans mt-0.5 md:hidden">{formatTime(tx.timestamp)}</p>
+                  <p className="text-[12px] text-[#627d70] font-sans mt-0.5 hidden md:block">{formatFullDate(tx.timestamp)}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <span className={`font-mono text-[14px] md:text-[15px] ${getTxAmountColor(tx)}`}>
+                    {getTxSign(tx)}₿{tx.amount.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -172,6 +172,9 @@ export const RecentTransactions: React.FC = () => {
               ? () => handleRetryReceiveEcash(selectedTx.id, selectedTx.tx_type.ReceiveEcash.token_string)
               : undefined
           }
+          onRetryMint={handleRetryMint}
+          onCheckIssue={(txId) => handleCheckIssue(txId, navigate)}
+          onDownloadNote={handleDownloadNote}
         />
       )}
     </section>
