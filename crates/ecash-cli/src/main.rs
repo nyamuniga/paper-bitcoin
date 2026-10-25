@@ -582,6 +582,10 @@ async fn cmd_verify(_mint_url: &str, payload: &str) -> Result<()> {
                 println!("SPENT");
                 println!("  WARNING: This note has already been redeemed! The funds are gone.");
             }
+            Ok(ecash_verifier::SpentStatus::PartiallySpent) => {
+                println!("PARTIALLY SPENT");
+                println!("  WARNING: Some proofs on this note have already been redeemed, but unspent proofs remain.");
+            }
             Err(e) => {
                 println!("UNKNOWN");
                 println!("  Could not verify online state: {}", e);

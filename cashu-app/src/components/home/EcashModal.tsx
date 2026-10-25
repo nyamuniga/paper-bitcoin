@@ -174,8 +174,13 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   };
 
   const handleReceive = async () => {
-    const trimmed = receiveToken.trim();
+    let trimmed = receiveToken.trim();
     if (!trimmed) return;
+    if (trimmed.toLowerCase().startsWith('cashu://')) {
+      trimmed = trimmed.substring(8).trim();
+    } else if (trimmed.toLowerCase().startsWith('cashu:')) {
+      trimmed = trimmed.substring(6).trim();
+    }
     setPaymentErrorMessage('');
     setLastAction(() => handleReceive);
 

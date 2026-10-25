@@ -159,6 +159,7 @@ impl OfflineVerifier {
 pub enum SpentStatus {
     Unspent,
     Spent,
+    PartiallySpent,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -189,6 +190,9 @@ pub enum VerificationResult {
 
 impl OfflineVerifier {
     pub async fn check_spend_state(data: &PublicNoteData) -> Result<SpentStatus, String> {
+        let mut any_spent = false;
+        let mut any_unspent = false;
+
         for entry in &data.entries {
             let mut y_values = Vec::new();
             for p in &entry.proofs {
@@ -199,7 +203,7 @@ impl OfflineVerifier {
             if y_values.is_empty() { continue; }
             
             let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(3))
+                .timeout(std::time::Duration::from_secs(4))
                 .build()
                 .unwrap_or_default();
             
@@ -221,10 +225,12 @@ impl OfflineVerifier {
                         if let Some(states) = json.get("states").and_then(|s| s.as_array()) {
                             for state in states {
                                 if state.get("state").and_then(|s| s.as_str()) == Some("SPENT") {
-                                    return Ok(SpentStatus::Spent);
+                                    any_spent = true;
+                                } else {
+                                    any_unspent = true;
                                 }
                             }
-                            continue; // Successfully checked this mint, none were SPENT
+                            continue; // Successfully checked this mint
                         }
                     }
                 }
@@ -233,7 +239,14 @@ impl OfflineVerifier {
                 return Err(format!("Could not connect to mint {}", entry.mint));
             }
         }
-        Ok(SpentStatus::Unspent)
+
+        if any_spent && !any_unspent {
+            Ok(SpentStatus::Spent)
+        } else if any_spent && any_unspent {
+            Ok(SpentStatus::PartiallySpent)
+        } else {
+            Ok(SpentStatus::Unspent)
+        }
     }
 }
 

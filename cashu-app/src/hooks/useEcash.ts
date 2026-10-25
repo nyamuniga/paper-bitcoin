@@ -87,9 +87,27 @@ export const useEcash = (mintUrl?: string) => {
     isReceivingRef.current = true;
     setReceiving(true);
     try {
-      const nostrKey = getGlobalNostrPrivateKey();
+      let cleanToken = token.trim();
+      if (cleanToken.toLowerCase().startsWith('cashu://')) {
+        cleanToken = cleanToken.substring(8).trim();
+      } else if (cleanToken.toLowerCase().startsWith('cashu:')) {
+        cleanToken = cleanToken.substring(6).trim();
+      }
+
+      let nostrKey = getGlobalNostrPrivateKey();
+      if (!nostrKey) {
+        try {
+          const custom = await invoke<string | null>('get_custom_nostr_key');
+          if (custom) {
+            nostrKey = custom;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       const amount = await invoke<number>('receive_ecash', { 
-        tokenString: token,
+        tokenString: cleanToken,
         nostrKey: nostrKey || undefined,
       });
       await refreshWallet();
