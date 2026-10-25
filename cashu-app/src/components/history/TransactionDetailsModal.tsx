@@ -63,7 +63,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
     if (isMint) return 'Lightning Deposit';
     if (isReceiveEcash) return 'Received eCash';
     if (isReceiveLightning) return 'Lightning Deposit';
-    if (isIssue) return 'Exported Note';
+    if (isIssue) return 'Issued Note';
     if (isRedeem) return 'Redeemed Note';
     if (isSend) return 'Sent eCash';
     return isMelt ? 'Lightning Payment' : 'Transaction';
