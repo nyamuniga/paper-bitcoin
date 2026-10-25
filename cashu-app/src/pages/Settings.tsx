@@ -6,6 +6,7 @@ import { NostrSection } from '../components/settings/NostrSection';
 import { LockedEcashSection } from '../components/settings/LockedEcashSection';
 import { NWCSection } from '../components/settings/NWCSection';
 import { LearnSection } from '../components/settings/LearnSection';
+import { CurrencySection } from '../components/settings/CurrencySection';
 import { PageHeader } from '../components/shared/PageHeader';
 
 export const Settings = () => {
@@ -33,9 +34,9 @@ export const Settings = () => {
 
   return (
     <main className="flex-1 w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6 flex flex-col">
-      <PageHeader 
-        title="Settings" 
-        subtitle="Keys, connections & preferences" 
+      <PageHeader
+        title="Settings"
+        subtitle="Keys, connections & preferences"
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start mt-1">
@@ -43,6 +44,10 @@ export const Settings = () => {
           <LearnSection
             isExpanded={activeSection === 'learn'}
             onToggle={() => toggleSection('learn')}
+          />
+          <CurrencySection
+            isExpanded={activeSection === 'currency'}
+            onToggle={() => toggleSection('currency')}
           />
           <RecoveryPhraseSection
             isExpanded={activeSection === 'recovery'}
