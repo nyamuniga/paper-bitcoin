@@ -21,6 +21,17 @@ export const CurrencySection: React.FC<CurrencySectionProps> = ({
   const setPreferredCurrency = useCurrencyStore((s) => s.setPreferredCurrency);
   const rates = useCurrencyStore((s) => s.rates);
 
+  const handleSelectCurrency = (code: string) => {
+    setPreferredCurrency(code);
+    if (isExpanded) {
+      if (onToggle) {
+        onToggle();
+      } else {
+        setInternalExpanded(false);
+      }
+    }
+  };
+
   const currentMeta = CURRENCIES[preferredCurrency] || {
     code: preferredCurrency,
     name: preferredCurrency,
@@ -93,7 +104,7 @@ export const CurrencySection: React.FC<CurrencySectionProps> = ({
                   <button
                     key={code}
                     type="button"
-                    onClick={() => setPreferredCurrency(code)}
+                    onClick={() => handleSelectCurrency(code)}
                     className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer border ${
                       isSelected
                         ? 'bg-primary text-on-primary border-primary shadow-sm'
@@ -128,7 +139,7 @@ export const CurrencySection: React.FC<CurrencySectionProps> = ({
                   <button
                     key={c.code}
                     type="button"
-                    onClick={() => setPreferredCurrency(c.code)}
+                    onClick={() => handleSelectCurrency(c.code)}
                     className={`w-full flex items-center justify-between p-3 text-left transition-colors cursor-pointer group/row ${
                       isSelected
                         ? 'bg-primary/10 text-primary'
