@@ -406,6 +406,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
           title="Receive"
           onClose={() => setShowReceive(false)}
           options={[
+
             {
               label: 'Ecash',
               icon: <Coins size={20} />,
@@ -442,7 +443,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
           onClose={() => setShowSend(false)}
           options={[
             {
-              label: 'Issue Note',
+              label: 'Printable Note',
               icon: <Banknote size={22} />,
               colorClass: 'bg-primary/20 text-primary',
               onClick: () => { navigate('/issue'); }

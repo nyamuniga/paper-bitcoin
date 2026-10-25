@@ -41,7 +41,7 @@ export const RecentTransactions: React.FC = () => {
     if (isMint) return 'Received Lightning';
     if (isReceiveEcash) return 'Received eCash';
     if (isReceiveLightning) return 'Received Lightning';
-    if (isIssue) return 'Issued Note';
+    if (isIssue) return 'Exported Note';
     if (isRedeem) return 'Redeemed Note';
     if (isSend) return 'Sent eCash';
     if (isMelt) return 'Sent Lightning';
