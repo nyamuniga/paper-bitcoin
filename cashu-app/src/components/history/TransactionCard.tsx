@@ -1,4 +1,4 @@
-import { FileText, ArrowDownLeft, ArrowUpRight, Clock, X } from 'lucide-react';
+import { Banknote, ArrowDownLeft, ArrowUpRight, Clock, X } from 'lucide-react';
 
 export interface Transaction {
   id: string;
@@ -79,7 +79,7 @@ export const TransactionCard = ({ tx, onClick }: TransactionCardProps) => {
     if (isIssue) {
       return {
         bg: 'bg-[#10241b] border-[#1b3829] text-[#627d70]',
-        icon: <FileText className="w-4 h-4 stroke-[2]" />
+        icon: <Banknote className="w-4 h-4 stroke-[2]" />
       };
     }
     return {

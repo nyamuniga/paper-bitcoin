@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Wallet, ScanLine, Send, Clock, Settings as SettingsIcon } from 'lucide-react';
+import { Wallet, ScanLine, Banknote, Clock, Settings as SettingsIcon } from 'lucide-react';
 
 export const BottomNav = () => {
   const location = useLocation();
@@ -28,7 +28,7 @@ export const BottomNav = () => {
 
       <Link to="/issue" className={`flex flex-col items-center justify-center relative hover:opacity-100 transition-opacity active:scale-90 transition-transform duration-150 group ${isActive('/issue')}`}>
         {location.pathname === '/issue' && <div className="absolute -bottom-1 w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_8px_rgba(229,168,59,0.9)]" />}
-        <Send size={24} className="mb-1 group-hover:scale-110 transition-transform" />
+        <Banknote size={24} className="mb-1 group-hover:scale-110 transition-transform" />
         <span className="text-label-tag font-label-tag text-[10px] tracking-wider">Issue</span>
       </Link>
 
