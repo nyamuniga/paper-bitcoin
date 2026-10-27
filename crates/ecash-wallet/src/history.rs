@@ -555,11 +555,13 @@ pub async fn apply_transaction_diff(
 
             match swap_res {
                 Ok(new_proofs) => {
+                    let rec_amt: u64 = new_proofs.iter().map(|p| p.amount).sum();
                     state.proofs.entry(tx_mint.clone()).or_default().extend(new_proofs);
                     if !state.mints.contains(&tx_mint) {
                         state.mints.push(tx_mint.clone());
                     }
                     if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
+                        t.amount = rec_amt;
                         t.status = TransactionStatus::Success;
                     }
                     TransactionStatus::Success

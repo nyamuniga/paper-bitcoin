@@ -399,8 +399,8 @@ impl MintClient {
             "outputs": outputs
         });
 
-        let mut backoff = std::time::Duration::from_millis(1500);
-        for attempt in 0..4 {
+        let mut backoff = std::time::Duration::from_millis(2000);
+        for attempt in 0..2 {
             let resp = self.http.post(format!("{}/v1/restore", self.url))
                 .json(&req).send().await?;
 
@@ -418,7 +418,7 @@ impl MintClient {
                 };
 
                 println!(
-                    "[MintClient] Rate limited (HTTP 429) on {} /v1/restore. Waiting {:?} (attempt {}/4)...",
+                    "[MintClient] Rate limited (HTTP 429) on {} /v1/restore. Waiting {:?} (attempt {}/2)...",
                     self.url, wait_time, attempt + 1
                 );
                 tokio::time::sleep(wait_time).await;
@@ -445,7 +445,7 @@ impl MintClient {
             return Ok((outputs_arr, sigs_arr));
         }
 
-        Err(anyhow!("Rate limit exceeded on {} /v1/restore after 4 attempts", self.url))
+        Err(anyhow!("Rate limit exceeded on {} /v1/restore", self.url))
     }
 
     pub async fn check_state(&self, ys: &[String]) -> Result<HashMap<String, String>> {
@@ -658,3 +658,76 @@ pub struct KeysetSummary {
 
 #[derive(Clone)]
 pub struct KeysetInfo { pub id: String, pub keys: HashMap<u64, String> }
+
+/// Calculate total mint input fees in satoshis for a set of proofs according to NUT-02:
+/// fee = ceil(sum(input_fee_ppk) / 1000) = (sum(input_fee_ppk) + 999) / 1000
+pub fn calculate_input_fee(proofs: &[ecash_core::types::Proof], keysets: &[KeysetSummary]) -> u64 {
+    let mut total_fee_ppk: u64 = 0;
+    for p in proofs {
+        let fee_ppk = keysets.iter()
+            .find(|ks| ks.id == p.id || (p.id.len() < ks.id.len() && ks.id.starts_with(&p.id)) || (ks.id.len() < p.id.len() && p.id.starts_with(&ks.id)))
+            .map(|ks| ks.input_fee_ppk)
+            .unwrap_or(0);
+        total_fee_ppk += fee_ppk;
+    }
+    if total_fee_ppk > 0 {
+        (total_fee_ppk + 999) / 1000
+    } else {
+        0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ecash_core::types::Proof;
+
+    #[test]
+    fn test_calculate_input_fee() {
+        let keysets = vec![
+            KeysetSummary {
+                id: "009a1f293252f338".to_string(),
+                unit: "sat".to_string(),
+                active: true,
+                input_fee_ppk: 100, // 100 ppk = 0.1 sat per proof
+            },
+            KeysetSummary {
+                id: "01abcdef".to_string(),
+                unit: "sat".to_string(),
+                active: true,
+                input_fee_ppk: 0,
+            },
+        ];
+
+        let create_proof = |id: &str, amt: u64| Proof {
+            id: id.to_string(),
+            amount: amt,
+            secret: "sec".to_string(),
+            c: "c".to_string(),
+            witness: None,
+            dleq: None,
+            b_prime: None,
+            c_prime: None,
+            derivation_index: 0,
+        };
+
+        // 0 proofs -> 0 fee
+        assert_eq!(calculate_input_fee(&[], &keysets), 0);
+
+        // 1 proof @ 100 ppk -> ceil(100/1000) = 1 sat
+        let proofs_1 = vec![create_proof("009a1f293252f338", 500)];
+        assert_eq!(calculate_input_fee(&proofs_1, &keysets), 1);
+
+        // 10 proofs @ 100 ppk -> ceil(1000/1000) = 1 sat
+        let proofs_10 = vec![create_proof("009a1f293252f338", 100); 10];
+        assert_eq!(calculate_input_fee(&proofs_10, &keysets), 1);
+
+        // 11 proofs @ 100 ppk -> ceil(1100/1000) = 2 sats
+        let proofs_11 = vec![create_proof("009a1f293252f338", 100); 11];
+        assert_eq!(calculate_input_fee(&proofs_11, &keysets), 2);
+
+        // Proof from 0 fee keyset -> 0 fee
+        let proofs_zero = vec![create_proof("01abcdef", 1000); 5];
+        assert_eq!(calculate_input_fee(&proofs_zero, &keysets), 0);
+    }
+}
