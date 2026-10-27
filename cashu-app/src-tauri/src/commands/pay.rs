@@ -19,6 +19,7 @@ pub async fn pay_invoice(
             .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
     };
 
+    let _lock = state.wallet_lock.lock().await;
     let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
 
     let (sats_paid, _preimage) =

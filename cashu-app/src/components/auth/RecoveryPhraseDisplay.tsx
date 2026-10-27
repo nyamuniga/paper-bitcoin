@@ -4,11 +4,10 @@ import { useWalletStore } from '../../store/wallet';
 
 interface RecoveryPhraseDisplayProps {
   mnemonic: string;
-  barkMnemonic?: string;
   onSaved: () => void;
 }
 
-export const RecoveryPhraseDisplay: React.FC<RecoveryPhraseDisplayProps> = ({ mnemonic, barkMnemonic, onSaved }) => {
+export const RecoveryPhraseDisplay: React.FC<RecoveryPhraseDisplayProps> = ({ mnemonic, onSaved }) => {
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
   return (
@@ -19,7 +18,7 @@ export const RecoveryPhraseDisplay: React.FC<RecoveryPhraseDisplayProps> = ({ mn
             <KeyRound size={32} strokeWidth={1.75} />
           </div>
         </div>
-        <h1 className="font-display-hero text-2xl font-semibold mb-2 text-center text-primary">Recovery Phrases</h1>
+        <h1 className="font-display-hero text-2xl font-semibold mb-2 text-center text-primary">Recovery Phrase</h1>
         <p className="text-on-surface-variant text-center text-sm mb-6 leading-relaxed">
           Write down these words and keep them somewhere safe. You will need them to recover your funds if you lose your device.
         </p>
@@ -29,14 +28,6 @@ export const RecoveryPhraseDisplay: React.FC<RecoveryPhraseDisplayProps> = ({ mn
           {mnemonic}
         </div>
 
-        {barkMnemonic && (
-          <>
-            <div className="text-xs font-semibold uppercase tracking-wider text-primary mb-2 font-mono">Bitcoin Wallet (12 words)</div>
-            <div className="bg-[#07100c] border border-outline-variant/50 rounded-xl p-4 text-sm font-mono text-center mb-6 break-words text-[#f7f4eb] select-all leading-relaxed shadow-inner">
-              {barkMnemonic}
-            </div>
-          </>
-        )}
         <button
           onClick={async () => {
             window.history.replaceState(null, '', '/');

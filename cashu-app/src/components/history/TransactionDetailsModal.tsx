@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ArrowDownLeft, ArrowUpRight, Banknote, CheckCircle, AlertCircle, XCircle, Copy, Check, Clock, Download } from 'lucide-react';
+import { X, ArrowDownLeft, ArrowUpRight, Banknote, CheckCircle, AlertCircle, XCircle, Copy, Check, Clock, Download, ExternalLink } from 'lucide-react';
 import { Transaction } from './TransactionCard';
 import { toast } from 'react-hot-toast';
 import { SafeQRCode } from '../shared/SafeQRCode';
@@ -8,6 +8,7 @@ import { useUrEncoder } from '../../hooks/useUrEncoder';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { MintName } from '../shared/MintName';
 import { MintIcon } from '../shared/MintIcon';
+import { openMempoolTx, openMempoolAddress } from '../../utils/mempool';
 
 interface TransactionDetailsModalProps {
   tx: Transaction;
@@ -38,8 +39,22 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   const isSend = 'Send' in tx.tx_type;
   const isReceiveEcash = 'ReceiveEcash' in tx.tx_type;
   const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
-  const isReceive = isReceiveEcash || isReceiveLightning;
+  const isSendOnchain = 'SendOnchain' in tx.tx_type;
+  const isReceiveOnchain = 'ReceiveOnchain' in tx.tx_type;
+  const isReceive = isReceiveEcash || isReceiveLightning || isReceiveOnchain;
   const isInflow = isMint || isRedeem || isReceive || tx.momo_direction === 'RWF_TO_SATS';
+
+  const onchainTxid = isSendOnchain
+    ? tx.tx_type.SendOnchain.txid
+    : isReceiveOnchain
+    ? tx.tx_type.ReceiveOnchain.txid
+    : null;
+
+  const onchainAddress = isSendOnchain
+    ? tx.tx_type.SendOnchain.address
+    : isReceiveOnchain
+    ? tx.tx_type.ReceiveOnchain.boarding_address
+    : null;
 
   const quoteId = isMint 
     ? tx.tx_type.Mint.quote_id 
@@ -63,9 +78,11 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
     if (isMint) return 'Lightning Deposit';
     if (isReceiveEcash) return 'Received eCash';
     if (isReceiveLightning) return 'Lightning Deposit';
+    if (isReceiveOnchain) return 'Bitcoin Deposit';
     if (isIssue) return 'Exported Note';
     if (isRedeem) return 'Redeemed Note';
     if (isSend) return 'Sent eCash';
+    if (isSendOnchain) return 'Bitcoin Payment';
     return isMelt ? 'Lightning Payment' : 'Transaction';
   };
 
@@ -300,6 +317,21 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 </div>
               </>
             )}
+
+            {isSendOnchain && tx.tx_type.SendOnchain && (
+              <>
+                <div className="border-b border-outline-variant/15"></div>
+                <div className="flex justify-between items-center gap-4">
+                  <span className="text-label-caps font-label-caps text-on-surface-variant flex-shrink-0">ARK BATCHING FEE</span>
+                  <span className="text-body-md font-medium text-on-surface text-right">₿{tx.tx_type.SendOnchain.ark_fee.toLocaleString()}</span>
+                </div>
+                <div className="border-b border-outline-variant/15"></div>
+                <div className="flex justify-between items-center gap-4">
+                  <span className="text-label-caps font-label-caps text-on-surface-variant flex-shrink-0">LIGHTNING ROUTING FEE</span>
+                  <span className="text-body-md font-medium text-on-surface text-right">₿{tx.tx_type.SendOnchain.cashu_fee.toLocaleString()}</span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Transaction Identifiers */}
@@ -355,6 +387,58 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 </button>
               </div>
             )}
+
+            {onchainTxid && (
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/60 border border-outline-variant/20 shadow-sm">
+                <div className="flex flex-col min-w-0 pr-2">
+                  <span className="text-[10px] font-semibold tracking-wider text-on-surface-variant uppercase">Bitcoin TxID</span>
+                  <span className="font-mono text-xs text-on-surface truncate">{onchainTxid}</span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={() => openMempoolTx(onchainTxid)}
+                    className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-primary transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
+                    title="View on Mempool.space"
+                  >
+                    <ExternalLink size={14} />
+                  </button>
+                  <button
+                    onClick={() => copyToClipboard(onchainTxid, 'TxID copied')}
+                    className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
+                    title="Copy TxID"
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {onchainAddress && (
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/60 border border-outline-variant/20 shadow-sm">
+                <div className="flex flex-col min-w-0 pr-2">
+                  <span className="text-[10px] font-semibold tracking-wider text-on-surface-variant uppercase">
+                    {isSendOnchain ? 'Recipient Address' : 'Bitcoin Deposit Address'}
+                  </span>
+                  <span className="font-mono text-xs text-on-surface truncate">{onchainAddress}</span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={() => openMempoolAddress(onchainAddress)}
+                    className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-primary transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
+                    title="View on Mempool.space"
+                  >
+                    <ExternalLink size={14} />
+                  </button>
+                  <button
+                    onClick={() => copyToClipboard(onchainAddress, 'Address copied')}
+                    className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
+                    title="Copy Address"
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -400,6 +484,10 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 {isReceiveEcash
                   ? 'Check Status & Claim'
                   : isReceiveLightning
+                  ? 'Check Status'
+                  : isReceiveOnchain
+                  ? 'Check Status'
+                  : isSendOnchain
                   ? 'Check Status'
                   : isRedeem
                   ? 'Check Status & Recover'

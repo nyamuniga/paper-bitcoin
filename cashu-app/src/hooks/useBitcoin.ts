@@ -2,7 +2,12 @@ import { useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { toast } from 'react-hot-toast';
-import { getBarkBoardingAddress, estimateOnChainSendBark, executeOnChainSendBark, OnchainSendEstimate } from '../services/barkService';
+import {
+  estimateOnChainSendFixedFloat,
+  executeOnChainSendFixedFloat,
+  getDepositAddressFixedFloat,
+  OnchainSendEstimate,
+} from '../services/fixedFloatService';
 
 export const useBitcoin = (mintUrl?: string) => {
   const [paying, setPaying] = useState(false);
@@ -65,15 +70,28 @@ export const useBitcoin = (mintUrl?: string) => {
     }
   };
 
-  const receiveOnChain = async () => {
+  const receiveOnChain = async (amountSats?: number, overrideMintUrl?: string) => {
     if (isRequestingRef.current) return null;
+    const targetMint = overrideMintUrl || mintUrl;
+    if (!targetMint) {
+      toast.error('No mint specified for on-chain deposit');
+      return null;
+    }
+    const amount = amountSats && amountSats > 0 ? amountSats : 10000;
+
     isRequestingRef.current = true;
     setRequesting(true);
     try {
-      const res = await getBarkBoardingAddress();
-      return { boardingAddress: res.address };
+      const res = await getDepositAddressFixedFloat(amount, targetMint);
+      await refreshWallet();
+      return {
+        boardingAddress: res.address,
+        amountSats: res.amount_sats,
+        quoteId: res.quote_id,
+        orderId: res.order_id,
+      };
     } catch (e: any) {
-      toast.error(`Failed to get boarding address: ${e.message || e}`);
+      toast.error(`Failed to get Bitcoin deposit address: ${e.message || e}`);
       return null;
     } finally {
       setRequesting(false);
@@ -92,7 +110,7 @@ export const useBitcoin = (mintUrl?: string) => {
     isRequestingRef.current = true;
     setRequesting(true);
     try {
-      return await estimateOnChainSendBark(address, amount, targetMint);
+      return await estimateOnChainSendFixedFloat(address, amount, targetMint);
     } catch (e: any) {
       toast.error(`Estimation failed: ${e.message || e}`);
       return null;
@@ -113,11 +131,19 @@ export const useBitcoin = (mintUrl?: string) => {
     isPayingRef.current = true;
     setPaying(true);
     try {
-      const txid = await executeOnChainSendBark(estimate.bridging_invoice, address, estimate.amount, targetMint);
+      const txid = await executeOnChainSendFixedFloat(
+        estimate.bridging_invoice,
+        address,
+        estimate.amount,
+        targetMint,
+        estimate.order_id,
+        estimate.order_token
+      );
       await refreshWallet();
       return { txid };
     } catch (e: any) {
       toast.error(`On-Chain send failed: ${e.message || e}`);
+      await refreshWallet();
       return null;
     } finally {
       setPaying(false);

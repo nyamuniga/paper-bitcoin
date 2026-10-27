@@ -83,8 +83,6 @@ export const Auth = () => {
     setShowConfirmReset,
     generatedMnemonic,
     setGeneratedMnemonic,
-    generatedBarkMnemonic,
-    setGeneratedBarkMnemonic,
     triggerError,
     unlockWallet,
     createWallet,
@@ -101,10 +99,8 @@ export const Auth = () => {
     return (
       <RecoveryPhraseDisplay
         mnemonic={generatedMnemonic}
-        barkMnemonic={generatedBarkMnemonic}
         onSaved={() => {
           setGeneratedMnemonic('');
-          setGeneratedBarkMnemonic('');
         }}
       />
     );

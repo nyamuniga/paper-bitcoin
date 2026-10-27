@@ -1,6 +1,6 @@
 [package]
 name = "bitnotes"
-version = "0.1.10"
+version = "0.1.11"
 description = "Physical cashu system"
 authors = ["you"]
 edition = "2021"
@@ -41,11 +41,12 @@ svg2pdf = "0.13.0"
 base45 = "3.2.0"
 ciborium = "0.2.2"
 hex.workspace = true
+hmac.workspace = true
+sha2.workspace = true
 tauri-plugin-http = "2"
 tauri-plugin-store = "2.4.4"
 nostr-sdk = { version = "0.44.1", features = ["nip04", "nip47"] }
 lightning-invoice = "0.34.1"
-bark-wallet = { version = "0.6.1", default-features = false, features = ["rand", "sqlite-bundled", "native", "tls-webpki-roots", "bitcoind-rpc"] }
 bip39 = { version = "2.2.2", features = ["rand"] }
 bitcoin = "0.32.102"
 rand.workspace = true
