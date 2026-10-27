@@ -105,18 +105,29 @@ impl WalletState {
         }
     }
 
-    pub fn heal_corrupt_proofs(&mut self) {
+    pub fn heal_corrupt_proofs(&mut self) -> u64 {
         use ecash_core::dhke::{point_from_hex, verify_dleq, BlindingSession};
         use ecash_core::derivation::TokenDerivation;
 
         let mut deriv = match TokenDerivation::from_hex(&self.seed_hex) {
             Ok(d) => d,
-            Err(_) => return,
+            Err(_) => return 0,
         };
-        
-        // Pre-compute all sessions up to current derivation index + some buffer
-        let mut all_sessions = Vec::new();
-        let max_index = self.derivation_index + 100;
+
+        // Determine max derivation index from all proofs and the current counter
+        let max_proof_idx = self
+            .proofs
+            .values()
+            .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
+            .max()
+            .unwrap_or(0);
+        let max_index = std::cmp::max(
+            std::cmp::max(self.derivation_index, max_proof_idx) + 150,
+            300,
+        );
+
+        // Pre-compute all sessions up to max_index
+        let mut all_sessions = Vec::with_capacity(max_index as usize);
         for _ in 0..max_index {
             let idx = deriv.index;
             let secret = deriv.next_secret();
@@ -132,21 +143,44 @@ impl WalletState {
             };
 
             for p in proofs.iter_mut() {
-                // First, check if it's already perfectly valid.
-                let is_valid = if let (Some(c_p_str), Some(b_p_str), Some(dleq), Some(mint_pk_str)) = (&p.c_prime, &p.b_prime, &p.dleq, keys_map.get(&p.amount)) {
-                    if let (Ok(c_p), Ok(b_p), Ok(mint_pk)) = (point_from_hex(c_p_str), point_from_hex(b_p_str), point_from_hex(mint_pk_str)) {
-                        verify_dleq(&mint_pk, &c_p, &b_p, dleq)
-                    } else { false }
-                } else { true }; // If missing data, we can't heal, assume valid or leave it.
+                let mint_pk_str = match keys_map.get(&p.amount) {
+                    Some(k) => k,
+                    None => continue,
+                };
+                let mint_pk = match point_from_hex(mint_pk_str) {
+                    Ok(pk) => pk,
+                    Err(_) => continue,
+                };
 
-                if !is_valid {
-                    // It's corrupt! Let's find the correct session.
-                    if let (Some(c_p_str), Some(dleq), Some(mint_pk_str)) = (&p.c_prime, &p.dleq, keys_map.get(&p.amount)) {
-                        if let (Ok(c_p), Ok(mint_pk)) = (point_from_hex(c_p_str), point_from_hex(mint_pk_str)) {
+                let mut needs_healing = false;
+                if let (Some(c_p_str), Some(dleq)) = (&p.c_prime, &p.dleq) {
+                    if let Ok(c_p) = point_from_hex(c_p_str) {
+                        let sess = BlindingSession::new(&p.secret);
+                        let b_prime_valid = p.b_prime.as_ref() == Some(&sess.b_prime_hex());
+                        let dleq_valid = verify_dleq(&mint_pk, &c_p, &sess.b_prime, dleq);
+                        let unblinded = sess.unblind(&c_p, &mint_pk, p.amount, &p.id, Some(dleq.clone()));
+                        let c_valid = unblinded.c == p.c;
+
+                        if !b_prime_valid || !dleq_valid || !c_valid {
+                            needs_healing = true;
+                        }
+                    } else {
+                        needs_healing = true;
+                    }
+                }
+
+                if needs_healing {
+                    if let (Some(c_p_str), Some(dleq)) = (&p.c_prime, &p.dleq) {
+                        if let Ok(c_p) = point_from_hex(c_p_str) {
                             for (idx, sess) in &all_sessions {
                                 if verify_dleq(&mint_pk, &c_p, &sess.b_prime, dleq) {
-                                    tracing::info!("Auto-healed proof for amount {}! Restored from secret idx {}", p.amount, idx);
-                                    let mut new_proof = sess.unblind(&c_p, &mint_pk, p.amount, &p.id, Some(dleq.clone()));
+                                    tracing::info!(
+                                        "Auto-healed proof for amount {}! Restored from secret idx {}",
+                                        p.amount,
+                                        idx
+                                    );
+                                    let mut new_proof =
+                                        sess.unblind(&c_p, &mint_pk, p.amount, &p.id, Some(dleq.clone()));
                                     new_proof.derivation_index = *idx;
                                     *p = new_proof;
                                     healed_count += 1;
@@ -158,10 +192,11 @@ impl WalletState {
                 }
             }
         }
-        
+
         if healed_count > 0 {
             tracing::info!("Successfully auto-healed {} corrupted proofs.", healed_count);
         }
+        healed_count
     }
 
     pub fn remove_mint(&mut self, mint_url: &str) -> Result<()> {

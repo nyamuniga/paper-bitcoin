@@ -70,38 +70,46 @@ export const CleanWalletModal: React.FC<CleanWalletModalProps> = ({
   if (!isOpen) return null;
 
   const renderLogLine = (line: string, index: number) => {
-    const isRestoreRequest = line.includes('Requesting restore of');
-    const isRestored = line.includes('Restored') && line.includes('unspent proofs');
-    const isNoTokens = line.includes('No tokens found') || line.includes('No unspent proofs');
-    const isRemoved = line.includes('Removed') && line.includes('spent proofs');
-    const isAdvanced = line.includes('Derivation index advanced') || line.includes('Synchronized');
+    const isRestoreRequest = line.includes('Requesting restore of') || line.includes('Scanning');
+    const isHealed = line.includes('Auto-healed') || line.includes('Healed') || line.includes('healed');
+    const isRestored = (line.includes('Restored') || line.includes('Recovered') || line.includes('Completed restore')) && (line.includes('unspent') || line.includes('proofs') || line.includes('sats'));
+    const isNoTokens = line.includes('No tokens found') || line.includes('No unspent proofs') || line.includes('No new unspent');
+    const isRemoved = line.includes('Removed') && (line.includes('spent') || line.includes('pending'));
+    const isAdvanced = line.includes('Derivation index') || line.includes('Synchronized') || line.includes('Synchronizing');
     const isSuccess = line.includes('successfully') || line.includes('Wallet clean complete');
-    const isChecking = line.includes('Checking');
+    const isChecking = line.includes('Checking') || line.includes('Verifying');
+    const isWarning = line.includes('Warning');
 
     let textColor = 'text-on-surface/85';
     let icon = <Terminal size={13} className="text-on-surface-variant/60 shrink-0 mt-0.5" />;
 
-    if (isRestoreRequest) {
-      textColor = 'text-secondary/95 font-medium';
-      icon = <Globe size={13} className="text-secondary shrink-0 mt-0.5 animate-pulse" />;
+    if (isSuccess) {
+      textColor = 'text-primary font-bold';
+      icon = <Sparkles size={13} className="text-primary shrink-0 mt-0.5" />;
+    } else if (isHealed) {
+      textColor = 'text-primary font-semibold';
+      icon = <Sparkles size={13} className="text-primary shrink-0 mt-0.5 animate-pulse" />;
     } else if (isRestored) {
       textColor = 'text-secondary font-bold';
       icon = <CheckCircle2 size={13} className="text-secondary shrink-0 mt-0.5" />;
-    } else if (isNoTokens) {
-      textColor = 'text-on-surface-variant/50';
-      icon = <MinusCircle size={13} className="text-on-surface-variant/40 shrink-0 mt-0.5" />;
+    } else if (isRestoreRequest) {
+      textColor = 'text-secondary/95 font-medium';
+      icon = <Globe size={13} className="text-secondary shrink-0 mt-0.5 animate-pulse" />;
     } else if (isRemoved) {
       textColor = 'text-error font-medium';
       icon = <Trash2 size={13} className="text-error/80 shrink-0 mt-0.5" />;
+    } else if (isWarning) {
+      textColor = 'text-amber-400 font-medium';
+      icon = <AlertTriangle size={13} className="text-amber-400 shrink-0 mt-0.5" />;
     } else if (isAdvanced) {
       textColor = 'text-primary font-semibold';
       icon = <Zap size={13} className="text-primary shrink-0 mt-0.5" />;
-    } else if (isSuccess) {
-      textColor = 'text-primary font-bold';
-      icon = <Sparkles size={13} className="text-primary shrink-0 mt-0.5" />;
     } else if (isChecking) {
       textColor = 'text-on-surface-variant';
       icon = <RefreshCw size={13} className="text-on-surface-variant/70 shrink-0 mt-0.5 animate-spin" />;
+    } else if (isNoTokens) {
+      textColor = 'text-on-surface-variant/50';
+      icon = <MinusCircle size={13} className="text-on-surface-variant/40 shrink-0 mt-0.5" />;
     }
 
     return (
