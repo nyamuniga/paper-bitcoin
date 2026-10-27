@@ -358,9 +358,11 @@ pub async fn receive_ecash(
             if is_spent {
                 // The input proofs were already swapped (likely by a previous attempt whose
                 // response was lost). Try to recover the output proofs via restore.
-                println!("[receive_ecash] Input proofs already spent — attempting restore for {}", mint_url);
-                let restore_result = ecash_wallet::restore::restore_from_mints(
-                    &mut w_state, &path, &passphrase, vec![mint_url.clone()], None
+                println!("[receive_ecash] Input proofs already spent — attempting scoped restore for {}", mint_url);
+                let start_idx = w_state.derivation_index.saturating_sub(30);
+                let end_idx = w_state.derivation_index + 10;
+                let restore_result = ecash_wallet::restore::restore_from_mints_range(
+                    &mut w_state, &path, &passphrase, vec![mint_url.clone()], start_idx, end_idx, None
                 ).await;
 
                 let total_restored = restore_result.unwrap_or(0);

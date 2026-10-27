@@ -8,7 +8,6 @@ import { TransactionDetailsModal } from '../components/history/TransactionDetail
 import { useTransactionStore } from '../store/transactionStore';
 import { useWalletStore } from '../store/wallet';
 import { AppPhase } from '../types/momo';
-import { syncBarkVutxos } from '../services/barkService';
 
 
 import { useNavigate } from 'react-router-dom';
@@ -34,7 +33,6 @@ export default function History() {
     handleRetryReceiveEcash
   } = useHistory();
   
-  const [isSyncingBark, setIsSyncingBark] = useState(false);
 
   const momoHistory = useTransactionStore((state) => state.history);
 
@@ -82,25 +80,17 @@ export default function History() {
         subtitle="Recent and pending activity"
         rightAction={
           <button
-            onClick={async () => {
-              setIsSyncingBark(true);
+            onClick={() => {
               fetchHistory();
-              try {
-                await syncBarkVutxos();
-              } catch (e) {
-                console.error("Failed to sync Bitcoin wallet", e);
-              } finally {
-                setIsSyncingBark(false);
-              }
             }}
-            disabled={isSyncingBark}
+            disabled={loading}
             className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all active:scale-95 border cursor-pointer ${
-              isSyncingBark
+              loading
                 ? 'bg-[#12261d] text-[#627d70] border-[#1e3c2e] opacity-50 cursor-not-allowed'
                 : 'bg-[#0c1b14] hover:bg-[#12261d] text-[#8b9e94] hover:text-[#f7f4eb] border-[#1e3c2e] shadow-sm'
             }`}
           >
-            <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${isSyncingBark ? 'animate-spin text-primary' : ''}`} />
+            <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin text-primary' : ''}`} />
           </button>
         }
       />

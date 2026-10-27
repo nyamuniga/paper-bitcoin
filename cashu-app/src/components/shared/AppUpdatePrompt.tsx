@@ -36,7 +36,7 @@ export const AppUpdatePrompt: React.FC = () => {
         if (info && info.hasUpdate) {
           setUpdateInfo(info);
         } else if (isManual) {
-          toast.success(`You are on the latest version! (${info?.currentVersion || 'v0.1.10'})`, {
+          toast.success(`You are on the latest version! (${info?.currentVersion || 'v0.1.11'})`, {
             icon: '✨',
           });
         }
@@ -54,7 +54,7 @@ export const AppUpdatePrompt: React.FC = () => {
       if (simulateUpdate) {
         setUpdateInfo({
           hasUpdate: true,
-          currentVersion: '0.1.10',
+          currentVersion: '0.1.11',
           latestVersion: '0.2.0',
           releaseName: 'v0.2.0 - Major New Release',
           releaseNotes: 'New MoMo top up & cash out features, enhanced speed.',

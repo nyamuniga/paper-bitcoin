@@ -19,6 +19,13 @@ pub async fn retry_mint(state: &mut WalletState, wallet_path: &PathBuf, passphra
     let (quote_id, outputs, blinding_sessions_hex) = match tx.tx_type {
         TransactionType::Mint(data) => (data.quote_id, data.outputs, data.blinding_sessions_hex),
         TransactionType::ReceiveLightning(data) => (data.quote_id, data.outputs, data.blinding_sessions_hex),
+        TransactionType::ReceiveOnchain(data) => {
+            if let Some(qid) = data.quote_id {
+                (qid, data.outputs, data.blinding_sessions_hex)
+            } else {
+                return Err(anyhow!("Not a mint transaction"));
+            }
+        }
         _ => return Err(anyhow!("Not a mint transaction")),
     };
 
@@ -93,7 +100,7 @@ pub enum TransactionDiff {
     RedeemSuccessRestore(Vec<String>), // mint_urls
 }
 
-async fn check_bolt11_mint_quote(
+pub async fn check_bolt11_mint_quote(
     client: &MintClient,
     quote_id: &str,
     tx_timestamp: u64,
@@ -140,7 +147,7 @@ async fn check_bolt11_mint_quote(
 
 pub async fn check_transaction_network(
     tx: &ecash_core::types::Transaction,
-    trusted_keys: Option<&std::collections::HashMap<u64, String>>
+    _trusted_keys: Option<&std::collections::HashMap<u64, String>>
 ) -> Result<TransactionDiff> {
     if tx.status != TransactionStatus::Pending {
         return Ok(TransactionDiff::NoChange);
@@ -191,13 +198,14 @@ pub async fn check_transaction_network(
                 ys.push(y);
             }
             let states = client.check_state(&ys).await.unwrap_or_default();
-            let any_spent = states.values().any(|s| s == "SPENT" || s == "PENDING");
+            let all_spent = !ys.is_empty() && states.values().all(|s| s == "SPENT");
             
-            if any_spent {
-                let spent_secrets: std::collections::HashSet<String> = send_data.proofs.iter().map(|p| p.secret.clone()).collect();
-                Ok(TransactionDiff::SendFailedRestore(vec![tx.mint_url.clone()], spent_secrets))
+            if all_spent {
+                // The recipient has redeemed all proofs: transaction is completed successfully!
+                Ok(TransactionDiff::StatusOnly(TransactionStatus::Success))
             } else {
-                Ok(TransactionDiff::StatusOnly(TransactionStatus::Failed))
+                // Proofs are still unspent or partially pending: keep as Pending
+                Ok(TransactionDiff::NoChange)
             }
         },
         TransactionType::ReceiveEcash(recv_data) => {
@@ -230,33 +238,57 @@ pub async fn check_transaction_network(
                 if !recv_data.outputs.is_empty() {
                     match client.mint_tokens(&recv_data.quote_id, recv_data.outputs.clone()).await {
                         Ok(sigs) => {
-                            let keys_to_use = if let Some(keys) = trusted_keys {
-                                keys.clone()
-                            } else {
-                                match client.fetch_keyset().await {
-                                    Ok(keyset) => {
-                                        keyset.keys
-                                    },
-                                    Err(e) => {
-                                        return Err(anyhow::anyhow!("Failed to fetch keyset: {}", e));
+                            let mut keyset_cache: std::collections::HashMap<String, crate::client::KeysetInfo> = std::collections::HashMap::new();
+
+                            // Build sessions list with (amount, secret_hex)
+                            let mut sessions: Vec<(u64, String)> = Vec::new();
+                            for (out_idx, out_val) in recv_data.outputs.iter().enumerate() {
+                                if let Some(amt) = out_val["amount"].as_u64() {
+                                    if let Some(sess_hex) = recv_data.blinding_sessions_hex.get(out_idx) {
+                                        sessions.push((amt, sess_hex.clone()));
                                     }
                                 }
-                            };
+                            }
 
                             let mut new_proofs = Vec::new();
-                            for (i, sig_val) in sigs.iter().enumerate() {
+                            for sig_val in sigs.iter() {
                                 if let (Some(amt), Some(sig_id), Some(c_str)) = (
                                     sig_val["amount"].as_u64(),
                                     sig_val["id"].as_str(),
                                     sig_val["C_"].as_str()
                                 ) {
-                                    if let (Ok(c_prime), Ok(mint_pk)) = (
-                                        ecash_core::dhke::point_from_hex(c_str),
-                                        ecash_core::dhke::point_from_hex(keys_to_use.get(&amt).unwrap_or(&"".to_string()))
-                                    ) {
-                                        if let Some(sess_hex) = recv_data.blinding_sessions_hex.get(i) {
-                                            let sess = ecash_core::dhke::BlindingSession::new(sess_hex);
-                                            let proof = sess.unblind(&c_prime, &mint_pk, amt, &sig_id.to_string(), None);
+                                    let session_pos = sessions.iter().position(|(d, _)| *d == amt);
+                                    let sess_hex = if let Some(idx) = session_pos {
+                                        let (_, s) = sessions.remove(idx);
+                                        s
+                                    } else {
+                                        continue;
+                                    };
+
+                                    let keyset = if let Some(ks) = keyset_cache.get(sig_id) {
+                                        ks.clone()
+                                    } else {
+                                        match client.fetch_keyset_by_id(sig_id).await {
+                                            Ok(ks) => {
+                                                keyset_cache.insert(sig_id.to_string(), ks.clone());
+                                                ks
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!("Failed to fetch keyset {}: {}", sig_id, e);
+                                                continue;
+                                            }
+                                        }
+                                    };
+
+                                    if let Some(mint_pk_str) = keyset.keys.get(&amt) {
+                                        if let (Ok(c_prime), Ok(mint_pk)) = (
+                                            ecash_core::dhke::point_from_hex(c_str),
+                                            ecash_core::dhke::point_from_hex(mint_pk_str)
+                                        ) {
+                                            let dleq = parse_dleq(sig_val);
+                                            let sess = ecash_core::dhke::BlindingSession::new(&sess_hex);
+                                            let mut proof = sess.unblind(&c_prime, &mint_pk, amt, sig_id, dleq);
+                                            proof.derivation_index = 0;
                                             new_proofs.push(proof);
                                         }
                                     }
@@ -267,6 +299,65 @@ pub async fn check_transaction_network(
                         Err(e) => {
                             let err_str = e.to_string();
                             if err_str.to_lowercase().contains("already signed") || err_str.to_lowercase().contains("already issued") {
+                                if let Ok((out_arr, sig_arr)) = client.restore_tokens(recv_data.outputs.clone()).await {
+                                    if !sig_arr.is_empty() {
+                                        let mut keyset_cache: std::collections::HashMap<String, crate::client::KeysetInfo> = std::collections::HashMap::new();
+                                        let mut sessions: Vec<(u64, String)> = Vec::new();
+                                        for (out_idx, out_val) in recv_data.outputs.iter().enumerate() {
+                                            if let Some(amt) = out_val["amount"].as_u64() {
+                                                if let Some(sess_hex) = recv_data.blinding_sessions_hex.get(out_idx) {
+                                                    sessions.push((amt, sess_hex.clone()));
+                                                }
+                                            }
+                                        }
+
+                                        let mut new_proofs = Vec::new();
+                                        for (_out_val, sig_val) in out_arr.iter().zip(sig_arr.iter()) {
+                                            if let (Some(amt), Some(sig_id), Some(c_str)) = (
+                                                sig_val.get("amount").and_then(|a| a.as_u64()),
+                                                sig_val.get("id").and_then(|i| i.as_str()),
+                                                sig_val.get("C_").and_then(|c| c.as_str()),
+                                            ) {
+                                                let session_pos = sessions.iter().position(|(d, _)| *d == amt);
+                                                let sess_hex = if let Some(idx) = session_pos {
+                                                    let (_, s) = sessions.remove(idx);
+                                                    s
+                                                } else {
+                                                    continue;
+                                                };
+
+                                                let keyset = if let Some(ks) = keyset_cache.get(sig_id) {
+                                                    ks.clone()
+                                                } else {
+                                                    match client.fetch_keyset_by_id(sig_id).await {
+                                                        Ok(ks) => {
+                                                            keyset_cache.insert(sig_id.to_string(), ks.clone());
+                                                            ks
+                                                        }
+                                                        Err(_) => continue,
+                                                    }
+                                                };
+
+                                                if let Some(mint_pk_str) = keyset.keys.get(&amt) {
+                                                    if let (Ok(c_prime), Ok(mint_pk)) = (
+                                                        ecash_core::dhke::point_from_hex(c_str),
+                                                        ecash_core::dhke::point_from_hex(mint_pk_str)
+                                                    ) {
+                                                        let dleq = parse_dleq(sig_val);
+                                                        let sess = ecash_core::dhke::BlindingSession::new(&sess_hex);
+                                                        let mut proof = sess.unblind(&c_prime, &mint_pk, amt, sig_id, dleq);
+                                                        proof.derivation_index = 0;
+                                                        new_proofs.push(proof);
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        if !new_proofs.is_empty() {
+                                            return Ok(TransactionDiff::ReceiveLightningSuccess(new_proofs));
+                                        }
+                                    }
+                                }
                                 return Ok(TransactionDiff::ReceiveLightningRestore(tx.mint_url.clone()));
                             }
                             return Err(anyhow::anyhow!("Mint tokens failed: {}", err_str));
@@ -281,6 +372,80 @@ pub async fn check_transaction_network(
                 return Ok(TransactionDiff::StatusOnly(TransactionStatus::Failed));
             }
 
+            Ok(TransactionDiff::NoChange)
+        },
+        TransactionType::SendOnchain(_) => {
+            Ok(TransactionDiff::NoChange)
+        },
+        TransactionType::ReceiveOnchain(recv_data) => {
+            if let Some(quote_id) = &recv_data.quote_id {
+                let (paid, expired) = check_bolt11_mint_quote(&client, quote_id, tx.timestamp).await;
+                if paid && !recv_data.outputs.is_empty() {
+                    match client.mint_tokens(quote_id, recv_data.outputs.clone()).await {
+                        Ok(sigs) => {
+                            let mut keyset_cache: std::collections::HashMap<String, crate::client::KeysetInfo> = std::collections::HashMap::new();
+                            let mut sessions: Vec<(u64, String)> = Vec::new();
+                            for (out_idx, out_val) in recv_data.outputs.iter().enumerate() {
+                                if let Some(amt) = out_val["amount"].as_u64() {
+                                    if let Some(sess_hex) = recv_data.blinding_sessions_hex.get(out_idx) {
+                                        sessions.push((amt, sess_hex.clone()));
+                                    }
+                                }
+                            }
+
+                            let mut new_proofs = Vec::new();
+                            for sig_val in sigs.iter() {
+                                if let (Some(amt), Some(sig_id), Some(c_str)) = (
+                                    sig_val["amount"].as_u64(),
+                                    sig_val["id"].as_str(),
+                                    sig_val["C_"].as_str()
+                                ) {
+                                    let session_pos = sessions.iter().position(|(d, _)| *d == amt);
+                                    let sess_hex = if let Some(idx) = session_pos {
+                                        let (_, s) = sessions.remove(idx);
+                                        s
+                                    } else {
+                                        continue;
+                                    };
+
+                                    let keyset = if let Some(ks) = keyset_cache.get(sig_id) {
+                                        ks.clone()
+                                    } else {
+                                        match client.fetch_keyset_by_id(sig_id).await {
+                                            Ok(ks) => {
+                                                keyset_cache.insert(sig_id.to_string(), ks.clone());
+                                                ks
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!("Failed to fetch keyset {}: {}", sig_id, e);
+                                                continue;
+                                            }
+                                        }
+                                    };
+
+                                    if let Some(mint_pk_str) = keyset.keys.get(&amt) {
+                                        if let (Ok(c_prime), Ok(mint_pk)) = (
+                                            ecash_core::dhke::point_from_hex(c_str),
+                                            ecash_core::dhke::point_from_hex(mint_pk_str)
+                                        ) {
+                                            let dleq = parse_dleq(sig_val);
+                                            let sess = ecash_core::dhke::BlindingSession::new(&sess_hex);
+                                            let mut proof = sess.unblind(&c_prime, &mint_pk, amt, sig_id, dleq);
+                                            proof.derivation_index = 0;
+                                            new_proofs.push(proof);
+                                        }
+                                    }
+                                }
+                            }
+                            return Ok(TransactionDiff::ReceiveLightningSuccess(new_proofs));
+                        }
+                        Err(_) => {}
+                    }
+                }
+                if expired {
+                    return Ok(TransactionDiff::StatusOnly(TransactionStatus::Failed));
+                }
+            }
             Ok(TransactionDiff::NoChange)
         },
         TransactionType::Redeem(redeem_data) => {
@@ -367,7 +532,9 @@ pub async fn apply_transaction_diff(
             if let Some(mint_proofs) = state.proofs.get_mut(&tx_mint) {
                 mint_proofs.retain(|p| !spent_secrets.contains(&p.secret));
             }
-            let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, mints, None).await;
+            let start_idx = state.derivation_index.saturating_sub(30);
+            let end_idx = state.derivation_index + 10;
+            let _ = crate::restore::restore_from_mints_range(state, wallet_path, passphrase, mints, start_idx, end_idx, None).await;
             if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
                 t.status = TransactionStatus::Failed;
             }
@@ -401,7 +568,9 @@ pub async fn apply_transaction_diff(
                     tracing::error!("[check_status] ReceiveEcash retry swap failed: {}", e);
                     let err_str = e.to_string().to_lowercase();
                     if err_str.contains("already spent") || err_str.contains("token already spent") {
-                        let total_restored = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![tx_mint.clone()], None).await.unwrap_or(0);
+                        let start_idx = state.derivation_index.saturating_sub(30);
+                        let end_idx = state.derivation_index + 10;
+                        let total_restored = crate::restore::restore_from_mints_range(state, wallet_path, passphrase, vec![tx_mint.clone()], start_idx, end_idx, None).await.unwrap_or(0);
                         if total_restored > 0 {
                             if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
                                 t.status = TransactionStatus::Success;
@@ -421,7 +590,9 @@ pub async fn apply_transaction_diff(
             }
         },
         TransactionDiff::ReceiveEcashSuccessRestore(mint_url) => {
-            let total_restored = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![mint_url], None).await.unwrap_or(0);
+            let start_idx = state.derivation_index.saturating_sub(30);
+            let end_idx = state.derivation_index + 10;
+            let total_restored = crate::restore::restore_from_mints_range(state, wallet_path, passphrase, vec![mint_url], start_idx, end_idx, None).await.unwrap_or(0);
             if total_restored > 0 {
                 if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
                     t.status = TransactionStatus::Success;
@@ -442,7 +613,9 @@ pub async fn apply_transaction_diff(
             TransactionStatus::Success
         },
         TransactionDiff::ReceiveLightningRestore(mint_url) => {
-            let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, vec![mint_url], None).await;
+            let start_idx = state.derivation_index.saturating_sub(30);
+            let end_idx = state.derivation_index + 10;
+            let _ = crate::restore::restore_from_mints_range(state, wallet_path, passphrase, vec![mint_url], start_idx, end_idx, None).await;
             if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
                 t.status = TransactionStatus::Success;
             }
@@ -453,7 +626,9 @@ pub async fn apply_transaction_diff(
             TransactionStatus::Failed
         },
         TransactionDiff::RedeemSuccessRestore(mints) => {
-            let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, mints, None).await;
+            let start_idx = state.derivation_index.saturating_sub(30);
+            let end_idx = state.derivation_index + 10;
+            let _ = crate::restore::restore_from_mints_range(state, wallet_path, passphrase, mints, start_idx, end_idx, None).await;
             if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
                 t.status = TransactionStatus::Success;
             }
@@ -510,12 +685,14 @@ pub async fn check_transaction_status_legacy(state: &mut WalletState, wallet_pat
             }
             
             let mints: Vec<String> = issue_data.allocations.iter().map(|a| a.0.clone()).collect();
-            let _ = crate::restore::restore_from_mints(state, wallet_path, passphrase, mints.clone(), None).await;
+            let start_idx = state.derivation_index.saturating_sub(30);
+            let end_idx = state.derivation_index + 10;
+            let _ = crate::restore::restore_from_mints_range(state, wallet_path, passphrase, mints.clone(), start_idx, end_idx, None).await;
             
             let mut temp_state = state.clone();
             temp_state.seed_hex = issue_data.master_seed_hex.clone();
             temp_state.derivation_index = 0;
-            let _ = crate::restore::restore_from_mints(&mut temp_state, wallet_path, passphrase, mints, None).await;
+            let _ = crate::restore::restore_from_mints_range(&mut temp_state, wallet_path, passphrase, mints, 0, 50, None).await;
             
             for (mint, proofs) in temp_state.proofs {
                 state.proofs.entry(mint).or_default().extend(proofs);

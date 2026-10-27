@@ -309,6 +309,31 @@ pub async fn swap_proofs(
                     state.save_encrypted(wallet_path, passphrase)?;
                     continue;
                 }
+
+                if err_lower.contains("already spent") || err_lower.contains("token already spent") {
+                    eprintln!("[swap_tokens] Mint reported proofs already spent. Identifying and purging dead proofs from wallet...");
+                    let input_ys: Vec<String> = inputs.iter().map(|p| {
+                        ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()))
+                    }).collect();
+                    if let Ok(states) = client.check_state(&input_ys).await {
+                        let spent_secrets: std::collections::HashSet<String> = inputs.iter().filter_map(|p| {
+                            let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()));
+                            match states.get(&y).map(|s| s.as_str()) {
+                                Some("SPENT") | Some("PENDING") => Some(p.secret.clone()),
+                                _ => None,
+                            }
+                        }).collect();
+
+                        if !spent_secrets.is_empty() {
+                            if let Some(mint_proofs) = state.proofs.get_mut(mint_url) {
+                                mint_proofs.retain(|p| !spent_secrets.contains(&p.secret));
+                            }
+                            state.save_encrypted(wallet_path, passphrase).ok();
+                            eprintln!("[swap_tokens] Automatically purged {} dead/spent proof(s) from wallet.", spent_secrets.len());
+                        }
+                    }
+                }
+
                 return Err(e);
             }
         }

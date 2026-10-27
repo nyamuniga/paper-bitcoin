@@ -4,6 +4,15 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 
 ---
 
+## [0.1.11] - 2026-10-27
+
+### ⚡ Direct On-Chain Bitcoin Swaps
+- **Seamless L1 Onboarding & Withdrawals**: Replaced legacy protocol layer with a direct on-chain swap engine supporting Bitcoin L1 send and receive.
+- **Real-Time Limit Feedback**: Added live on-chain send and receive limit indicators that dynamically validate satoshi amounts against routing capacity as the user types.
+- **BIP-21 Amount Encoding**: QR codes and payment URIs now include `?amount=` parameter so desktop wallets (Sparrow, Electrum) and mobile scanner apps automatically pre-fill the exact satoshi amount.
+- **Automatic Background Claiming**: On-chain deposit addresses automatically persist pending transactions in the wallet database, allowing background services to unblind and claim ecash tokens even if the app or modal was closed.
+- **Safe Proof Rollback**: Complete atomic rollback protection safely restores all spendable proofs back to the wallet if an outgoing payment cannot find a route.
+
 ## [0.1.10] - 2026-10-25
 
 ### 🌐 Multi-Currency Portfolio Valuation
