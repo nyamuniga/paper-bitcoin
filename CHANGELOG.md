@@ -4,6 +4,14 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 
 ---
 
+## [0.1.12] - 2026-10-27
+
+### 🛡️ Automatic Proof Self-Healing & Keyset Resolution
+- **Unverified Proof Isolation & Purge**: Implemented automated isolation and purging of corrupted or unverified ecash tokens when mints return `Token not verified` (NUT-00/NUT-03).
+- **Auto-Retrying Coin Selection**: Pre-melt swaps and Lightning payments automatically isolate faulty tokens, purge them from storage, and retry coin selection with remaining healthy proofs without interrupting the user.
+- **Accurate Keyset Public Key Lookups**: Restoring ecash tokens from inactive or historical keysets now fetches and matches public keys directly by Keyset ID (`sig_id`), preventing signature corruption from rotated keysets.
+- **Active Clean Wallet Proof Consolidation**: Clean Wallet now actively tests and consolidates proofs with mints, purging unknown keysets and broken tokens while optimizing denominations.
+
 ## [0.1.11] - 2026-10-27
 
 ### ⚡ Direct On-Chain Bitcoin Swaps
