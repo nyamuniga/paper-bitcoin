@@ -19,7 +19,7 @@ fn generate_change_denoms(max_change: u64) -> Vec<u64> {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-pub(crate) fn parse_dleq(sig: &serde_json::Value) -> Option<ecash_core::types::Dleq> {
+pub fn parse_dleq(sig: &serde_json::Value) -> Option<ecash_core::types::Dleq> {
     if let Some(d) = sig.get("dleq") {
         if let (Some(e), Some(s)) = (d.get("e").and_then(|v| v.as_str()), d.get("s").and_then(|v| v.as_str())) {
             return Some(ecash_core::types::Dleq { e: e.to_string(), s: s.to_string() });
@@ -1139,23 +1139,59 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
                 ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()))
             }).collect();
             
-            let mut valid_proofs = melt_proofs.clone();
-            if let Ok(states) = hub_client.check_state(&ys).await {
-                valid_proofs.retain(|p| {
-                    let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()));
-                    match states.get(&y).map(|s| s.as_str()) {
-                        Some("SPENT") => false,
-                        Some("UNSPENT") | Some("PENDING") => true,
-                        _ => false, // Invalid or unknown
+            let mut valid_proofs = Vec::new();
+            let mut is_pending_at_mint = false;
+
+            for attempt in 1..=4 {
+                if attempt > 1 {
+                    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                }
+                if let Ok(states) = hub_client.check_state(&ys).await {
+                    let mut unspent_found = Vec::new();
+                    let mut any_pending = false;
+                    for p in &melt_proofs {
+                        let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()));
+                        match states.get(&y).map(|s| s.as_str()) {
+                            Some("UNSPENT") => unspent_found.push(p.clone()),
+                            Some("PENDING") => any_pending = true,
+                            _ => {}
+                        }
                     }
-                });
+                    if unspent_found.len() == melt_proofs.len() {
+                        valid_proofs = unspent_found;
+                        is_pending_at_mint = false;
+                        break;
+                    }
+                    if any_pending {
+                        is_pending_at_mint = true;
+                    } else if !unspent_found.is_empty() {
+                        valid_proofs = unspent_found;
+                        is_pending_at_mint = false;
+                        break;
+                    }
+                }
             }
 
             if !valid_proofs.is_empty() {
+                println!("[pay_invoice] Safely returning {} verified UNSPENT proof(s) back to wallet.", valid_proofs.len());
                 state.proofs.entry(hub_mint.clone()).or_default().extend(valid_proofs);
+            } else if is_pending_at_mint {
+                println!("[pay_invoice] Proofs are still PENDING at {}. Not re-adding locked proofs to spendable balance.", hub_mint);
+            } else {
+                println!("[pay_invoice] Proofs were reported as SPENT or unverified by {}. Not adding to wallet balance.", hub_mint);
+            }
+
+            // Always deduplicate to ensure no duplicate ghost proofs exist
+            for (_, proofs) in state.proofs.iter_mut() {
+                let mut seen = std::collections::HashSet::new();
+                proofs.retain(|p| seen.insert(p.secret.clone()));
             }
             if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
-                tx.status = TransactionStatus::Failed;
+                if is_pending_at_mint {
+                    tx.status = TransactionStatus::Pending;
+                } else {
+                    tx.status = TransactionStatus::Failed;
+                }
             }
             state.save_encrypted(wallet_path, passphrase).ok();
             return Err(anyhow!("Payment failed: {}", e));
@@ -1197,7 +1233,24 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
             state.proofs.entry(hub_mint.clone()).or_default().extend(new_proofs);
         }
     } else {
-        state.proofs.entry(hub_mint.clone()).or_default().extend(melt_proofs);
+        let ys: Vec<String> = melt_proofs.iter().map(|p| {
+            ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()))
+        }).collect();
+        let mut unspent_proofs = Vec::new();
+        if let Ok(states) = hub_client.check_state(&ys).await {
+            for p in melt_proofs {
+                let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()));
+                if states.get(&y).map(|s| s.as_str()) == Some("UNSPENT") {
+                    unspent_proofs.push(p);
+                }
+            }
+        }
+        if !unspent_proofs.is_empty() {
+            println!("[pay_invoice] Safely returning {} verified UNSPENT proof(s) back to wallet.", unspent_proofs.len());
+            state.proofs.entry(hub_mint.clone()).or_default().extend(unspent_proofs);
+        } else {
+            println!("[pay_invoice] Proofs were reported as SPENT or PENDING by {}. Not adding unverified tokens to spendable balance.", hub_mint);
+        }
     }
 
     if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
@@ -1211,6 +1264,7 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     state.save_encrypted(wallet_path, passphrase).ok();
 
     if !paid {
+        println!("[pay_invoice] Lightning payment failed on {}: mint could not find a route to invoice or payment expired. Proofs refunded.", hub_mint);
         return Err(anyhow!("Lightning Network payment failed. The mint could not find a route or the invoice expired. Your funds have been refunded."));
     }
 

@@ -24,7 +24,9 @@ export const TransactionCard = ({ tx, onClick }: TransactionCardProps) => {
   const isSend = 'Send' in tx.tx_type;
   const isReceiveEcash = 'ReceiveEcash' in tx.tx_type;
   const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
-  const isReceive = isReceiveEcash || isReceiveLightning;
+  const isSendOnchain = 'SendOnchain' in tx.tx_type;
+  const isReceiveOnchain = 'ReceiveOnchain' in tx.tx_type;
+  const isReceive = isReceiveEcash || isReceiveLightning || isReceiveOnchain;
 
   const isInflow = isMint || isRedeem || isReceive || tx.momo_direction === 'RWF_TO_SATS';
 
@@ -50,10 +52,12 @@ export const TransactionCard = ({ tx, onClick }: TransactionCardProps) => {
     if (isMint) return 'Received Lightning';
     if (isReceiveEcash) return 'Received eCash';
     if (isReceiveLightning) return 'Received Lightning';
+    if (isReceiveOnchain) return 'Received Bitcoin';
     if (isIssue) return 'Exported Note';
     if (isRedeem) return 'Redeemed Note';
     if (isSend) return 'Sent eCash';
     if (isMelt) return 'Sent Lightning';
+    if (isSendOnchain) return 'Sent Bitcoin';
     return 'Transaction';
   };
 

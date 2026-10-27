@@ -16,16 +16,30 @@ pub async fn restore_from_mints(
     mint_urls: Vec<String>,
     progress_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> Result<u64> {
+    let scan_limit = std::cmp::max(100_u64, state.derivation_index + 50);
+    restore_from_mints_range(state, wallet_path, passphrase, mint_urls, 0, scan_limit, progress_tx).await
+}
+
+pub async fn restore_from_mints_range(
+    state: &mut WalletState,
+    wallet_path: &PathBuf,
+    passphrase: &str,
+    mint_urls: Vec<String>,
+    start_idx: u64,
+    end_idx: u64,
+    progress_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+) -> Result<u64> {
     let mut total_restored = 0;
     let mut max_used_index = -1_i64;
-    
-    // We scan up to max(100, derivation_index + 50) derivation indices to ensure newly minted/swapped proofs are checked.
-    let scan_limit = std::cmp::max(100_u64, state.derivation_index + 50);
-    
-    for raw_url in mint_urls {
+
+    for (mint_idx, raw_url) in mint_urls.into_iter().enumerate() {
+        if mint_idx > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        }
+
         let mint_url = crate::state::normalize_mint_url(&raw_url);
         if mint_url.is_empty() { continue; }
-        
+
         let client = MintClient::new(&mint_url);
         let keyset = match client.fetch_keyset().await {
             Ok(ks) => ks,
@@ -35,29 +49,28 @@ pub async fn restore_from_mints(
             }
         };
 
+        // Filter denominations up to 1M sats (~$650 USD). Eliminates huge unused denominations (2M to 67M sats)
+        // to dramatically reduce output count while covering all real-world ecash splits.
         let mut target_amounts: Vec<u64> = keyset
             .keys
             .keys()
-            .filter(|&&amt| amt <= 67_108_864)
+            .filter(|&&amt| amt <= 1_048_576)
             .cloned()
             .collect();
         target_amounts.sort_unstable();
 
         let mut output_json = Vec::new();
         // Keep track of session info to unblind later.
-        // We key by the hex of B_ and the amount, since the mint will return C_ for that B_
         let mut session_map = std::collections::HashMap::new();
 
-        // Generate secrets for indices 0..scan_limit
-        for idx in 0..scan_limit {
+        // Generate secrets for indices start_idx..=end_idx
+        for idx in start_idx..=end_idx {
             let mut deriv = TokenDerivation::from_hex(&state.seed_hex)?;
             deriv.index = idx;
             let secret = deriv.next_secret();
             let sess = BlindingSession::new(&secret);
             let b_hex = sess.b_prime_hex();
 
-            // We don't know which amount this index was originally used for.
-            // So we request a restore for standard amounts for this B_.
             for &amt in &target_amounts {
                 output_json.push(serde_json::json!({
                     "amount": amt,
@@ -65,7 +78,7 @@ pub async fn restore_from_mints(
                     "B_": b_hex.clone()
                 }));
                 session_map.insert(
-                    format!("{}_{}", b_hex, amt), 
+                    format!("{}_{}", b_hex, amt),
                     (secret.clone(), idx)
                 );
             }
@@ -78,45 +91,27 @@ pub async fn restore_from_mints(
 
         let mut out_arr = Vec::new();
         let mut sig_arr = Vec::new();
-        
-        use futures::StreamExt;
-        
-        // Chunk size 200 is small enough for mobile proxy limits (~30KB),
-        // and concurrency of 5 prevents dropping the network while speeding it up.
-        let chunks: Vec<_> = output_json.chunks(200).map(|c| c.to_vec()).collect();
-        let mut stream = futures::stream::iter(chunks)
-            .map(|chunk| {
-                let client = client.clone();
-                let mint_url = mint_url.clone();
-                async move {
-                    let mut retries = 3;
-                    loop {
-                        match client.restore_tokens(chunk.clone()).await {
-                            Ok((o, s)) => return Some((o, s)),
-                            Err(e) => {
-                                let err_lower = e.to_string().to_lowercase();
-                                if err_lower.contains("404") || err_lower.contains("not found") || err_lower.contains("unsupported") {
-                                    println!("Mint {} does not support /v1/restore (NUT-13)", mint_url);
-                                    return None;
-                                }
-                                retries -= 1;
-                                if retries == 0 {
-                                    println!("Restore failed for chunk on {} after 3 retries: {}", mint_url, e);
-                                    return None;
-                                }
-                                println!("Restore chunk failed on {}, retrying... ({})", mint_url, e);
-                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                            }
-                        }
-                    }
-                }
-            })
-            .buffer_unordered(5); // 5 concurrent requests
 
-        while let Some(res) = stream.next().await {
-            if let Some((o, s)) = res {
-                out_arr.extend(o);
-                sig_arr.extend(s);
+        // Process chunks sequentially with 150ms delay between chunks to avoid rate limiting
+        let chunks: Vec<_> = output_json.chunks(100).map(|c| c.to_vec()).collect();
+        for (chunk_idx, chunk) in chunks.into_iter().enumerate() {
+            if chunk_idx > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            }
+
+            match client.restore_tokens(chunk).await {
+                Ok((o, s)) => {
+                    out_arr.extend(o);
+                    sig_arr.extend(s);
+                }
+                Err(e) => {
+                    let err_lower = e.to_string().to_lowercase();
+                    if err_lower.contains("404") || err_lower.contains("not found") || err_lower.contains("unsupported") {
+                        println!("Mint {} does not support /v1/restore (NUT-13)", mint_url);
+                        break;
+                    }
+                    println!("Restore chunk failed on {}: {}", mint_url, e);
+                }
             }
         }
 
@@ -127,9 +122,9 @@ pub async fn restore_from_mints(
             println!("No tokens found on {}", mint_url);
             continue;
         }
-        
+
         let _ = std::fs::write("/tmp/cashu_restore_sigs.json", serde_json::to_string_pretty(&sig_arr).unwrap_or_default());
-        
+
         let mut restored_proofs = Vec::new();
         let mut ys = Vec::new();
 
@@ -148,7 +143,7 @@ pub async fn restore_from_mints(
                             let mut proof = sess.unblind(&c_prime, &mint_pk, amt, sig_id, dleq);
                             proof.derivation_index = *idx;
                             max_used_index = std::cmp::max(max_used_index, *idx as i64);
-                            
+
                             let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(proof.secret.as_bytes()));
                             ys.push(y);
                             restored_proofs.push(proof);
@@ -168,41 +163,58 @@ pub async fn restore_from_mints(
             continue;
         }
 
-        // Check if spent in chunks
+        // Check if spent in chunks with 150ms delay
         let mut states = std::collections::HashMap::new();
-        for chunk in ys.chunks(100) {
+        for (chunk_idx, chunk) in ys.chunks(100).enumerate() {
+            if chunk_idx > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            }
             if let Ok(st) = client.check_state(chunk).await {
                 states.extend(st);
             }
         }
-        
+
+        let existing_secrets: std::collections::HashSet<String> = state.proofs
+            .get(&mint_url)
+            .map(|ps| ps.iter().map(|p| p.secret.clone()).collect())
+            .unwrap_or_default();
+
         let mut unspent = Vec::new();
         for proof in restored_proofs {
             let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(proof.secret.as_bytes()));
             if states.get(&y).map(|s| s.as_str()) == Some("UNSPENT") {
-                total_restored += proof.amount;
-                unspent.push(proof);
+                // Only keep and count proofs that do NOT already exist in the wallet
+                if !existing_secrets.contains(&proof.secret) {
+                    total_restored += proof.amount;
+                    unspent.push(proof);
+                }
             }
         }
-        
+
         if !unspent.is_empty() {
+            let restored_amt: u64 = unspent.iter().map(|p| p.amount).sum();
             if let Some(tx) = &progress_tx {
-                tx.send(format!("Restored {} unspent proofs from {}", unspent.len(), mint_url)).ok();
+                tx.send(format!("Restored {} new unspent proofs ({} sats) from {}", unspent.len(), restored_amt, mint_url)).ok();
             }
-            println!("Restored {} unspent proofs from {}", unspent.len(), mint_url);
+            println!("Restored {} new unspent proofs ({} sats) from {}", unspent.len(), restored_amt, mint_url);
             state.proofs.entry(mint_url.clone()).or_default().extend(unspent);
             if !state.mints.contains(&mint_url) {
                 state.mints.push(mint_url.clone());
             }
         } else {
             if let Some(tx) = &progress_tx {
-                tx.send(format!("No unspent proofs found on {}", mint_url)).ok();
+                tx.send(format!("No new unspent proofs found on {}", mint_url)).ok();
             }
         }
     }
-    
+
+    // Global deduplication across all mints
+    for (_, proofs) in state.proofs.iter_mut() {
+        let mut seen = std::collections::HashSet::new();
+        proofs.retain(|p| seen.insert(p.secret.clone()));
+    }
+
     if max_used_index >= 0 {
-        // Update the global derivation index to the max seen + 1 so we don't reuse
         state.derivation_index = std::cmp::max(state.derivation_index, (max_used_index as u64) + 1);
         state.save_encrypted(wallet_path, passphrase)?;
     }
@@ -228,19 +240,26 @@ pub async fn clean_wallet_proofs(
     progress_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> Result<CleanWalletResult> {
     let mut total_removed = 0;
-    
-    // 1. We need to iterate over all mints and their proofs to remove SPENT proofs
+
+    // 0. Deduplicate proofs across all mints and auto-heal corrupt proofs
+    for (_, proofs) in state.proofs.iter_mut() {
+        let mut seen = std::collections::HashSet::new();
+        proofs.retain(|p| seen.insert(p.secret.clone()));
+    }
+    state.heal_corrupt_proofs();
+
+    // 1. Iterate over all mints and their proofs to remove SPENT proofs
     if let Some(tx) = &progress_tx {
         tx.send("Checking wallet proof states with mints...".to_string()).ok();
     }
     for (mint_url, proofs) in state.proofs.clone().into_iter() {
         if proofs.is_empty() { continue; }
-        
+
         if let Some(tx) = &progress_tx {
             tx.send(format!("Checking {} local proof(s) on {}", proofs.len(), mint_url)).ok();
         }
         let client = MintClient::new(&mint_url);
-        
+
         // Collect Ys
         let mut ys = Vec::new();
         let mut y_to_secret = std::collections::HashMap::new();
@@ -249,26 +268,29 @@ pub async fn clean_wallet_proofs(
             ys.push(y.clone());
             y_to_secret.insert(y, p.secret.clone());
         }
-        
-        // Check state in chunks
+
+        // Check state in chunks with 150ms delay
         let mut states = std::collections::HashMap::new();
-        for chunk in ys.chunks(100) {
+        for (chunk_idx, chunk) in ys.chunks(100).enumerate() {
+            if chunk_idx > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            }
             if let Ok(st) = client.check_state(chunk).await {
                 states.extend(st);
             }
         }
-        
-        // Find spent secrets
+
+        // Find spent or stuck pending secrets
         let mut spent_secrets = std::collections::HashSet::new();
         for (y, s) in states {
-            if s == "SPENT" {
+            if s == "SPENT" || s == "PENDING" {
                 if let Some(secret) = y_to_secret.get(&y) {
                     spent_secrets.insert(secret.clone());
                 }
             }
         }
-        
-        // Remove spent proofs from state
+
+        // Remove spent/pending proofs from state
         if !spent_secrets.is_empty() {
             let mut removed_for_mint = 0;
             if let Some(mint_proofs) = state.proofs.get_mut(&mint_url) {
@@ -283,7 +305,7 @@ pub async fn clean_wallet_proofs(
                 });
             }
             if let Some(tx) = &progress_tx {
-                tx.send(format!("Removed {} spent proofs ({} sats) on {}", spent_secrets.len(), removed_for_mint, mint_url)).ok();
+                tx.send(format!("Removed {} spent/pending proofs ({} sats) on {}", spent_secrets.len(), removed_for_mint, mint_url)).ok();
             }
         }
     }
@@ -317,28 +339,34 @@ pub async fn clean_wallet_proofs(
         .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
         .max()
         .unwrap_or(0);
-    
+
     if max_proof_idx > 0 && state.derivation_index <= max_proof_idx {
         state.derivation_index = max_proof_idx + 1;
     }
-    
-    // 4. Run restore_from_mints to patch derivation_index and recover any missing unspent proofs
+
+    // 4. Run scoped restore to recover any recently unspent proofs that might have dropped mid-flight
     let mint_urls = state.mints.clone();
-    if let Some(tx) = &progress_tx {
-        tx.send(format!("Scanning {} known mint(s) to recover tokens...", mint_urls.len())).ok();
-    }
-    let total_restored = restore_from_mints(state, wallet_path, passphrase, mint_urls, progress_tx.clone()).await.unwrap_or(0);
+    let total_restored = if !mint_urls.is_empty() {
+        let start_idx = state.derivation_index.saturating_sub(40);
+        let end_idx = state.derivation_index + 15;
+        if let Some(tx) = &progress_tx {
+            tx.send(format!("Scanning {} known mint(s) for dropped tokens (indices {}..{})...", mint_urls.len(), start_idx, end_idx)).ok();
+        }
+        restore_from_mints_range(state, wallet_path, passphrase, mint_urls, start_idx, end_idx, progress_tx.clone()).await.unwrap_or(0)
+    } else {
+        0
+    };
 
-    // 5. Advance derivation index with a safety buffer (+25)
-    // This leaps past any previously signed outputs at or near the current counter,
-    // ensuring subsequent transactions will NEVER collide with "outputs already signed".
-    let base_idx = std::cmp::max(state.derivation_index, max_proof_idx + 1);
-    state.derivation_index = base_idx + 25;
-    if let Some(tx) = &progress_tx {
-        tx.send(format!("Derivation index advanced to {} (+25 safety buffer)", state.derivation_index)).ok();
+    // 5. Advance or normalize derivation index safely
+    let min_safe_idx = max_proof_idx + 1;
+    if state.derivation_index < min_safe_idx || state.derivation_index > min_safe_idx + 25 {
+        state.derivation_index = min_safe_idx + 10;
+        if let Some(tx) = &progress_tx {
+            tx.send(format!("Derivation index safely normalized to {}", state.derivation_index)).ok();
+        }
     }
 
-    // 6. Deduplicate proofs (since restore_from_mints might have added ones we already had)
+    // 6. Deduplicate proofs (since restore might have added ones we already had)
     for (_, proofs) in state.proofs.iter_mut() {
         let mut seen = std::collections::HashSet::new();
         proofs.retain(|p| {
@@ -350,10 +378,10 @@ pub async fn clean_wallet_proofs(
             }
         });
     }
-    
+
     // 7. Save to disk with the fixed derivation index and clean proofs
     state.save_encrypted(wallet_path, passphrase)?;
-    
+
     if let Some(tx) = &progress_tx {
         tx.send(format!("Wallet cleaned successfully! (+{} sats restored, -{} sats spent purged)", total_restored, total_removed)).ok();
     }

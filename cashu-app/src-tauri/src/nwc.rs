@@ -424,8 +424,10 @@ pub async fn spawn_nwc_listener(app: AppHandle) -> Result<()> {
                                     ecash_core::types::TransactionType::Mint(_) => "incoming",
                                     ecash_core::types::TransactionType::ReceiveLightning(_) => "incoming",
                                     ecash_core::types::TransactionType::ReceiveEcash(_) => "incoming",
+                                    ecash_core::types::TransactionType::ReceiveOnchain(_) => "incoming",
                                     ecash_core::types::TransactionType::Melt(_) => "outgoing",
                                     ecash_core::types::TransactionType::Send(_) => "outgoing",
+                                    ecash_core::types::TransactionType::SendOnchain(_) => "outgoing",
                                     ecash_core::types::TransactionType::Issue(_) => "incoming",
                                     ecash_core::types::TransactionType::Redeem(_) => "incoming",
                                 };
@@ -434,8 +436,10 @@ pub async fn spawn_nwc_listener(app: AppHandle) -> Result<()> {
                                     ecash_core::types::TransactionType::Mint(_) => "Minted from Lightning",
                                     ecash_core::types::TransactionType::ReceiveLightning(_) => "Received Lightning",
                                     ecash_core::types::TransactionType::ReceiveEcash(_) => "Received eCash",
+                                    ecash_core::types::TransactionType::ReceiveOnchain(_) => "Received Bitcoin",
                                     ecash_core::types::TransactionType::Melt(_) => "Paid Lightning Invoice",
                                     ecash_core::types::TransactionType::Send(_) => "Sent eCash",
+                                    ecash_core::types::TransactionType::SendOnchain(_) => "Sent Bitcoin",
                                     ecash_core::types::TransactionType::Issue(_) => "Issued eCash",
                                     ecash_core::types::TransactionType::Redeem(_) => "Redeemed eCash",
                                 };
