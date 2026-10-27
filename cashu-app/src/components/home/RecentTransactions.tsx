@@ -34,17 +34,20 @@ export const RecentTransactions: React.FC = () => {
     const isSend = 'Send' in tx.tx_type;
     const isReceiveEcash = 'ReceiveEcash' in tx.tx_type;
     const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
-
+    const isSendOnchain = 'SendOnchain' in tx.tx_type;
+    const isReceiveOnchain = 'ReceiveOnchain' in tx.tx_type;
 
     if (tx.momo_direction === 'RWF_TO_SATS') return 'MoMo Top Up';
     if (tx.momo_direction === 'SATS_TO_RWF') return 'MoMo Cash Out';
     if (isMint) return 'Received Lightning';
     if (isReceiveEcash) return 'Received eCash';
     if (isReceiveLightning) return 'Received Lightning';
+    if (isReceiveOnchain) return 'Received Bitcoin';
     if (isIssue) return 'Exported Note';
     if (isRedeem) return 'Redeemed Note';
     if (isSend) return 'Sent eCash';
     if (isMelt) return 'Sent Lightning';
+    if (isSendOnchain) return 'Sent Bitcoin';
     return 'Transaction';
   };
 
@@ -55,7 +58,7 @@ export const RecentTransactions: React.FC = () => {
     if (tx.status === 'Failed' || tx.status === 'FailedMintError') {
       return <X className="w-4 h-4 text-[#f87171] stroke-[2.5]" />;
     }
-    const isReceive = 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
+    const isReceive = 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || 'ReceiveOnchain' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
     if (isReceive) {
       return <ArrowDownLeft className="w-4 h-4 text-[#34d399] stroke-[2.5]" />;
     }
@@ -72,7 +75,7 @@ export const RecentTransactions: React.FC = () => {
     if (tx.status === 'Failed' || tx.status === 'FailedMintError') {
       return 'bg-[#f87171]/10 border-[#f87171]/20';
     }
-    const isInflow = 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
+    const isInflow = 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || 'ReceiveOnchain' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
     if (isInflow) return 'bg-[#0e291d] border-[#1c442f]';
     return 'bg-[#10241b] border-[#1b3829]';
   };
@@ -82,7 +85,7 @@ export const RecentTransactions: React.FC = () => {
   };
 
   const getTxSign = (tx: Transaction) => {
-    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS') return '+';
+    if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || 'ReceiveOnchain' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS') return '+';
     if ('Issue' in tx.tx_type) return '';
     return '-';
   };

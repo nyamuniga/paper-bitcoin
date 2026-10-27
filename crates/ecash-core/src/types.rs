@@ -254,6 +254,27 @@ pub struct ReceiveLightningTransactionData {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SendOnchainTransactionData {
+    pub txid: Option<String>,
+    pub address: String,
+    pub amount: u64,
+    pub ark_fee: u64,
+    pub cashu_fee: u64,
+    pub bridging_invoice: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReceiveOnchainTransactionData {
+    pub address: String,
+    pub txid: Option<String>,
+    pub quote_id: Option<String>,
+    #[serde(default)]
+    pub outputs: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub blinding_sessions_hex: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransactionType {
     Mint(MintTransactionData),
     Melt(MeltTransactionData),
@@ -262,6 +283,8 @@ pub enum TransactionType {
     Send(SendTransactionData),
     ReceiveEcash(ReceiveEcashTransactionData),
     ReceiveLightning(ReceiveLightningTransactionData),
+    SendOnchain(SendOnchainTransactionData),
+    ReceiveOnchain(ReceiveOnchainTransactionData),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

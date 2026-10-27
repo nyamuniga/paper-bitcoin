@@ -48,6 +48,10 @@ export interface SovereignStampOverlayProps {
   onDismiss?: () => void;
   /** If provided, pending state offers "Continue in background". */
   onBackground?: () => void;
+  /** Onchain transaction ID if available. */
+  txid?: string;
+  /** Callback to view transaction on mempool.space. */
+  onViewMempool?: () => void;
   soundEnabled?: boolean;
   hapticEnabled?: boolean;
 }
@@ -212,6 +216,8 @@ const OverlayBody: React.FC<BodyProps> = ({
   onRetry,
   onDismiss,
   onBackground,
+  txid,
+  onViewMempool,
   soundEnabled = true,
   hapticEnabled = true,
 }) => {
@@ -741,7 +747,7 @@ const OverlayBody: React.FC<BodyProps> = ({
             )}
 
             {/* Success receipt */}
-            {status === 'success' && (recipient || sender || memo) && (
+            {status === 'success' && (recipient || sender || memo || txid) && (
               <motion.dl
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -754,18 +760,27 @@ const OverlayBody: React.FC<BodyProps> = ({
                     <dd className="min-w-0 truncate font-mono text-body-sm text-on-surface">{sender}</dd>
                   </div>
                 )}
-                {sender && (recipient || memo) && <div className="divider-dashed mx-4" />}
+                {sender && (recipient || memo || txid) && <div className="divider-dashed mx-4" />}
                 {recipient && (
                   <div className="flex items-center justify-between gap-4 px-4 py-3">
                     <dt className="text-label-caps font-label-caps uppercase text-on-surface-variant">To</dt>
                     <dd className="min-w-0 truncate font-mono text-body-sm text-on-surface">{recipient}</dd>
                   </div>
                 )}
-                {recipient && memo && <div className="divider-dashed mx-4" />}
+                {recipient && (memo || txid) && <div className="divider-dashed mx-4" />}
                 {memo && (
                   <div className="flex items-center justify-between gap-4 px-4 py-3">
                     <dt className="text-label-caps font-label-caps uppercase text-on-surface-variant">Memo</dt>
                     <dd className="min-w-0 truncate text-body-sm text-on-surface">{memo}</dd>
+                  </div>
+                )}
+                {memo && txid && <div className="divider-dashed mx-4" />}
+                {txid && (
+                  <div className="flex items-center justify-between gap-4 px-4 py-3">
+                    <dt className="text-label-caps font-label-caps uppercase text-on-surface-variant">TxID</dt>
+                    <dd className="min-w-0 truncate font-mono text-body-sm text-on-surface">
+                      {txid.slice(0, 8)}...{txid.slice(-8)}
+                    </dd>
                   </div>
                 )}
               </motion.dl>
@@ -796,7 +811,20 @@ const OverlayBody: React.FC<BodyProps> = ({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ delay: d(T.successImpact + 0.35), duration: 0.4, ease: EASE_OUT_EXPO }}
+                className="flex flex-col gap-2.5"
               >
+                {onViewMempool && (
+                  <button
+                    type="button"
+                    onClick={onViewMempool}
+                    className="btn-secondary w-full rounded-2xl py-3.5 text-[15px] font-semibold active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 border border-outline-variant/30 hover:border-primary/40 transition-colors"
+                  >
+                    <svg className="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    <span>View on Mempool.space</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   autoFocus

@@ -28,7 +28,7 @@ impl MintClient {
     pub fn new(mint_url: &str) -> Self {
         Self {
             http: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(60))
                 .pool_max_idle_per_host(0)
                 .build()
                 .unwrap_or_default(),
@@ -273,8 +273,45 @@ impl MintClient {
             req["outputs"] = serde_json::Value::Array(outs);
         }
 
-        let mv: serde_json::Value = self.http.post(format!("{}/v1/melt/bolt11", self.url))
-            .json(&req).send().await?.json().await?;
+        let mv: serde_json::Value = match self.http.post(format!("{}/v1/melt/bolt11", self.url))
+            .timeout(std::time::Duration::from_secs(120))
+            .json(&req).send().await
+        {
+            Ok(resp) => {
+                let status = resp.status();
+                if let Ok(v) = resp.json::<serde_json::Value>().await {
+                    v
+                } else {
+                    return Err(anyhow!("Failed to parse JSON response from {} (status {})", self.url, status));
+                }
+            }
+            Err(e) => {
+                println!("[MintClient] POST /v1/melt/bolt11 error: {:?}. Checking quote {} status directly...", e, qid);
+                let mut resolved_val = None;
+                for attempt in 1..=6 {
+                    tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+                    if let Ok(resp) = self.http.get(format!("{}/v1/melt/quote/bolt11/{}", self.url, qid)).send().await {
+                        if let Ok(qv) = resp.json::<serde_json::Value>().await {
+                            let q_state = qv["state"].as_str().unwrap_or("").to_uppercase();
+                            let q_paid = qv["paid"].as_bool().unwrap_or(false);
+                            println!("[MintClient] Quote poll attempt {}/6: state='{}', paid={}", attempt, q_state, q_paid);
+                            if q_state == "PAID" || q_paid {
+                                resolved_val = Some(qv);
+                                break;
+                            } else if q_state == "UNPAID" || q_state == "FAILED" {
+                                return Err(anyhow!("Melt payment failed on {}: Quote is {}", self.url, q_state));
+                            }
+                        }
+                    }
+                }
+                match resolved_val {
+                    Some(v) => v,
+                    None => return Err(anyhow!("Melt request to {} failed: {}. Quote {} may still be pending at the mint.", self.url, e, qid)),
+                }
+            }
+        };
+
+        println!("[MintClient] /v1/melt/bolt11 response from {}: {:?}", self.url, mv);
 
         check_api_error(&mv, "Melt")?;
 
@@ -294,8 +331,8 @@ impl MintClient {
         // If the payment is not yet confirmed (e.g. mint returned PENDING or in-flight routing),
         // poll the quote endpoint for up to 10 seconds to detect settlement.
         if !paid && (is_pending_state || (!paid_bool && !has_preimage)) {
-            tracing::info!("Melt status is pending or unconfirmed. Polling quote {}...", qid);
-            for _ in 0..10 {
+            println!("[MintClient] Melt status is pending or unconfirmed. Polling quote {} on {}...", qid, self.url);
+            for i in 1..=10 {
                 tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
                 if let Ok(resp) = self.http.get(format!("{}/v1/melt/quote/bolt11/{}", self.url, qid)).send().await {
                     if let Ok(qv) = resp.json::<serde_json::Value>().await {
@@ -304,8 +341,10 @@ impl MintClient {
                         let q_preimage = qv.get("payment_preimage").and_then(|p| p.as_str()).map(|s| s.to_string());
                         let q_has_preimage = q_preimage.as_ref().map(|p| !p.is_empty()).unwrap_or(false);
 
+                        println!("[MintClient] Poll attempt {}/10 for quote {}: state='{}', paid={}", i, qid, q_state, q_paid);
+
                         if q_state.eq_ignore_ascii_case("paid") || q_paid || q_has_preimage {
-                            tracing::info!("Quote {} confirmed PAID via polling", qid);
+                            println!("[MintClient] Quote {} confirmed PAID via polling!", qid);
                             paid = true;
                             if preimage.is_none() {
                                 preimage = q_preimage;
@@ -317,7 +356,7 @@ impl MintClient {
                             }
                             break;
                         } else if q_state.eq_ignore_ascii_case("failed") || q_state.eq_ignore_ascii_case("unpaid") {
-                            tracing::warn!("Quote {} resolved to state: {}", qid, q_state);
+                            println!("[MintClient] Quote {} resolved to state: {}", qid, q_state);
                             break;
                         }
                     }
@@ -360,36 +399,105 @@ impl MintClient {
             "outputs": outputs
         });
 
-        let v: serde_json::Value = self.http.post(format!("{}/v1/restore", self.url))
-            .json(&req).send().await?.json().await?;
+        let mut backoff = std::time::Duration::from_millis(1500);
+        for attempt in 0..4 {
+            let resp = self.http.post(format!("{}/v1/restore", self.url))
+                .json(&req).send().await?;
 
-        check_api_error(&v, "Restore")?;
+            if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after_secs = resp.headers()
+                    .get("retry-after")
+                    .and_then(|h| h.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok())
+                    .unwrap_or(0);
 
-        let outputs_arr = v.get("outputs").and_then(|s| s.as_array()).cloned().unwrap_or_default();
-        let sigs_arr = v.get("signatures").and_then(|s| s.as_array()).cloned().unwrap_or_default();
-        
-        if outputs_arr.is_empty() && sigs_arr.is_empty() {
-            // It's possible the mint just didn't find any tokens, which is fine, we return empty
-            return Ok((vec![], vec![]));
+                let wait_time = if retry_after_secs > 0 {
+                    std::time::Duration::from_secs(retry_after_secs + 1)
+                } else {
+                    backoff
+                };
+
+                println!(
+                    "[MintClient] Rate limited (HTTP 429) on {} /v1/restore. Waiting {:?} (attempt {}/4)...",
+                    self.url, wait_time, attempt + 1
+                );
+                tokio::time::sleep(wait_time).await;
+                backoff *= 2;
+                continue;
+            }
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let text = resp.text().await.unwrap_or_default();
+                return Err(anyhow!("Mint restore HTTP error {}: {}", status, text));
+            }
+
+            let v: serde_json::Value = resp.json().await?;
+            check_api_error(&v, "Restore")?;
+
+            let outputs_arr = v.get("outputs").and_then(|s| s.as_array()).cloned().unwrap_or_default();
+            let sigs_arr = v.get("signatures").and_then(|s| s.as_array()).cloned().unwrap_or_default();
+            
+            if outputs_arr.is_empty() && sigs_arr.is_empty() {
+                return Ok((vec![], vec![]));
+            }
+
+            return Ok((outputs_arr, sigs_arr));
         }
 
-        Ok((outputs_arr, sigs_arr))
+        Err(anyhow!("Rate limit exceeded on {} /v1/restore after 4 attempts", self.url))
     }
 
     pub async fn check_state(&self, ys: &[String]) -> Result<HashMap<String, String>> {
-        let v: serde_json::Value = self.http.post(format!("{}/v1/checkstate", self.url))
-            .json(&serde_json::json!({ "Ys": ys })).send().await?.json().await?;
-        check_api_error(&v, "Checkstate")?;
-        
-        let mut results = HashMap::new();
-        if let Some(states) = v.get("states").and_then(|s| s.as_array()) {
-            for state_obj in states {
-                if let (Some(y), Some(state_val)) = (state_obj.get("Y").and_then(|y| y.as_str()), state_obj.get("state").and_then(|s| s.as_str())) {
-                    results.insert(y.to_string(), state_val.to_string());
+        let req = serde_json::json!({ "Ys": ys });
+        let mut backoff = std::time::Duration::from_millis(1500);
+        for attempt in 0..4 {
+            let resp = self.http.post(format!("{}/v1/checkstate", self.url))
+                .json(&req).send().await?;
+
+            if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after_secs = resp.headers()
+                    .get("retry-after")
+                    .and_then(|h| h.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok())
+                    .unwrap_or(0);
+
+                let wait_time = if retry_after_secs > 0 {
+                    std::time::Duration::from_secs(retry_after_secs + 1)
+                } else {
+                    backoff
+                };
+
+                println!(
+                    "[MintClient] Rate limited (HTTP 429) on {} /v1/checkstate. Waiting {:?} (attempt {}/4)...",
+                    self.url, wait_time, attempt + 1
+                );
+                tokio::time::sleep(wait_time).await;
+                backoff *= 2;
+                continue;
+            }
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let text = resp.text().await.unwrap_or_default();
+                return Err(anyhow!("Mint checkstate HTTP error {}: {}", status, text));
+            }
+
+            let v: serde_json::Value = resp.json().await?;
+            check_api_error(&v, "Checkstate")?;
+            
+            let mut results = HashMap::new();
+            if let Some(states) = v.get("states").and_then(|s| s.as_array()) {
+                for state_obj in states {
+                    if let (Some(y), Some(state_val)) = (state_obj.get("Y").and_then(|y| y.as_str()), state_obj.get("state").and_then(|s| s.as_str())) {
+                        results.insert(y.to_string(), state_val.to_string());
+                    }
                 }
             }
+            return Ok(results);
         }
-        Ok(results)
+
+        Err(anyhow!("Rate limit exceeded on {} /v1/checkstate after 4 attempts", self.url))
     }
 
     pub async fn fetch_info(&self) -> Result<serde_json::Value> {
