@@ -84,7 +84,10 @@ pub async fn send_ecash(
         w_state.save_encrypted(&path, &passphrase)?;
     } else {
         // 2. We need to split proofs via swap
-        // Select proofs summing to >= amount (prefer smallest to clean up dust)
+        let client = ecash_wallet::client::MintClient::new(&mint_url);
+        let all_keysets = client.fetch_keysets().await.unwrap_or_default();
+
+        // Select proofs summing to >= amount + swap_fee (prefer smallest to clean up dust)
         let mut sorted_proofs = proofs.clone();
         sorted_proofs.sort_by_key(|p| p.amount);
 
@@ -92,17 +95,19 @@ pub async fn send_ecash(
         let mut swap_total = 0;
 
         for proof in &sorted_proofs {
-            if swap_total >= amount {
-                break;
-            }
             selected_for_swap.push(proof.clone());
             swap_total += proof.amount;
+            let swap_fee = ecash_wallet::client::calculate_input_fee(&selected_for_swap, &all_keysets);
+            if swap_total >= amount + swap_fee {
+                break;
+            }
         }
 
-        if swap_total < amount {
+        let swap_fee = ecash_wallet::client::calculate_input_fee(&selected_for_swap, &all_keysets);
+        if swap_total < amount + swap_fee {
             return Err(crate::error::CommandError(format!(
-                "Insufficient balance. Have {} sats, need {} sats",
-                swap_total, amount
+                "Insufficient balance. Have {} sats, need {} sats (including {} sats mint fee)",
+                swap_total, amount + swap_fee, swap_fee
             )));
         }
 
@@ -122,7 +127,7 @@ pub async fn send_ecash(
                 proofs: selected_for_swap.clone(),
             }),
             amount,
-            fee: 0,
+            fee: swap_fee,
             status: TransactionStatus::Pending,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -133,7 +138,7 @@ pub async fn send_ecash(
         w_state.transactions.push(pending_tx);
         w_state.save_encrypted(&path, &passphrase)?;
 
-        let change_amount = swap_total - amount;
+        let change_amount = swap_total.saturating_sub(amount).saturating_sub(swap_fee);
         let desired_denoms = split_into_powers_of_2(amount);
         let change_denoms = split_into_powers_of_2(change_amount);
 
@@ -399,6 +404,8 @@ pub async fn receive_ecash(
         }
     };
 
+    let actual_received: u64 = new_proofs.iter().map(|p| p.amount).sum();
+
     // Store the new proofs in the wallet
     w_state
         .proofs
@@ -413,9 +420,11 @@ pub async fn receive_ecash(
 
     // Update transaction to Success
     if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
+        tx.amount = actual_received;
+        tx.fee += net_amount.saturating_sub(actual_received);
         tx.status = TransactionStatus::Success;
     }
     w_state.save_encrypted(&path, &passphrase)?;
 
-    Ok(net_amount)
+    Ok(actual_received)
 }

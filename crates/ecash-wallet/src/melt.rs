@@ -622,16 +622,39 @@ async fn redeem_note_legacy(
     let total_hub_sats: u64 = hub_proofs.iter().map(|p| p.amount).sum();
     tracing::info!("Consolidated Hub proofs: {} sats", total_hub_sats);
 
-    if total_hub_sats < total_required {
-        return Err(anyhow!("Insufficient funds on note: have {} sats, need {} sats ({} + {} fee reserve)", total_hub_sats, total_required, required_amt, fee_reserve));
+    let all_hub_keysets = hub_client.fetch_keysets().await.unwrap_or_default();
+    let hub_fee_ppk = all_hub_keysets.iter()
+        .find(|ks| ks.id == hub_keyset.id || (hub_keyset.id.len() < ks.id.len() && ks.id.starts_with(&hub_keyset.id)) || (ks.id.len() < hub_keyset.id.len() && hub_keyset.id.starts_with(&ks.id)))
+        .map(|ks| ks.input_fee_ppk)
+        .unwrap_or(0);
+
+    let base_melt_needed = total_required;
+    let mut total_melt_needed = base_melt_needed;
+    let mut melt_input_fee = 0;
+    if hub_fee_ppk > 0 {
+        for _ in 0..3 {
+            let denoms = ecash_core::types::split_into_powers_of_2(total_melt_needed);
+            let fee_ppk_sum = denoms.len() as u64 * hub_fee_ppk;
+            melt_input_fee = (fee_ppk_sum + 999) / 1000;
+            total_melt_needed = base_melt_needed + melt_input_fee;
+        }
     }
 
-    // If hub_proofs total exceeds total_required, swap first so the excess change
+    let swap_fee = crate::client::calculate_input_fee(&hub_proofs, &all_hub_keysets);
+
+    if total_hub_sats < total_melt_needed + swap_fee {
+        return Err(anyhow!(
+            "Insufficient funds on note: have {} sats, need {} sats ({} + {} fee reserve + {} mint fees)",
+            total_hub_sats, total_melt_needed + swap_fee, required_amt, fee_reserve, swap_fee + melt_input_fee
+        ));
+    }
+
+    // If hub_proofs total exceeds total_melt_needed + swap_fee, swap first so the excess change
     // is safely deposited directly into the user's wallet via NUT-03 swap!
-    // That way, we only pass EXACTLY total_required to the melt endpoint.
-    let melt_proofs = if total_hub_sats > total_required {
-        let change_amount = total_hub_sats - total_required;
-        let desired_amounts = ecash_core::types::split_into_powers_of_2(total_required);
+    // That way, we only pass EXACTLY total_melt_needed to the melt endpoint.
+    let melt_proofs = if total_hub_sats > total_melt_needed + swap_fee {
+        let change_amount = total_hub_sats - total_melt_needed - swap_fee;
+        let desired_amounts = ecash_core::types::split_into_powers_of_2(total_melt_needed);
         let change_amounts = ecash_core::types::split_into_powers_of_2(change_amount);
 
         crate::swap::swap_proofs(
@@ -642,6 +665,25 @@ async fn redeem_note_legacy(
             hub_proofs,
             desired_amounts,
             change_amounts,
+            None,
+        ).await.map_err(|e| {
+            let msg = e.to_string();
+            if msg.to_lowercase().contains("already spent") {
+                anyhow!("This note has already been redeemed. The tokens are already spent.")
+            } else {
+                e
+            }
+        })?
+    } else if total_hub_sats == total_melt_needed + swap_fee && swap_fee > 0 {
+        let desired_amounts = ecash_core::types::split_into_powers_of_2(total_melt_needed);
+        crate::swap::swap_proofs(
+            state,
+            wallet_path,
+            passphrase,
+            hub_mint,
+            hub_proofs,
+            desired_amounts,
+            vec![],
             None,
         ).await.map_err(|e| {
             let msg = e.to_string();
@@ -1012,63 +1054,121 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let hub_mint = selected_mint.ok_or_else(|| anyhow!("Payment failed.\n{}", mint_errors.join("\n")))?;
     let hub_client = MintClient::new(&hub_mint);
     let hub_keyset = hub_client.fetch_keyset().await?;
+    let all_hub_keysets = hub_client.fetch_keysets().await.unwrap_or_default();
 
-    let total_needed = required_amt + fee_reserve;
+    // Determine active keyset input fee rate (ppk)
+    let hub_fee_ppk = all_hub_keysets.iter()
+        .find(|ks| ks.id == hub_keyset.id || (hub_keyset.id.len() < ks.id.len() && ks.id.starts_with(&hub_keyset.id)) || (ks.id.len() < hub_keyset.id.len() && hub_keyset.id.starts_with(&ks.id)))
+        .map(|ks| ks.input_fee_ppk)
+        .unwrap_or(0);
 
-    // 1. Coin selection: Only select proofs needed to cover required_amt + fee_reserve
-    let all_mint_proofs = state.proofs.get(&hub_mint)
-        .ok_or_else(|| anyhow!("No proofs for mint {}", hub_mint))?
-        .clone();
-
-    if all_mint_proofs.is_empty() {
-        return Err(anyhow!("No proofs found for mint {}", hub_mint));
-    }
-
-    let mut sorted_proofs = all_mint_proofs.clone();
-    sorted_proofs.sort_by_key(|p| p.amount);
-
-    let mut selected_for_melt = Vec::new();
-    let mut selected_total = 0;
-    for p in &sorted_proofs {
-        selected_for_melt.push(p.clone());
-        selected_total += p.amount;
-        if selected_total >= total_needed {
-            break;
+    // Calculate required melt proofs value including input fees for /v1/melt (NUT-05)
+    let base_melt_needed = required_amt + fee_reserve;
+    let mut total_melt_needed = base_melt_needed;
+    let mut melt_input_fee = 0;
+    if hub_fee_ppk > 0 {
+        for _ in 0..3 {
+            let denoms = ecash_core::types::split_into_powers_of_2(total_melt_needed);
+            let fee_ppk_sum = denoms.len() as u64 * hub_fee_ppk;
+            melt_input_fee = (fee_ppk_sum + 999) / 1000;
+            total_melt_needed = base_melt_needed + melt_input_fee;
         }
     }
 
-    if selected_total < total_needed {
-        return Err(anyhow!("Insufficient balance on {}. Need {} sats, have {} sats", hub_mint, total_needed, selected_total));
-    }
+    // 1. Coin selection & pre-melt swap:
+    // Only select proofs needed to cover total_melt_needed + swap input fees.
+    // If an input proof fails verification (NUT-00/NUT-03 "Token not verified"),
+    // swap_proofs automatically isolates and purges it, and we retry coin selection.
+    let mut melt_proofs = Vec::new();
+    for swap_attempt in 0..3 {
+        let all_mint_proofs = state.proofs.get(&hub_mint)
+            .ok_or_else(|| anyhow!("No proofs for mint {}", hub_mint))?
+            .clone();
 
-    // 2. If selected proofs exceed total_needed, swap first to exact amounts and change.
-    // This keeps the user's change safely in state.proofs, completely avoiding reliance
-    // on NUT-08 melt change for the entire surplus (as many mints do not support NUT-08).
-    let melt_proofs = if selected_total > total_needed {
-        let change_amount = selected_total - total_needed;
-        let desired_amounts = ecash_core::types::split_into_powers_of_2(total_needed);
-        let change_amounts = ecash_core::types::split_into_powers_of_2(change_amount);
-
-        crate::swap::swap_proofs(
-            state,
-            wallet_path,
-            passphrase,
-            &hub_mint,
-            selected_for_melt,
-            desired_amounts,
-            change_amounts,
-            None,
-        ).await?
-    } else {
-        // Exact match: only remove selected_for_melt from wallet state
-        let selected_secrets: std::collections::HashSet<String> =
-            selected_for_melt.iter().map(|p| p.secret.clone()).collect();
-        if let Some(mint_proofs) = state.proofs.get_mut(&hub_mint) {
-            mint_proofs.retain(|p| !selected_secrets.contains(&p.secret));
+        if all_mint_proofs.is_empty() {
+            return Err(anyhow!("No proofs found for mint {}", hub_mint));
         }
-        state.save_encrypted(wallet_path, passphrase)?;
-        selected_for_melt
-    };
+
+        let mut sorted_proofs = all_mint_proofs.clone();
+        sorted_proofs.sort_by_key(|p| p.amount);
+
+        let mut selected_for_melt = Vec::new();
+        let mut selected_total = 0;
+        for p in &sorted_proofs {
+            selected_for_melt.push(p.clone());
+            selected_total += p.amount;
+            let swap_fee = crate::client::calculate_input_fee(&selected_for_melt, &all_hub_keysets);
+            if selected_total >= total_melt_needed + swap_fee {
+                break;
+            }
+        }
+
+        let swap_fee = crate::client::calculate_input_fee(&selected_for_melt, &all_hub_keysets);
+        if selected_total < total_melt_needed + swap_fee {
+            return Err(anyhow!(
+                "Insufficient balance on {}. Need {} sats (including {} sats mint fees), have {} sats",
+                hub_mint, total_melt_needed + swap_fee, swap_fee + melt_input_fee, selected_total
+            ));
+        }
+
+        // 2. If selected proofs exceed total_melt_needed + swap_fee, or if swap_fee > 0, swap to exact amounts and change.
+        // This keeps the user's change safely in state.proofs, completely avoiding reliance
+        // on NUT-08 melt change for the entire surplus (as many mints do not support NUT-08).
+        let swap_res = if selected_total > total_melt_needed + swap_fee {
+            let change_amount = selected_total - total_melt_needed - swap_fee;
+            let desired_amounts = ecash_core::types::split_into_powers_of_2(total_melt_needed);
+            let change_amounts = ecash_core::types::split_into_powers_of_2(change_amount);
+
+            crate::swap::swap_proofs(
+                state,
+                wallet_path,
+                passphrase,
+                &hub_mint,
+                selected_for_melt,
+                desired_amounts,
+                change_amounts,
+                None,
+            ).await
+        } else if selected_total == total_melt_needed + swap_fee && swap_fee > 0 {
+            let desired_amounts = ecash_core::types::split_into_powers_of_2(total_melt_needed);
+            crate::swap::swap_proofs(
+                state,
+                wallet_path,
+                passphrase,
+                &hub_mint,
+                selected_for_melt,
+                desired_amounts,
+                vec![],
+                None,
+            ).await
+        } else {
+            // Exact match with zero swap fee: only remove selected_for_melt from wallet state
+            let selected_secrets: std::collections::HashSet<String> =
+                selected_for_melt.iter().map(|p| p.secret.clone()).collect();
+            if let Some(mint_proofs) = state.proofs.get_mut(&hub_mint) {
+                mint_proofs.retain(|p| !selected_secrets.contains(&p.secret));
+            }
+            state.save_encrypted(wallet_path, passphrase)?;
+            Ok(selected_for_melt)
+        };
+
+        match swap_res {
+            Ok(proofs) => {
+                melt_proofs = proofs;
+                break;
+            }
+            Err(e) => {
+                let err_lower = e.to_string().to_lowercase();
+                if (err_lower.contains("token not verified") || err_lower.contains("not verified") || err_lower.contains("purged"))
+                    && swap_attempt < 2
+                {
+                    println!("[pay_invoice] Unverified proof detected and purged. Retrying coin selection with remaining proofs (attempt {}/3)...", swap_attempt + 1);
+                    continue;
+                }
+                return Err(e);
+            }
+        }
+    }
 
     let max_proof_idx = state
         .proofs
@@ -1172,7 +1272,10 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
                 }
             }
 
-            if !valid_proofs.is_empty() {
+            let err_lower = e.to_string().to_lowercase();
+            if err_lower.contains("token not verified") || err_lower.contains("not verified") {
+                println!("[pay_invoice] Melt rejected with 'Token not verified'. Purging unverified proofs instead of returning to wallet balance.");
+            } else if !valid_proofs.is_empty() {
                 println!("[pay_invoice] Safely returning {} verified UNSPENT proof(s) back to wallet.", valid_proofs.len());
                 state.proofs.entry(hub_mint.clone()).or_default().extend(valid_proofs);
             } else if is_pending_at_mint {

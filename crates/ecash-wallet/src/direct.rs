@@ -71,6 +71,8 @@ pub async fn issue_direct_note(
             anyhow!("Failed to fetch keyset: {}", e)
         })?;
         
+        let all_keysets = client.fetch_keysets().await.unwrap_or_default();
+        
         // Find inputs to melt
         let mut sorted_proofs = state.proofs.get(*mint_url).unwrap().clone();
         sorted_proofs.sort_by_key(|p| p.amount);
@@ -78,12 +80,18 @@ pub async fn issue_direct_note(
         let mut selected_for_swap = Vec::new();
         let mut swap_total = 0;
         for p in &sorted_proofs {
-            if swap_total >= *amt { break; }
             selected_for_swap.push(p.clone());
             swap_total += p.amount;
+            let fee = crate::client::calculate_input_fee(&selected_for_swap, &all_keysets);
+            if swap_total >= *amt + fee { break; }
         }
 
-        let change_amount = swap_total - amt;
+        let fee = crate::client::calculate_input_fee(&selected_for_swap, &all_keysets);
+        if swap_total < *amt + fee {
+            return Err(anyhow!("Insufficient balance on {}. Need {} sats (including {} sats mint fee), have {} sats", mint_url, *amt + fee, fee, swap_total));
+        }
+
+        let change_amount = swap_total - amt - fee;
         let desired_denoms = ecash_core::types::split_into_powers_of_2(*amt);
         let change_denoms = ecash_core::types::split_into_powers_of_2(change_amount);
 
@@ -263,7 +271,8 @@ pub async fn redeem_direct_note(
             None,
         ).await {
             Ok(p) => {
-                total_amount += mint_amt;
+                let rec_amt: u64 = p.iter().map(|x| x.amount).sum();
+                total_amount += rec_amt;
                 p
             },
             Err(e) => {
