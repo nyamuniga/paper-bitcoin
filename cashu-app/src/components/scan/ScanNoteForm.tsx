@@ -2,6 +2,9 @@ import React from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { QrCode, Loader2 } from 'lucide-react';
 import { useUrDecoder } from '../../hooks/useUrDecoder';
+import { parseBitcoinInput } from '../../utils/bitcoinValidation';
+import { useLnurlValidation } from '../../hooks/useLnurlValidation';
+import { LnurlValidationStatus } from '../shared/LnurlValidationStatus';
 
 interface ScanNoteFormProps {
   showScanner: boolean;
@@ -17,6 +20,12 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
   showScanner, setShowScanner, binB64, setBinB64, onDecode, loading, error
 }) => {
   const urDecoder = useUrDecoder();
+
+  // Live-validate pasted Lightning Addresses / LNURLs before allowing "Process"
+  const parsed = parseBitcoinInput(binB64);
+  const isLnurlInput = parsed.type === 'lnurl' || parsed.type === 'lnurl-pay';
+  const lnurlValidation = useLnurlValidation(isLnurlInput ? parsed.addressOrInvoice : null);
+  const isLnurlBlocked = isLnurlInput && lnurlValidation.status !== 'valid';
 
   return (
     <div className="w-full max-w-2xl bg-surface-container-high rounded-xl relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] p-card-gap flex flex-col gap-8 border border-outline-variant/30">
@@ -86,20 +95,36 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
             <textarea
               value={binB64}
               onChange={(e) => setBinB64(e.target.value)}
-              className="w-full bg-surface-container-lowest text-on-background rounded-lg border-none px-4 py-4 min-h-[100px] resize-none focus:ring-1 focus:ring-primary/50 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] text-body-md font-body-md placeholder:text-on-surface-variant/40 transition-all glow-effect focus:bg-surface-container-lowest/80"
+              className={`w-full bg-surface-container-lowest text-on-background rounded-lg border-none px-4 py-4 min-h-[100px] resize-none focus:ring-1 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] text-body-md font-body-md placeholder:text-on-surface-variant/40 transition-all glow-effect focus:bg-surface-container-lowest/80 ${
+                lnurlValidation.status === 'invalid'
+                  ? 'ring-1 ring-error/50 focus:ring-error'
+                  : lnurlValidation.status === 'valid'
+                  ? 'ring-1 ring-emerald-500/40 focus:ring-emerald-500/60'
+                  : 'focus:ring-primary/50'
+              }`}
               placeholder="Ecash token, address, invoice, or note data..."
               spellCheck="false"
             ></textarea>
           </div>
 
+          {isLnurlInput && (
+            <LnurlValidationStatus input={parsed.addressOrInvoice} validation={lnurlValidation} />
+          )}
+
           {error && <div className="text-error text-sm text-center">{error}</div>}
 
           <button
             onClick={() => onDecode(binB64)}
-            disabled={loading || !binB64}
+            disabled={loading || !binB64 || isLnurlBlocked}
             className="w-full bg-gradient-to-r from-[#d4a055] to-[#f7931a] hover:from-[#e8b566] hover:to-[#ffa633] text-on-primary font-headline-lg-mobile text-body-md rounded-2xl py-4 transition-all transform active:scale-[0.98] shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
           >
-            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <span className="font-bold tracking-wide">Process</span>}
+            {loading || (isLnurlInput && lnurlValidation.status === 'checking') ? (
+              <Loader2 className="animate-spin w-5 h-5" />
+            ) : isLnurlInput && lnurlValidation.status === 'invalid' ? (
+              <span className="font-bold tracking-wide">Invalid Address</span>
+            ) : (
+              <span className="font-bold tracking-wide">Process</span>
+            )}
           </button>
         </div>
       </div>

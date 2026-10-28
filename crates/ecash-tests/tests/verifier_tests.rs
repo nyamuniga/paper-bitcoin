@@ -22,6 +22,7 @@ fn create_valid_note(mint_url: &str) -> (OfflineVerifier, PublicNoteData) {
         c_prime: proof.c_prime,
         b_prime: proof.b_prime,
         dleq: proof.dleq,
+        witness: None,
         y: Some(ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(proof.secret.as_bytes()))),
         derivation_index: 0,
     };
@@ -84,4 +85,55 @@ fn test_verify_integrity_mismatch() {
     
     let result = verifier.verify(&note);
     assert_eq!(result, VerificationResult::IntegrityMismatch);
+}
+
+#[test]
+fn test_verify_untrusted_with_online_keys_and_forged_face_value() {
+    let url = "https://rogue.mint";
+    let mint_key = MintKeypair::generate();
+    let session = BlindingSession::new("test-secret");
+    let (c_prime, dleq) = mint_key.blind_sign_with_dleq(&session.b_prime);
+    let proof = session.unblind(&c_prime, &mint_key.public_point(), 64, &mint_key.keyset_id(), Some(dleq));
+
+    let pub_proof = PublicProof {
+        amount: proof.amount,
+        id: proof.id,
+        c: proof.c,
+        c_prime: proof.c_prime,
+        b_prime: proof.b_prime,
+        dleq: proof.dleq,
+        witness: None,
+        y: Some(ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(proof.secret.as_bytes()))),
+        derivation_index: 0,
+    };
+    let entry = PublicTokenEntry {
+        mint: url.to_string(),
+        proofs: vec![pub_proof],
+    };
+    let validation_hash = compute_validation_hash(&[entry.clone()]);
+    let mut note = PublicNoteData {
+        entries: vec![entry],
+        validation_hash,
+        face_value_sats: 64,
+    };
+
+    let mut verifier = OfflineVerifier::new();
+    let mut keys = HashMap::new();
+    keys.insert(64, mint_key.public_key_hex());
+    verifier.add_untrusted_mint_keys(url, keys);
+
+    // Untrusted mint with valid DLEQ must still be ValidUntrusted
+    match verifier.verify(&note) {
+        VerificationResult::ValidUntrusted { face_value_sats, .. } => {
+            assert_eq!(face_value_sats, 64);
+        }
+        other => panic!("Expected ValidUntrusted, got {:?}", other),
+    }
+
+    // Forged face_value_sats > proof_total_sats must be rejected
+    note.face_value_sats = 1_000_000;
+    match verifier.verify(&note) {
+        VerificationResult::InvalidFormat { .. } => {}
+        other => panic!("Expected InvalidFormat for inflated face_value_sats, got {:?}", other),
+    }
 }

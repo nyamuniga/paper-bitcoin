@@ -17,7 +17,9 @@ import { NumberPad } from '../shared/NumberPad';
 import QRCode from 'react-qr-code';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { parseBitcoinInput } from '../../utils/bitcoinValidation';
-import { resolveLnurlPay, fetchLnurlPayInvoice } from '../../services/lnurlService';
+import { fetchLnurlPayInvoice } from '../../services/lnurlService';
+import { useLnurlValidation, validateLnurlPay } from '../../hooks/useLnurlValidation';
+import { LnurlValidationStatus } from '../shared/LnurlValidationStatus';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { openMempoolTx, openMempoolAddress } from '../../utils/mempool';
 
@@ -59,6 +61,10 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const [destinationInput, setDestinationInput] = useState(initialInvoice);
   const [showScanner, setShowScanner] = useState(false);
   const parsedInput = parseBitcoinInput(destinationInput);
+  const isLnurlInput = parsedInput.type === 'lnurl' || parsedInput.type === 'lnurl-pay';
+  // Live, debounced check that the Lightning Address / LNURL actually resolves
+  const lnurlValidation = useLnurlValidation(isLnurlInput ? parsedInput.addressOrInvoice : null);
+  const isLnurlBlocked = isLnurlInput && lnurlValidation.status !== 'valid';
 
   const [lnurlParams, setLnurlParams] = useState<any | null>(null);
 
@@ -145,17 +151,23 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
         getOnchainSendLimits().then(setOnchainLimits).catch(console.error);
       }
       setSendStep('amount');
-    } else if (parsedInput.type === 'lnurl' || parsedInput.type === 'lnurl-pay') {
+    } else if (isLnurlInput) {
       try {
         setIsFetchingLnurl(true);
-        const params = await resolveLnurlPay(parsedInput.addressOrInvoice);
+        // Reuse the already-validated params (cached) instead of re-fetching
+        const entry = lnurlValidation.status === 'valid' && lnurlValidation.params
+          ? { params: lnurlValidation.params, error: null }
+          : await validateLnurlPay(parsedInput.addressOrInvoice);
+        if (entry.error || !entry.params) {
+          toast.error(entry.error || 'Invalid Lightning address');
+          return;
+        }
+        const params = entry.params;
         setLnurlParams(params);
         if (params.minSendable === params.maxSendable) {
           setLnurlSendAmount(Math.floor(params.minSendable / 1000).toString());
         }
         setSendStep('amount');
-      } catch (e: any) {
-        toast.error(`LNURL Error: ${e.message}`);
       } finally {
         setIsFetchingLnurl(false);
       }
@@ -446,11 +458,11 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         <button onClick={() => setShowScanner(false)} className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-highest px-4 py-2 rounded-full text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface">Cancel Scanner</button>
                       </div>
                     ) : (
-                      <div className={`relative glow-effect transition-shadow duration-300 rounded-lg ${isInsufficient ? 'shadow-[0_0_15px_rgba(239,68,68,0.3)]' : ''}`}>
+                      <div className={`relative glow-effect transition-shadow duration-300 rounded-lg ${isInsufficient || lnurlValidation.status === 'invalid' ? 'shadow-[0_0_15px_rgba(239,68,68,0.3)]' : ''}`}>
                         <textarea
                           value={destinationInput}
                           onChange={(e) => setDestinationInput(e.target.value)}
-                          className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInsufficient ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`}
+                          className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInsufficient || lnurlValidation.status === 'invalid' ? 'focus:ring-error ring-1 ring-error/50' : lnurlValidation.status === 'valid' ? 'ring-1 ring-emerald-500/40 focus:ring-emerald-500/60' : 'focus:ring-primary'}`}
                           placeholder="Lightning, LNURL, or On-Chain..."
                           rows={4}
                           spellCheck={false}
@@ -483,6 +495,9 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         Invalid invoice or address
                       </div>
                     )}
+                    {isLnurlInput && !showScanner && (
+                      <LnurlValidationStatus input={parsedInput.addressOrInvoice} validation={lnurlValidation} />
+                    )}
 
                     {parsedInput.type === 'lightning' ? (
                       <button
@@ -496,11 +511,17 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     ) : (
                       <button
                         onClick={handleNextFromInput}
-                        disabled={parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay' && parsedInput.type !== 'onchain'}
-                        className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${(parsedInput.type !== 'lnurl' && parsedInput.type !== 'lnurl-pay' && parsedInput.type !== 'onchain') ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                        disabled={(!isLnurlInput && parsedInput.type !== 'onchain') || isLnurlBlocked || isFetchingLnurl}
+                        className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${((!isLnurlInput && parsedInput.type !== 'onchain') || isLnurlBlocked || isFetchingLnurl) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                           }`}
                       >
-                        {isFetchingLnurl ? <Loader2 className="animate-spin w-6 h-6" /> : 'Next'}
+                        {isFetchingLnurl || (isLnurlInput && lnurlValidation.status === 'checking') ? (
+                          <Loader2 className="animate-spin w-6 h-6" />
+                        ) : isLnurlInput && lnurlValidation.status === 'invalid' ? (
+                          'Invalid Address'
+                        ) : (
+                          'Next'
+                        )}
                       </button>
                     )}
                   </div>
@@ -531,13 +552,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         {/* On-Chain Limits and Real-Time Feedback */}
                         {isOnchain && (
                           <div className="flex flex-col items-center gap-1.5 w-full">
-                            {/* Limits Pills */}
-                            <div className="flex items-center justify-center gap-2 text-[12px] font-mono py-1 px-3.5 rounded-full bg-surface-container-highest/80 border border-outline-variant/30 text-on-surface-variant shadow-sm">
-                              <span>Min: <strong className="text-primary font-bold">{minLimit.toLocaleString()} sats</strong></span>
-                              <span className="text-outline-variant/40">•</span>
-                              <span>Max: <strong className="text-on-surface font-bold">{Math.min(maxLimit, availableBalance).toLocaleString()} sats</strong></span>
-                            </div>
-
                             {/* Real-time typing alerts */}
                             {typedAmount > 0 && isBelowMin && (
                               <div className="text-[12px] font-medium text-amber-400 bg-amber-500/15 px-3 py-1.5 rounded-lg border border-amber-500/30 text-center animate-fade-in flex items-center justify-center gap-1.5 shadow-sm">
@@ -554,11 +568,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                                 <span>⚠️ Insufficient balance ({availableBalance.toLocaleString()} sats available)</span>
                               </div>
                             )}
-                            {typedAmount > 0 && canProceed && (
-                              <div className="text-[12px] font-medium text-emerald-400 bg-emerald-500/15 px-3 py-1.5 rounded-lg border border-emerald-500/30 text-center animate-fade-in flex items-center justify-center gap-1.5 shadow-sm">
-                                <span>✓ Amount is within on-chain limits</span>
-                              </div>
-                            )}
                           </div>
                         )}
 
@@ -572,28 +581,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         onChange={setLnurlSendAmount}
                         compact
                       />
-
-                      {/* Quick preset buttons for on-chain send */}
-                      {isOnchain && (
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setLnurlSendAmount(minLimit.toString())}
-                            className="flex-1 py-2 px-3 bg-surface-container-highest hover:bg-surface-bright rounded-xl text-xs font-bold text-primary border border-outline-variant/30 transition-all active:scale-[0.98] cursor-pointer shadow-sm flex items-center justify-center gap-1"
-                          >
-                            <span>Fill Min ({minLimit.toLocaleString()})</span>
-                          </button>
-                          {availableBalance >= minLimit && (
-                            <button
-                              type="button"
-                              onClick={() => setLnurlSendAmount(Math.min(maxLimit, availableBalance).toString())}
-                              className="flex-1 py-2 px-3 bg-surface-container-highest hover:bg-surface-bright rounded-xl text-xs font-bold text-on-surface-variant hover:text-on-surface border border-outline-variant/30 transition-all active:scale-[0.98] cursor-pointer shadow-sm flex items-center justify-center gap-1"
-                            >
-                              <span>Fill Max ({Math.min(maxLimit, availableBalance).toLocaleString()})</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
 
                       <button
                         onClick={handleNextFromAmount}
@@ -860,12 +847,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       {/* On-Chain Receive Limits & Real-Time Feedback */}
                       {receiveMode === 'onchain' && (
                         <div className="flex flex-col items-center gap-1.5 w-full">
-                          <div className="flex items-center justify-center gap-2 text-[12px] font-mono py-1 px-3.5 rounded-full bg-surface-container-highest/80 border border-outline-variant/30 text-on-surface-variant shadow-sm">
-                            <span>Min: <strong className="text-primary font-bold">12,500 sats</strong></span>
-                            <span className="text-outline-variant/40">•</span>
-                            <span>Max: <strong className="text-on-surface font-bold">18,000,000 sats</strong></span>
-                          </div>
-
                           {parsedReceiveAmount > 0 && parsedReceiveAmount < 12500 && (
                             <div className="text-[12px] font-medium text-amber-400 bg-amber-500/15 px-3 py-1.5 rounded-lg border border-amber-500/30 text-center animate-fade-in shadow-sm">
                               ⚠️ Minimum on-chain deposit is 12,500 sats ({(12500 - parsedReceiveAmount).toLocaleString()} more needed)
@@ -874,11 +855,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                           {parsedReceiveAmount > 18000000 && (
                             <div className="text-[12px] font-medium text-error bg-error/15 px-3 py-1.5 rounded-lg border border-error/30 text-center animate-fade-in shadow-sm">
                               ⚠️ Maximum on-chain deposit is 18,000,000 sats
-                            </div>
-                          )}
-                          {parsedReceiveAmount >= 12500 && parsedReceiveAmount <= 18000000 && (
-                            <div className="text-[12px] font-medium text-emerald-400 bg-emerald-500/15 px-3 py-1.5 rounded-lg border border-emerald-500/30 text-center animate-fade-in shadow-sm">
-                              ✓ Valid deposit amount (within limits)
                             </div>
                           )}
                         </div>
@@ -896,32 +872,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         compact
                       />
                     </div>
-
-                    {receiveMode === 'onchain' && (
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setReceiveAmount('12500')}
-                          className="flex-1 py-1.5 px-3 bg-surface-container-highest hover:bg-surface-bright rounded-xl text-xs font-bold text-primary border border-outline-variant/30 transition-all active:scale-[0.98] cursor-pointer shadow-sm text-center"
-                        >
-                          Fill Min (12,500 sats)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setReceiveAmount('50000')}
-                          className="flex-1 py-1.5 px-3 bg-surface-container-highest hover:bg-surface-bright rounded-xl text-xs font-bold text-on-surface-variant hover:text-on-surface border border-outline-variant/30 transition-all active:scale-[0.98] cursor-pointer shadow-sm text-center"
-                        >
-                          50,000 sats
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setReceiveAmount('100000')}
-                          className="flex-1 py-1.5 px-3 bg-surface-container-highest hover:bg-surface-bright rounded-xl text-xs font-bold text-on-surface-variant hover:text-on-surface border border-outline-variant/30 transition-all active:scale-[0.98] cursor-pointer shadow-sm text-center"
-                        >
-                          100,000 sats
-                        </button>
-                      </div>
-                    )}
 
                     <button
                       onClick={handleRequestInvoice}

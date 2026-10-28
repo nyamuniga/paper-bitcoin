@@ -223,7 +223,13 @@ export default function DiscoverMints() {
                     {mint.parsedInfo?.name || 'Unnamed Mint'}
                   </div>
                   <div className="text-xs text-on-surface-variant truncate">
-                    {new URL(mint.url).hostname}
+                    { (() => {
+                      try {
+                        return new URL(mint.url).hostname;
+                      } catch {
+                        return mint.url;
+                      }
+                    })() }
                   </div>
                 </div>
 

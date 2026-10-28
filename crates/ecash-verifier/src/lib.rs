@@ -44,6 +44,13 @@ impl OfflineVerifier {
         self.mint_keys.insert(u, keys);
     }
 
+    /// Load public keys for an untrusted mint so its DLEQ signatures can still be verified
+    /// online without marking the mint as trusted.
+    pub fn add_untrusted_mint_keys(&mut self, url: impl Into<String>, keys: HashMap<u64, String>) {
+        let u = url.into();
+        self.mint_keys.insert(u, keys);
+    }
+
     /// Verify from a `PublicNoteData` JSON string (the public QR payload).
     pub fn verify_json(&self, json_str: &str) -> VerificationResult {
         match serde_json::from_str::<PublicNoteData>(json_str) {
@@ -82,8 +89,8 @@ impl OfflineVerifier {
                 };
             }
 
-            // ── 3. DLEQ Verification (NUT-12) if trusted ──────────────────────
-            if self.trusted.contains_key(&entry.mint) {
+            // ── 3. DLEQ Verification (NUT-12) if keys are available ───────────
+            if self.trusted.contains_key(&entry.mint) || self.mint_keys.contains_key(&entry.mint) {
                 let mint_key_map = match self.mint_keys.get(&entry.mint) {
                     Some(m) => m,
                     None => return VerificationResult::InvalidFormat { reason: format!("Trusted mint {} has no loaded keys", entry.mint) },
@@ -123,14 +130,24 @@ impl OfflineVerifier {
                     total_sats += proof.amount;
                 }
             } else {
-                // Untrusted mint, just sum up the sats from proofs
+                // Untrusted mint and offline (no keys loaded), just sum up the sats from proofs
                 for proof in &entry.proofs {
                     total_sats += proof.amount;
                 }
             }
         }
 
-        // ── 4. Integrity hash ─────────────────────────────────────────────
+        // ── 4. Face value sanity check ────────────────────────────────────
+        if data.face_value_sats > total_sats {
+            return VerificationResult::InvalidFormat {
+                reason: format!(
+                    "Claimed face value ({} sats) exceeds total backing proofs ({} sats)",
+                    data.face_value_sats, total_sats
+                ),
+            };
+        }
+
+        // ── 5. Integrity hash ─────────────────────────────────────────────
         let expected = compute_validation_hash(&data.entries);
         if expected != data.validation_hash {
             return VerificationResult::IntegrityMismatch;

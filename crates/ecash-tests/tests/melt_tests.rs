@@ -62,7 +62,7 @@ async fn test_redemption_integration() {
         .and(path("/v1/melt/quote/bolt11"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "quote": "melt_q123",
-            "amount": 60,
+            "amount": 62,
             "fee_reserve": 2
         })))
         .mount(&server)
@@ -99,6 +99,7 @@ async fn test_redemption_integration() {
                         b_prime: Some(session.b_prime_hex()),
                         y: None,
                         dleq: Some(dleq),
+                        witness: None,
                         derivation_index: 0,
                     }
                 ]
@@ -116,7 +117,7 @@ async fn test_redemption_integration() {
     let result = redeem_note(&mut state, &wallet_path, passphrase, &real_public_data, &seed_hex, "lnbc1...").await;
     
     assert!(result.is_ok(), "Redemption failed: {:?}", result.err());
-    assert_eq!(result.unwrap(), 60);
+    assert_eq!(result.unwrap(), 62);
 
     // Check that transaction is Success
     let tx = state.transactions.iter().find(|t| matches!(t.tx_type, ecash_core::types::TransactionType::Redeem(_))).unwrap();
@@ -165,7 +166,7 @@ async fn test_pay_invoice_integration() {
         .and(path("/v1/melt/quote/bolt11"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "quote": "melt_q123",
-            "amount": 60,
+            "amount": 62,
             "fee_reserve": 2
         })))
         .mount(&server)
@@ -198,15 +199,16 @@ async fn test_pay_invoice_integration() {
             c_prime: Some(DUMMY_POINT.to_string()),
             b_prime: Some(DUMMY_POINT.to_string()),
             dleq: None,
+            witness: None,
             secret: "random_secret".to_string(),
             derivation_index: 1,
         }
     ]);
 
-    let result = pay_invoice(&mut state, &wallet_path, passphrase, "lnbc1...").await;
+    let result = pay_invoice(&mut state, &wallet_path, passphrase, "lnbc1...", None).await;
     
     assert!(result.is_ok(), "pay_invoice failed: {:?}", result.err());
-    assert_eq!(result.unwrap(), 60);
+    assert_eq!(result.unwrap().0, 62);
 
     // Check that transaction is Success
     let tx = state.transactions.iter().find(|t| matches!(t.tx_type, ecash_core::types::TransactionType::Melt(_))).unwrap();
@@ -218,4 +220,59 @@ async fn test_pay_invoice_integration() {
     assert_eq!(proofs[0].amount, 2); // The change amount returned by the mock
 
     let _ = std::fs::remove_file(wallet_path);
+}
+
+#[tokio::test]
+async fn test_reconstruct_token_seed_derived_and_legacy() {
+    use ecash_wallet::melt::reconstruct_token;
+
+    let server = MockServer::start().await;
+    let master_seed_hex = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+    let mut note_deriv = TokenDerivation::from_hex(master_seed_hex).unwrap();
+    let sess_new = note_deriv.next_session();
+
+    let mint = MintKeypair::generate();
+    let mint_pk = mint.public_key_hex();
+    let (c_prime, dleq) = mint.blind_sign_with_dleq(&sess_new.b_prime);
+    let c_prime_hex = point_to_hex(&c_prime);
+    let mut proof = sess_new.unblind(&c_prime, &mint.public_point(), 64, "00112233", Some(dleq.clone()));
+    proof.derivation_index = 0;
+
+    let keys_body = json!({
+        "keysets": [{
+            "id": "00112233",
+            "unit": "sat",
+            "keys": { "64": mint_pk }
+        }]
+    });
+    Mock::given(method("GET"))
+        .and(path("/v1/keys/00112233"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(keys_body))
+        .mount(&server)
+        .await;
+
+    let entry = PublicTokenEntry {
+        mint: server.uri(),
+        proofs: vec![PublicProof {
+            amount: 64,
+            id: "00112233".to_string(),
+            c: proof.c.clone(),
+            c_prime: Some(c_prime_hex),
+            b_prime: Some(sess_new.b_prime_hex()),
+            y: None,
+            dleq: Some(dleq),
+            witness: None,
+            derivation_index: 0,
+        }],
+    };
+    let validation_hash = ecash_core::dhke::compute_validation_hash(&[entry.clone()]);
+    let public_data = PublicNoteData {
+        entries: vec![entry],
+        validation_hash,
+        face_value_sats: 64,
+    };
+
+    let reconstructed = reconstruct_token(&public_data, master_seed_hex).await.expect("reconstruct_token failed on seed-derived note");
+    assert_eq!(reconstructed.token[0].proofs[0].c, proof.c);
+    assert_eq!(reconstructed.token[0].proofs[0].secret, proof.secret);
 }

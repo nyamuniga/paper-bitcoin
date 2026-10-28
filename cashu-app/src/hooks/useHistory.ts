@@ -1,25 +1,89 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../store/wallet';
+import { useTransactionStore } from '../store/transactionStore';
+import { AppPhase } from '../types/momo';
 import { getGlobalNostrPrivateKey } from './useNostr';
 import { Transaction } from '../components/history/TransactionCard';
 
 export const useHistory = () => {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [rawTransactions, setRawTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
+  const momoHistory = useTransactionStore((state) => state.history);
+  const activeTransaction = useTransactionStore((state) => state.activeTransaction);
 
   const fetchHistory = async () => {
     try {
       const txs = await invoke<Transaction[]>('get_transactions');
-      setTransactions(txs);
+      setRawTransactions(txs);
     } catch (e) {
       toast.error('Failed to load history');
     } finally {
       setLoading(false);
     }
   };
+
+  const transactions = useMemo(() => {
+    const allMomoTxs = activeTransaction
+      ? [activeTransaction, ...momoHistory.filter((t) => t.id !== activeTransaction.id)]
+      : momoHistory;
+
+    return rawTransactions.map((tx) => {
+      let status = tx.status;
+      let momo_direction: string | undefined = undefined;
+
+      const isMint = 'Mint' in tx.tx_type;
+      const isMelt = 'Melt' in tx.tx_type;
+      const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
+      const quoteId = isMint
+        ? tx.tx_type.Mint.quote_id
+        : isMelt
+        ? tx.tx_type.Melt.quote_id
+        : isReceiveLightning
+        ? tx.tx_type.ReceiveLightning.quote_id
+        : undefined;
+
+      if (tx.status === 'Pending' || quoteId || isMelt || isReceiveLightning || isMint) {
+        const momoTx = allMomoTxs.find((t) => {
+          if (t.id === tx.id) return true;
+          if (t.mintQuoteId && (t.mintQuoteId === tx.id || (quoteId && t.mintQuoteId === quoteId))) {
+            return true;
+          }
+
+          const timeDiff = Math.abs((t.timestamp || Date.now()) - tx.timestamp * 1000);
+          // Strict timestamp window (2 minutes) to prevent false matches with normal lightning payments
+          if (isMelt && t.direction === 'SATS_TO_RWF') {
+            if (
+              timeDiff < 120000 &&
+              Math.abs(t.satsAmount - tx.amount) <= tx.amount * 0.05 + 100
+            ) {
+              return true;
+            }
+          }
+          if ((isReceiveLightning || isMint) && t.direction === 'RWF_TO_SATS') {
+            if (timeDiff < 300000 && t.satsAmount > 0 && t.satsAmount === tx.amount) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (momoTx) {
+          momo_direction = momoTx.direction;
+          if (
+            tx.status === 'Pending' &&
+            (momoTx.currentPhase === AppPhase.PAYMENT_FAILED ||
+              momoTx.currentPhase === AppPhase.PAYOUT_FAILED)
+          ) {
+            status = 'Failed' as const;
+          }
+        }
+      }
+      return { ...tx, status, momo_direction };
+    });
+  }, [rawTransactions, momoHistory, activeTransaction]);
 
   const lastUpdate = useWalletStore((s) => s.lastUpdate);
 

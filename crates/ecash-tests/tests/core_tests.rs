@@ -63,6 +63,7 @@ fn test_compact_codec_roundtrip() {
                                 e: "3333333333333333333333333333333333333333333333333333333333333333".to_string(), // 32 bytes
                                 s: "4444444444444444444444444444444444444444444444444444444444444444".to_string(), // 32 bytes
                             }),
+                            witness: None,
                             derivation_index: 42,
                         }
                     ]
@@ -97,4 +98,26 @@ fn test_compact_codec_roundtrip() {
     assert_eq!(entry_orig.proofs[0].dleq.as_ref().unwrap().e, entry_dec.proofs[0].dleq.as_ref().unwrap().e);
     assert_eq!(entry_orig.proofs[0].dleq.as_ref().unwrap().s, entry_dec.proofs[0].dleq.as_ref().unwrap().s);
     assert_eq!(entry_orig.proofs[0].derivation_index, entry_dec.proofs[0].derivation_index);
+}
+
+#[test]
+fn test_seed_derived_blinding_vs_legacy_fallback() {
+    use ecash_core::derivation::TokenDerivation;
+
+    let seed_hex = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+    let mut deriv = TokenDerivation::from_hex(seed_hex).unwrap();
+    let sess_new = deriv.next_session();
+    assert_eq!(deriv.index, 1);
+
+    // Knowing only `secret` must NOT allow computing `B'` of a seed-derived session
+    let sess_legacy = BlindingSession::new_legacy(&sess_new.secret);
+    assert_ne!(sess_new.b_prime_hex(), sess_legacy.b_prime_hex());
+
+    // Roundtrip via to_session_hex() preserves the seed-derived blinding factor
+    let roundtrip = BlindingSession::new(&sess_new.to_session_hex());
+    assert_eq!(sess_new.b_prime_hex(), roundtrip.b_prime_hex());
+
+    // Passing a plain secret without `:r_hex` falls back to legacy derivation
+    let legacy_fallback = BlindingSession::new(&sess_new.secret);
+    assert_eq!(sess_legacy.b_prime_hex(), legacy_fallback.b_prime_hex());
 }

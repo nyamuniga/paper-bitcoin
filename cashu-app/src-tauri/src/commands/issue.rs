@@ -1,5 +1,4 @@
 use crate::error::CommandResult;
-use ecash_wallet::WalletState;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -28,16 +27,9 @@ pub async fn issue_note(
     mint_urls: Vec<String>,
     strategy: String,
 ) -> CommandResult<PendingIssue> {
-    let path = state.wallet_path.clone();
-
-    let passphrase = {
-        let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock
-            .clone()
-            .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
-    };
-
-    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    if mint_urls.is_empty() {
+        return Err(crate::error::CommandError("No mints selected".to_string()));
+    }
 
     let mut actual_allocs = Vec::new();
     let per_mint = sats / mint_urls.len() as u64;
@@ -56,8 +48,11 @@ pub async fn issue_note(
         _ => ecash_wallet::ReserveStrategy::Static,
     };
 
+    let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
+    let w_state = wallet_guard.as_mut().unwrap();
+
     let (tx_id, hub_mint, invoice, total_sats) = ecash_wallet::prepare_issue_multimint_note(
-        &mut w_state,
+        w_state,
         &path,
         &passphrase,
         &actual_allocs,
@@ -78,21 +73,16 @@ pub async fn get_pending_issue(
     state: State<'_, AppState>,
     tx_id: String,
 ) -> CommandResult<PendingIssue> {
-    let path = state.wallet_path.clone();
-    let passphrase = {
-        let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock
-            .clone()
-            .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
+    let tx = {
+        let (wallet_guard, _, _) = state.lock_and_get_wallet().await?;
+        let w_state = wallet_guard.as_ref().unwrap();
+        w_state
+            .transactions
+            .iter()
+            .find(|t| t.id == tx_id)
+            .cloned()
+            .ok_or_else(|| crate::error::CommandError("Transaction not found".to_string()))?
     };
-
-    let w_state = WalletState::load_encrypted(&path, &passphrase)?;
-
-    let tx = w_state
-        .transactions
-        .into_iter()
-        .find(|t| t.id == tx_id)
-        .ok_or_else(|| crate::error::CommandError("Transaction not found".to_string()))?;
 
     if let ecash_core::types::TransactionType::Issue(issue_data) = tx.tx_type {
         // Fetch the invoice from the hub mint using the quote_id
@@ -189,16 +179,9 @@ pub async fn issue_note_direct(
     sats: u64,
     mint_urls: Vec<String>,
 ) -> CommandResult<IssuedNote> {
-    let path = state.wallet_path.clone();
-
-    let passphrase = {
-        let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock
-            .clone()
-            .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
-    };
-
-    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    if mint_urls.is_empty() {
+        return Err(crate::error::CommandError("No mints selected".to_string()));
+    }
 
     let mut actual_allocs = Vec::new();
     let per_mint = sats / mint_urls.len() as u64;
@@ -217,10 +200,13 @@ pub async fn issue_note_direct(
         .map(|(u, a)| (u.as_str(), *a))
         .collect();
 
-    let note =
-        ecash_wallet::direct::issue_direct_note(&mut w_state, &path, &passphrase, &allocs_refs)
+    let note = {
+        let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
+        let w_state = wallet_guard.as_mut().unwrap();
+        ecash_wallet::direct::issue_direct_note(w_state, &path, &passphrase, &allocs_refs)
             .await
-            .map_err(|e| crate::error::CommandError(e.to_string()))?;
+            .map_err(|e| crate::error::CommandError(e.to_string()))?
+    };
 
     let bin = ecash_core::compact::encode_full_note(&note)
         .map_err(|e| crate::error::CommandError(format!("Failed to encode note: {:?}", e)))?;

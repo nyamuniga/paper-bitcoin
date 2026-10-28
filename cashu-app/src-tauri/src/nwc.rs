@@ -120,15 +120,28 @@ pub fn set_app_default_mint(app: tauri::AppHandle, mint_url: Option<String>) -> 
     Ok(())
 }
 
+fn get_authorized_nwc_client_pubkey(app: &AppHandle) -> Option<PublicKey> {
+    let store = app.store("settings.bin").ok()?;
+    let client_secret_hex = store.get("nwc_client_secret")?.as_str()?.to_string();
+    let secret_key = SecretKey::from_hex(&client_secret_hex).ok()?;
+    Some(Keys::new(secret_key).public_key())
+}
+
 #[tauri::command]
 pub fn enable_nwc(app: tauri::AppHandle) -> Result<bool, String> {
     // To enable NWC, we force "Remember Me" so the daemon can decrypt the wallet in the background.
     let state = app.state::<AppState>();
     let passphrase = { state.passphrase.lock().unwrap().clone() };
     if let Some(p) = passphrase {
-        let store = app.store("auth.bin").map_err(|e| e.to_string())?;
-        store.set("passphrase", serde_json::json!(p));
-        store.save().map_err(|e| e.to_string())?;
+        crate::commands::auth::save_passphrase(&app, &p);
+
+        if let Ok(settings) = app.store("settings.bin") {
+            settings.set("nwc_enabled", serde_json::json!(true));
+            let _ = settings.save();
+        }
+        state
+            .nwc_enabled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(true)
     } else {
         Err("Wallet must be unlocked to enable NWC".to_string())
@@ -136,8 +149,28 @@ pub fn enable_nwc(app: tauri::AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
+pub fn disable_nwc(app: tauri::AppHandle) -> Result<bool, String> {
+    let state = app.state::<AppState>();
+    state
+        .nwc_enabled
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    if let Ok(mut queue) = state.pending_nwc_requests.lock() {
+        queue.clear();
+    }
+    if let Ok(settings) = app.store("settings.bin") {
+        settings.set("nwc_enabled", serde_json::json!(false));
+        let _ = settings.save();
+    }
+    Ok(true)
+}
+
+#[tauri::command]
 pub fn reset_nwc_keys(app: tauri::AppHandle) -> Result<String, String> {
     let store = app.store("settings.bin").map_err(|e| e.to_string())?;
+    let state = app.state::<AppState>();
+    if let Ok(mut queue) = state.pending_nwc_requests.lock() {
+        queue.clear();
+    }
     
     // Generate new provider keys
     let new_secret_key = SecretKey::generate();
@@ -192,6 +225,12 @@ pub async fn approve_nwc_request(event_id: String, app: tauri::AppHandle, state:
         let idx = queue.iter().position(|r| r.event_id == event_id).ok_or_else(|| "Request not found".to_string())?;
         queue.remove(idx)
     };
+
+    if let Ok(event) = serde_json::from_str::<Event>(&pending_req.raw_event) {
+        if get_authorized_nwc_client_pubkey(&app) != Some(event.pubkey) {
+            return Err("Unauthorized NWC client pubkey".to_string());
+        }
+    }
     
     // Pay the invoice
     match handle_pay_invoice(&app, &pending_req.invoice).await {
@@ -298,6 +337,28 @@ pub async fn spawn_nwc_listener(app: AppHandle) -> Result<()> {
         while let Ok(notification) = notifications.recv().await {
             if let RelayPoolNotification::Event { event, .. } = notification {
                 if event.kind == Kind::WalletConnectRequest {
+                    let state = app_handle.state::<AppState>();
+                    if !state.nwc_enabled.load(std::sync::atomic::Ordering::SeqCst) {
+                        continue;
+                    }
+
+                    if event.verify().is_err() {
+                        eprintln!("Rejected NWC request with invalid Nostr signature");
+                        continue;
+                    }
+
+                    let Some(authorized_pubkey) = get_authorized_nwc_client_pubkey(&app_handle) else {
+                        eprintln!("Rejected NWC request: no authorized nwc_client_secret configured");
+                        continue;
+                    };
+                    if event.pubkey != authorized_pubkey {
+                        eprintln!(
+                            "Rejected unauthorized NWC request from pubkey {} (expected {})",
+                            event.pubkey, authorized_pubkey
+                        );
+                        continue;
+                    }
+
                     if !processed_events.insert(event.id.to_hex()) {
                         continue;
                     }
@@ -390,7 +451,7 @@ pub async fn spawn_nwc_listener(app: AppHandle) -> Result<()> {
                         let _ = send_nip47_response(&client, &keys, &event, resp).await;
                     } else if req.method == Method::GetBalance {
                         let mut real_balance = 0;
-                        if let Ok(wallet) = get_wallet_state(&app_handle) {
+                        if let Ok(wallet) = get_wallet_state(&app_handle).await {
                             real_balance = wallet.total_balance() * 1000; // msats
                         }
                         
@@ -415,7 +476,7 @@ pub async fn spawn_nwc_listener(app: AppHandle) -> Result<()> {
                         let _ = send_nip47_json_response(&client, &keys, &event, custom_resp.to_string()).await;
                     } else if req.method == Method::ListTransactions {
                         let mut txs = Vec::new();
-                        if let Ok(wallet) = get_wallet_state(&app_handle) {
+                        if let Ok(wallet) = get_wallet_state(&app_handle).await {
                             let mut sorted_txs = wallet.transactions.clone();
                             sorted_txs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
                             
@@ -561,51 +622,49 @@ async fn handle_pay_invoice(app: &AppHandle, invoice: &str) -> Result<String> {
     }
     
     let state = app.state::<AppState>();
-    
+    let mut wallet_guard = state.wallet.lock().await;
+
     // 1. Try to get passphrase from memory
     let mut passphrase = state.passphrase.lock().unwrap().clone();
-    
+
     // 2. If missing, try to get from store (auth.bin)
     if passphrase.is_none() {
-        if let Ok(store) = app.store("auth.bin") {
-            if let Some(val) = store.get("passphrase") {
-                if let Some(s) = val.as_str() {
-                    passphrase = Some(s.to_string());
-                }
-            }
-        }
+        passphrase = crate::commands::auth::get_saved_passphrase(app);
     }
-    
+
     let passphrase = passphrase.ok_or_else(|| anyhow::anyhow!("Wallet is locked and Remember Me is disabled"))?;
     let path = state.wallet_path.clone();
-    
-    // Execute payment holding the wallet lock
-    let mut wallet = WalletState::load_encrypted(&path, &passphrase)?;
-    // pay_invoice now returns (sats, preimage).
-    let (_sats, preimage) = ecash_wallet::pay_invoice(&mut wallet, &path, &passphrase, invoice, selected_mint).await?;
-    
+
+    if wallet_guard.is_none() {
+        let loaded = WalletState::load_encrypted(&path, &passphrase)?;
+        *wallet_guard = Some(loaded);
+    }
+    let wallet = wallet_guard.as_mut().unwrap();
+
+    // Execute payment holding the synchronized in-memory wallet lock
+    let (_sats, preimage) = ecash_wallet::pay_invoice(wallet, &path, &passphrase, invoice, selected_mint).await?;
+
     Ok(preimage)
 }
 
-fn get_wallet_state(app: &tauri::AppHandle) -> Result<WalletState> {
+async fn get_wallet_state(app: &tauri::AppHandle) -> Result<WalletState> {
     let state = app.state::<AppState>();
-    
+    let mut wallet_guard = state.wallet.lock().await;
+
     // Try to get passphrase from memory
     let mut passphrase = state.passphrase.lock().unwrap().clone();
-    
+
     // If missing, try to get from store
     if passphrase.is_none() {
-        if let Ok(store) = app.store("auth.bin") {
-            if let Some(val) = store.get("passphrase") {
-                if let Some(s) = val.as_str() {
-                    passphrase = Some(s.to_string());
-                }
-            }
-        }
+        passphrase = crate::commands::auth::get_saved_passphrase(app);
     }
-    
+
     let passphrase = passphrase.ok_or_else(|| anyhow::anyhow!("Wallet is locked"))?;
     let path = state.wallet_path.clone();
-    
-    WalletState::load_encrypted(&path, &passphrase).map_err(|e| anyhow::anyhow!(e))
+
+    if wallet_guard.is_none() {
+        let loaded = WalletState::load_encrypted(&path, &passphrase).map_err(|e| anyhow::anyhow!(e))?;
+        *wallet_guard = Some(loaded);
+    }
+    Ok(wallet_guard.as_ref().unwrap().clone())
 }

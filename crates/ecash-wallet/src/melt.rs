@@ -100,15 +100,24 @@ pub async fn reconstruct_token(public_data: &ecash_core::types::PublicNoteData, 
             }
             let keyset = keyset_cache.get(&p.id).ok_or_else(|| anyhow!("Keyset missing from cache for id {}", p.id))?;
 
-            let secret = note_deriv.secret_at(p.derivation_index);
-            let sess = BlindingSession::new(&secret);
-
             let c_prime_str = p.c_prime.as_ref().ok_or_else(|| anyhow!("Missing C_ in public proof"))?;
             let c_prime = point_from_hex(c_prime_str).context("Invalid C_")?;
             let mint_pk_str = keyset.keys.get(&p.amount).ok_or_else(|| anyhow!("Unknown amount {} in keyset", p.amount))?;
             let mint_pk = point_from_hex(mint_pk_str).context("Invalid mint pk")?;
 
+            let sess = note_deriv.session_at(p.derivation_index);
             let mut reconstructed_proof = sess.unblind(&c_prime, &mint_pk, p.amount, &p.id, p.dleq.clone());
+            if reconstructed_proof.c != p.c
+                || (p.b_prime.is_some() && p.b_prime.as_deref() != Some(&sess.b_prime_hex()))
+            {
+                let legacy_sess = note_deriv.session_at_legacy(p.derivation_index);
+                let legacy_proof = legacy_sess.unblind(&c_prime, &mint_pk, p.amount, &p.id, p.dleq.clone());
+                if legacy_proof.c == p.c
+                    || p.b_prime.as_deref() == Some(&legacy_sess.b_prime_hex())
+                {
+                    reconstructed_proof = legacy_proof;
+                }
+            }
             reconstructed_proof.derivation_index = p.derivation_index;
             proofs.push(reconstructed_proof);
         }
@@ -211,9 +220,8 @@ async fn redeem_note_mpp(
         let mut change_sessions = Vec::new();
         let mut change_outputs = Vec::new();
         for &d in &change_denoms {
-            let secret = deriv.next_secret();
-            let sess = BlindingSession::new(&secret);
-            let index = deriv.index - 1;
+            let index = deriv.index;
+            let sess = deriv.next_session();
             change_outputs.push(serde_json::json!({
                 "amount": d,
                 "id": "placeholder",
@@ -433,9 +441,8 @@ async fn redeem_note_legacy(
             let mut change_outputs = Vec::new();
             
             for &d in &change_denoms {
-                let secret = deriv.next_secret();
-                let sess = BlindingSession::new(&secret);
-                let index = deriv.index - 1;
+                let index = deriv.index;
+                let sess = deriv.next_session();
                 change_outputs.push(serde_json::json!({
                     "amount": d,
                     "id": entry_keyset.id,
@@ -449,9 +456,8 @@ async fn redeem_note_legacy(
             let mut hub_change_sessions = Vec::new();
             let mut hub_change_outputs = Vec::new();
             for &d in &denoms {
-                let secret = deriv.next_secret();
-                let sess = BlindingSession::new(&secret);
-                let index = deriv.index - 1;
+                let index = deriv.index;
+                let sess = deriv.next_session();
                 hub_change_outputs.push(serde_json::json!({
                     "amount": d,
                     "id": hub_keyset.id,
@@ -718,9 +724,8 @@ async fn redeem_note_legacy(
     let mut sessions = Vec::new();
     let mut outputs = Vec::new();
     for &d in &change_denoms {
-        let secret = deriv.next_secret();
-        let sess = BlindingSession::new(&secret);
-        let index = deriv.index - 1;
+        let index = deriv.index;
+        let sess = deriv.next_session();
         outputs.push(serde_json::json!({
             "amount": 0,
             "id": hub_keyset.id,
@@ -778,9 +783,8 @@ async fn redeem_note_legacy(
                     outputs.clear();
                     sessions.clear();
                     for &d in &change_denoms {
-                        let secret = deriv.next_secret();
-                        let sess = BlindingSession::new(&secret);
-                        let index = deriv.index - 1;
+                        let index = deriv.index;
+                        let sess = deriv.next_session();
                         outputs.push(serde_json::json!({
                             "amount": 0,
                             "id": hub_keyset.id,
@@ -1191,8 +1195,7 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let mut outputs = Vec::new();
     for &d in &change_denoms {
         let index = deriv.index;
-        let secret = deriv.next_secret();
-        let sess = BlindingSession::new(&secret);
+        let sess = deriv.next_session();
         outputs.push(serde_json::json!({"amount": d, "id": hub_keyset.id, "B_": sess.b_prime_hex()}));
         sessions.push((d, sess, index));
     }

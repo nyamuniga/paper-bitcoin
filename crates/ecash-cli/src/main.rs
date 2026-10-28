@@ -1162,20 +1162,28 @@ async fn fetch_mint_keys(url: &str) -> Option<std::collections::HashMap<u64, Str
 pub fn decode_qr_payload(payload: &str) -> anyhow::Result<Vec<u8>> {
     use std::io::Read;
     use base64::Engine;
+    const MAX_DECOMPRESSED_QR_BYTES: usize = 256 * 1024;
+    let decompress_bounded = |compressed: &[u8]| -> anyhow::Result<Vec<u8>> {
+        let decoder = flate2::read::ZlibDecoder::new(compressed);
+        let mut limited = decoder.take((MAX_DECOMPRESSED_QR_BYTES + 1) as u64);
+        let mut decompressed = Vec::new();
+        limited.read_to_end(&mut decompressed)?;
+        if decompressed.len() > MAX_DECOMPRESSED_QR_BYTES {
+            anyhow::bail!("Decompressed QR payload exceeds 256 KiB limit");
+        }
+        Ok(decompressed)
+    };
     if let Some(b45) = payload.strip_prefix("ECASHZ:") {
         let compressed = base45::decode(b45).map_err(|_| anyhow::anyhow!("Invalid base45 payload"))?;
-        let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
-        let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)?;
-        Ok(decompressed)
+        decompress_bounded(&compressed)
     } else if let Some(b64) = payload.strip_prefix("eCashZ:") {
         let compressed = base64::engine::general_purpose::STANDARD.decode(b64)?;
-        let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
-        let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)?;
-        Ok(decompressed)
+        decompress_bounded(&compressed)
     } else {
         let decoded = base64::engine::general_purpose::STANDARD.decode(payload)?;
+        if decoded.len() > MAX_DECOMPRESSED_QR_BYTES {
+            anyhow::bail!("Decoded QR payload exceeds 256 KiB limit");
+        }
         Ok(decoded)
     }
 }

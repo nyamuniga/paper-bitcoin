@@ -23,14 +23,6 @@ export function useUrEncoder(dataStr: string | null, fragmentSize: number = 150,
   const [currentFrame, setCurrentFrame] = useState<string>(() => {
     if (!dataStr) return '';
     if (!isTooLargeForStatic) return dataStr;
-    if (encoder) {
-      try {
-        return encoder.nextPart();
-      } catch (e) {
-        console.error("Failed to get initial UR part on state init:", e);
-        return '';
-      }
-    }
     return '';
   });
 

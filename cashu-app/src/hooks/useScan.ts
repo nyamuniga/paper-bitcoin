@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { useNavigate } from 'react-router-dom';
 import { parseBitcoinInput } from '../utils/bitcoinValidation';
+import { validateLnurlPay } from './useLnurlValidation';
 
 export const useScan = () => {
   const [binB64, setBinB64] = useState<string>('');
@@ -33,7 +34,22 @@ export const useScan = () => {
     }
     
     const parsed = parseBitcoinInput(trimmed);
-    if (parsed.type === 'lightning' || parsed.type === 'lnurl' || parsed.type === 'lnurl-pay') {
+    if (parsed.type === 'lightning') {
+      navigate('/', { state: { lnbcInvoice: parsed.addressOrInvoice } });
+      return;
+    }
+
+    if (parsed.type === 'lnurl' || parsed.type === 'lnurl-pay') {
+      // Validate the Lightning Address / LNURL before handing off to the send flow
+      // (covers camera scans, which bypass the live check on the paste box).
+      setLoading(true);
+      const entry = await validateLnurlPay(parsed.addressOrInvoice);
+      setLoading(false);
+      if (entry.error) {
+        // Put it in the paste box so the inline validation pill explains why
+        setBinB64(trimmed);
+        return;
+      }
       navigate('/', { state: { lnbcInvoice: parsed.addressOrInvoice } });
       return;
     }

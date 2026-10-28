@@ -32,6 +32,9 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
   const { npub, relays, setRelays, isInitializing } = useNostrStore();
   const [nsec, setNsec] = useState<string | null>(null);
   const [showNsec, setShowNsec] = useState(false);
+  const [showPassphrasePrompt, setShowPassphrasePrompt] = useState<'reveal' | 'copy' | null>(null);
+  const [passphraseInput, setPassphraseInput] = useState('');
+  const [isVerifyingPassphrase, setIsVerifyingPassphrase] = useState(false);
   const [isEditingNsec, setIsEditingNsec] = useState(false);
   const [editNsecValue, setEditNsecValue] = useState('');
   const [newRelay, setNewRelay] = useState('');
@@ -49,28 +52,28 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
     }).catch(console.error);
   }, []);
 
+  const loadNsecFromBackend = async (): Promise<string> => {
+    const customKeyHex = await invoke<string | null>('get_custom_nostr_key');
+    let privateKeyHex = customKeyHex;
+
+    if (!privateKeyHex) {
+      const seedHex = await invoke<string>('get_seed_hex');
+      const { privateKey } = deriveNostrKeypair(seedHex);
+      privateKeyHex = privateKey;
+    }
+
+    const nsecString = nip19.nsecEncode(hexToBytes(privateKeyHex));
+    setNsec(nsecString);
+    return nsecString;
+  };
+
   const handleRevealNsec = async () => {
     if (nsec) {
       setShowNsec(!showNsec);
       return;
     }
-
-    try {
-      const customKeyHex = await invoke<string | null>('get_custom_nostr_key');
-      let privateKeyHex = customKeyHex;
-
-      if (!privateKeyHex) {
-        const seedHex = await invoke<string>('get_seed_hex');
-        const { privateKey } = deriveNostrKeypair(seedHex);
-        privateKeyHex = privateKey;
-      }
-
-      const nsecString = nip19.nsecEncode(hexToBytes(privateKeyHex));
-      setNsec(nsecString);
-      setShowNsec(true);
-    } catch (e: any) {
-      toast.error('Failed to reveal nsec: ' + e.message);
-    }
+    setPassphraseInput('');
+    setShowPassphrasePrompt('reveal');
   };
 
   const handleCopy = (text: string | null) => {
@@ -83,22 +86,29 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
     if (nsec) {
       handleCopy(nsec);
     } else {
-      try {
-        const customKeyHex = await invoke<string | null>('get_custom_nostr_key');
-        let privateKeyHex = customKeyHex;
+      setPassphraseInput('');
+      setShowPassphrasePrompt('copy');
+    }
+  };
 
-        if (!privateKeyHex) {
-          const seedHex = await invoke<string>('get_seed_hex');
-          const { privateKey } = deriveNostrKeypair(seedHex);
-          privateKeyHex = privateKey;
-        }
-
-        const nsecString = nip19.nsecEncode(hexToBytes(privateKeyHex));
-        setNsec(nsecString);
+  const handleVerifyNsecPassphrase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passphraseInput) return;
+    setIsVerifyingPassphrase(true);
+    try {
+      await invoke<boolean>('verify_passphrase', { passphrase: passphraseInput });
+      const nsecString = await loadNsecFromBackend();
+      if (showPassphrasePrompt === 'reveal') {
+        setShowNsec(true);
+      } else if (showPassphrasePrompt === 'copy') {
         handleCopy(nsecString);
-      } catch (e: any) {
-        toast.error('Failed to copy nsec');
       }
+      setShowPassphrasePrompt(null);
+      setPassphraseInput('');
+    } catch {
+      toast.error('Incorrect passphrase');
+    } finally {
+      setIsVerifyingPassphrase(false);
     }
   };
 
@@ -313,6 +323,36 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
                   </button>
                 </div>
               </div>
+            )}
+
+            {showPassphrasePrompt && !isEditingNsec && (
+              <form
+                onSubmit={handleVerifyNsecPassphrase}
+                className="mt-2 p-3 bg-surface-container-lowest rounded-xl border border-outline-variant flex flex-col sm:flex-row gap-2"
+              >
+                <input
+                  type="password"
+                  value={passphraseInput}
+                  onChange={(e) => setPassphraseInput(e.target.value)}
+                  placeholder="Enter wallet passphrase to unlock nsec"
+                  autoFocus
+                  className="flex-1 bg-surface-container-high border border-outline-variant rounded-lg px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary"
+                />
+                <button
+                  type="submit"
+                  disabled={isVerifyingPassphrase || !passphraseInput}
+                  className="px-4 py-2 bg-primary text-on-primary text-xs font-bold rounded-lg disabled:opacity-50 cursor-pointer"
+                >
+                  {isVerifyingPassphrase ? 'Verifying...' : 'Confirm'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPassphrasePrompt(null)}
+                  className="px-3 py-2 bg-surface-container-highest text-on-surface text-xs font-bold rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </form>
             )}
 
             <div className="flex items-start gap-2 mt-2">

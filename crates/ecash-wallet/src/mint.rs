@@ -91,8 +91,7 @@ pub async fn prepare_issue_multimint_note(
     let mut outputs = Vec::new();
     for &d in &hub_denoms {
         let index = note_deriv.index;
-        let secret = note_deriv.next_secret();
-        let sess = BlindingSession::new(&secret);
+        let sess = note_deriv.next_session();
         outputs.push(serde_json::json!({"amount": d, "id": hub_keyset.id, "B_": sess.b_prime_hex()}));
         sessions.push((sess, index));
     }
@@ -110,7 +109,7 @@ pub async fn prepare_issue_multimint_note(
                 ReserveStrategy::Static => "static".to_string(),
                 ReserveStrategy::Dynamic => "dynamic".to_string(),
             },
-            hub_blinding_sessions_hex: sessions.iter().map(|(s, _)| s.secret.clone()).collect(),
+            hub_blinding_sessions_hex: sessions.iter().map(|(s, _)| s.to_session_hex()).collect(),
             hub_outputs: outputs.clone(),
             child_quotes: other_quotes,
         }),
@@ -260,8 +259,7 @@ pub async fn resume_issue_note(
         let mut b_out = Vec::new();
         for &d in &denoms {
             let index = note_deriv.index;
-            let secret = note_deriv.next_secret();
-            let sess = BlindingSession::new(&secret);
+            let sess = note_deriv.next_session();
             // We use a dummy keyset id for now, it will be overridden if we fetch keyset
             b_out.push(serde_json::json!({"amount": d, "id": "placeholder", "B_": sess.b_prime_hex()}));
             b_sess.push((d, sess, index));
