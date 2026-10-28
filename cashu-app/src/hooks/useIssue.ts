@@ -79,7 +79,7 @@ export const useIssue = () => {
         const errMsg = e.toString();
         addLog("check_issue_status error: " + errMsg);
 
-        if (errMsg.includes('not paid') || errMsg.includes('Concurrent issuance failed') || errMsg.includes('already spent') || errMsg.includes('timeout') || errMsg.includes('error')) {
+        if (errMsg.includes('not paid') || errMsg.includes('Concurrent issuance failed') || errMsg.includes('already spent') || errMsg.includes('timeout')) {
           timeoutId = setTimeout(pollStatus, 2000);
         } else {
           setError("Status check failed. " + errMsg);

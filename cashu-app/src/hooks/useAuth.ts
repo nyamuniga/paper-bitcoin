@@ -15,15 +15,28 @@ export const useAuth = () => {
   const [restoreProgress, setRestoreProgress] = useState<string[]>([]);
   
   useEffect(() => {
+    let unlistenFn: (() => void) | null = null;
+    let isMounted = true;
     import('@tauri-apps/api/event').then(({ listen }) => {
       listen('restore-progress', (event) => {
+        if (!isMounted) return;
         setRestoreProgress(prev => {
-            const next = [...prev, event.payload as string];
-            if (next.length > 50) return next.slice(next.length - 50); // Keep last 50 logs
-            return next;
+          const next = [...prev, event.payload as string];
+          if (next.length > 50) return next.slice(next.length - 50); // Keep last 50 logs
+          return next;
         });
+      }).then((unlisten) => {
+        if (isMounted) {
+          unlistenFn = unlisten;
+        } else {
+          unlisten();
+        }
       });
     });
+    return () => {
+      isMounted = false;
+      if (unlistenFn) unlistenFn();
+    };
   }, []);
   
   const refreshWallet = useWalletStore((s) => s.refreshWallet);

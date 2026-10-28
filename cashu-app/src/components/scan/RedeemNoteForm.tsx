@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Loader2, Zap, Wallet, QrCode } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import { getInvoiceAmountSats } from '../../services/lnurlService';
 
 interface RedeemNoteFormProps {
   invoice: string;
@@ -18,27 +19,6 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
   invoice, setInvoice, redeeming, onRedeem, noteAmount, redeemMethod, setRedeemMethod, hasExtraProofs, isSpent
 }) => {
   const [showScanner, setShowScanner] = useState(false);
-
-  const getInvoiceAmountSats = (inv: string): number | null => {
-    try {
-      const hrp = inv.toLowerCase().split('1')[0];
-      if (!hrp) return null;
-      const match = hrp.match(/^ln[a-z]+(\d+)([munp]?)$/);
-      if (match) {
-        let val = parseInt(match[1], 10);
-        const mult = match[2];
-        if (mult === 'm') val *= 100000;
-        else if (mult === 'u') val *= 100;
-        else if (mult === 'n') val *= 0.1;
-        else if (mult === 'p') val *= 0.0001;
-        else val *= 100000000;
-        return Math.floor(val);
-      }
-    } catch (e) {
-      return null;
-    }
-    return null;
-  };
 
   const invoiceAmount = getInvoiceAmountSats(invoice);
   const isZeroAmount = invoiceAmount === 0;

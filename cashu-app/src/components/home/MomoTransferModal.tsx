@@ -543,7 +543,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                     {phase === AppPhase.RETRYABLE_ERROR ? (
                       <div className="flex gap-3">
                         <button onClick={handleClose} className="flex-1 py-4 rounded-2xl font-label-lg border border-outline-variant/20 hover:bg-surface-container-highest">Cancel</button>
-                        <button onClick={() => updateTransactionPhase(AppPhase.AWAITING_INVOICE_PAYMENT)} className="flex-1 bg-primary text-on-primary py-4 rounded-2xl font-label-lg">Retry</button>
+                        <button onClick={() => updateTransactionPhase(activeTransaction?.invoicePaid ? AppPhase.INITIATING_PAYOUT : AppPhase.AWAITING_INVOICE_PAYMENT)} className="flex-1 bg-primary text-on-primary py-4 rounded-2xl font-label-lg">Retry</button>
                       </div>
                     ) : (
                       <button onClick={handleClose} className="w-full bg-surface-container-highest text-on-surface py-4 rounded-2xl font-label-lg hover:bg-surface-bright">Close</button>
@@ -739,7 +739,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
         }}
         onRetry={stampStatus === 'failed' ? () => {
           setStampDismissed(false);
-          updateTransactionPhase(activeTab === 'receive' ? AppPhase.VERIFYING_PAYMENT : AppPhase.AWAITING_INVOICE_PAYMENT);
+          updateTransactionPhase(activeTab === 'receive' ? AppPhase.VERIFYING_PAYMENT : (activeTransaction?.invoicePaid ? AppPhase.INITIATING_PAYOUT : AppPhase.AWAITING_INVOICE_PAYMENT));
         } : undefined}
       />
     </div>,

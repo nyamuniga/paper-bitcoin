@@ -51,38 +51,27 @@ pub async fn restore_from_mints_range(
             }
         };
 
-        // Filter denominations up to 1M sats (~$650 USD). Eliminates huge unused denominations (2M to 67M sats)
-        // to dramatically reduce output count while covering all real-world ecash splits.
-        let mut target_amounts: Vec<u64> = keyset
-            .keys
-            .keys()
-            .filter(|&&amt| amt <= 1_048_576)
-            .cloned()
-            .collect();
-        target_amounts.sort_unstable();
-
         let mut output_json = Vec::new();
         // Keep track of session info to unblind later.
         let mut session_map = std::collections::HashMap::new();
+        let deriv = TokenDerivation::from_hex(&state.seed_hex)?;
 
-        // Generate secrets for indices start_idx..=end_idx
+        // Generate secrets for indices start_idx..=end_idx (both seed-derived r and legacy fallback).
+        // Send exactly ONE BlindedMessage per unique B_ so outputs and signatures stay 1-to-1.
         for idx in start_idx..=end_idx {
-            let mut deriv = TokenDerivation::from_hex(&state.seed_hex)?;
-            deriv.index = idx;
-            let secret = deriv.next_secret();
-            let sess = BlindingSession::new(&secret);
-            let b_hex = sess.b_prime_hex();
+            for sess in [deriv.session_at(idx), deriv.session_at_legacy(idx)] {
+                let b_hex = sess.b_prime_hex();
+                let sess_hex = sess.to_session_hex();
 
-            for &amt in &target_amounts {
+                if session_map.contains_key(&b_hex) {
+                    continue;
+                }
                 output_json.push(serde_json::json!({
-                    "amount": amt,
+                    "amount": 1,
                     "id": keyset.id,
                     "B_": b_hex.clone()
                 }));
-                session_map.insert(
-                    format!("{}_{}", b_hex, amt),
-                    (secret.clone(), idx)
-                );
+                session_map.insert(b_hex, (sess_hex, idx));
             }
         }
 
@@ -131,9 +120,8 @@ pub async fn restore_from_mints_range(
             continue;
         }
 
-        let _ = std::fs::write("/tmp/cashu_restore_sigs.json", serde_json::to_string_pretty(&sig_arr).unwrap_or_default());
-
         let mut restored_proofs = Vec::new();
+        let mut seen_restored_secrets = std::collections::HashSet::new();
         let mut ys = Vec::new();
         let mut keyset_cache: std::collections::HashMap<String, KeysetInfo> = std::collections::HashMap::new();
         keyset_cache.insert(keyset.id.clone(), keyset.clone());
@@ -145,27 +133,48 @@ pub async fn restore_from_mints_range(
                 out_val.get("B_").and_then(|b| b.as_str()),
                 sig_val.get("C_").and_then(|c| c.as_str()),
             ) {
-                if let Some((secret, idx)) = session_map.get(&format!("{}_{}", b_hex, amt)) {
-                    let sig_keyset = match keyset_cache.get(sig_id) {
-                        Some(ks) => ks.clone(),
-                        None => match client.fetch_keyset_by_id(sig_id).await {
-                            Ok(ks) => {
-                                keyset_cache.insert(sig_id.to_string(), ks.clone());
-                                ks
-                            }
-                            Err(_) => keyset.clone(),
-                        },
-                    };
-                    let mint_pk_str = sig_keyset.keys.get(&amt).or_else(|| keyset.keys.get(&amt));
-                    if let Some(pk_str) = mint_pk_str {
-                        if let Ok(mint_pk) = point_from_hex(pk_str) {
-                            if let Ok(c_prime) = point_from_hex(c_hex) {
-                                let dleq = crate::melt::parse_dleq(&sig_val);
-                                let sess = BlindingSession::new(secret);
-                                let mut proof = sess.unblind(&c_prime, &mint_pk, amt, sig_id, dleq);
-                                proof.derivation_index = *idx;
-                                max_used_index = std::cmp::max(max_used_index, *idx as i64);
+                let sig_keyset = match keyset_cache.get(sig_id) {
+                    Some(ks) => ks.clone(),
+                    None => match client.fetch_keyset_by_id(sig_id).await {
+                        Ok(ks) => {
+                            keyset_cache.insert(sig_id.to_string(), ks.clone());
+                            ks
+                        }
+                        Err(_) => keyset.clone(),
+                    },
+                };
+                let mint_pk_str = sig_keyset.keys.get(&amt).or_else(|| keyset.keys.get(&amt));
+                if let Some(pk_str) = mint_pk_str {
+                    if let (Ok(mint_pk), Ok(c_prime)) = (point_from_hex(pk_str), point_from_hex(c_hex)) {
+                        let dleq = crate::melt::parse_dleq(&sig_val);
 
+                        // Match by B_ first; if DLEQ is present and fails (e.g. mint reordered array), find matching session via DLEQ
+                        let mut matched_session = session_map.get(b_hex).cloned();
+                        if let (Some((ref sess_str, _)), Some(ref dleq_val)) = (&matched_session, &dleq) {
+                            let cand = BlindingSession::new(sess_str);
+                            if !ecash_core::dhke::verify_dleq(&mint_pk, &c_prime, &cand.b_prime, dleq_val) {
+                                matched_session = None;
+                            }
+                        }
+                        if matched_session.is_none() {
+                            if let Some(ref dleq_val) = dleq {
+                                for (cand_sess_str, cand_idx) in session_map.values() {
+                                    let cand = BlindingSession::new(cand_sess_str);
+                                    if ecash_core::dhke::verify_dleq(&mint_pk, &c_prime, &cand.b_prime, dleq_val) {
+                                        matched_session = Some((cand_sess_str.clone(), *cand_idx));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some((secret, idx)) = matched_session {
+                            let sess = BlindingSession::new(&secret);
+                            let mut proof = sess.unblind(&c_prime, &mint_pk, amt, sig_id, dleq);
+                            proof.derivation_index = idx;
+                            max_used_index = std::cmp::max(max_used_index, idx as i64);
+
+                            if seen_restored_secrets.insert(proof.secret.clone()) {
                                 let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(proof.secret.as_bytes()));
                                 ys.push(y);
                                 restored_proofs.push(proof);
@@ -291,16 +300,6 @@ pub async fn restore_from_mints_adaptive(
             }
         };
 
-        // Filter denominations up to 1M sats (~$650 USD). Eliminates huge unused denominations (2M to 67M sats)
-        // to dramatically reduce output count while covering all real-world ecash splits.
-        let mut target_amounts: Vec<u64> = keyset
-            .keys
-            .keys()
-            .filter(|&&amt| amt <= 1_048_576)
-            .cloned()
-            .collect();
-        target_amounts.sort_unstable();
-
         let max_known_proof_idx = state.proofs.get(&mint_url)
             .map(|ps| ps.iter().map(|p| p.derivation_index).max().unwrap_or(0))
             .unwrap_or(0);
@@ -320,24 +319,22 @@ pub async fn restore_from_mints_adaptive(
 
             let mut output_json = Vec::new();
             let mut session_map = std::collections::HashMap::new();
+            let deriv = TokenDerivation::from_hex(&state.seed_hex)?;
 
             for idx in batch_start..=batch_end {
-                let mut deriv = TokenDerivation::from_hex(&state.seed_hex)?;
-                deriv.index = idx;
-                let secret = deriv.next_secret();
-                let sess = BlindingSession::new(&secret);
-                let b_hex = sess.b_prime_hex();
+                for sess in [deriv.session_at(idx), deriv.session_at_legacy(idx)] {
+                    let b_hex = sess.b_prime_hex();
+                    let sess_hex = sess.to_session_hex();
 
-                for &amt in &target_amounts {
+                    if session_map.contains_key(&b_hex) {
+                        continue;
+                    }
                     output_json.push(serde_json::json!({
-                        "amount": amt,
+                        "amount": 1,
                         "id": keyset.id,
                         "B_": b_hex.clone()
                     }));
-                    session_map.insert(
-                        format!("{}_{}", b_hex, amt),
-                        (secret.clone(), idx)
-                    );
+                    session_map.insert(b_hex, (sess_hex, idx));
                 }
             }
 
@@ -391,6 +388,7 @@ pub async fn restore_from_mints_adaptive(
 
             if !sig_arr.is_empty() {
                 let mut batch_restored_proofs = Vec::new();
+                let mut seen_batch_secrets = std::collections::HashSet::new();
                 let mut ys = Vec::new();
                 let mut keyset_cache: std::collections::HashMap<String, KeysetInfo> = std::collections::HashMap::new();
                 keyset_cache.insert(keyset.id.clone(), keyset.clone());
@@ -402,30 +400,51 @@ pub async fn restore_from_mints_adaptive(
                         out_val.get("B_").and_then(|b| b.as_str()),
                         sig_val.get("C_").and_then(|c| c.as_str()),
                     ) {
-                        if let Some((secret, idx)) = session_map.get(&format!("{}_{}", b_hex, amt)) {
-                            let sig_keyset = match keyset_cache.get(sig_id) {
-                                Some(ks) => ks.clone(),
-                                None => match client.fetch_keyset_by_id(sig_id).await {
-                                    Ok(ks) => {
-                                        keyset_cache.insert(sig_id.to_string(), ks.clone());
-                                        ks
+                        let sig_keyset = match keyset_cache.get(sig_id) {
+                            Some(ks) => ks.clone(),
+                            None => match client.fetch_keyset_by_id(sig_id).await {
+                                Ok(ks) => {
+                                    keyset_cache.insert(sig_id.to_string(), ks.clone());
+                                    ks
+                                }
+                                Err(_) => keyset.clone(),
+                            },
+                        };
+                        let mint_pk_str = sig_keyset.keys.get(&amt).or_else(|| keyset.keys.get(&amt));
+                        if let Some(pk_str) = mint_pk_str {
+                            if let (Ok(mint_pk), Ok(c_prime)) = (point_from_hex(pk_str), point_from_hex(c_hex)) {
+                                let dleq = crate::melt::parse_dleq(&sig_val);
+
+                                // Match by B_ first; if DLEQ is present and fails (e.g. mint reordered array), find matching session via DLEQ
+                                let mut matched_session = session_map.get(b_hex).cloned();
+                                if let (Some((ref sess_str, _)), Some(ref dleq_val)) = (&matched_session, &dleq) {
+                                    let cand = BlindingSession::new(sess_str);
+                                    if !ecash_core::dhke::verify_dleq(&mint_pk, &c_prime, &cand.b_prime, dleq_val) {
+                                        matched_session = None;
                                     }
-                                    Err(_) => keyset.clone(),
-                                },
-                            };
-                            let mint_pk_str = sig_keyset.keys.get(&amt).or_else(|| keyset.keys.get(&amt));
-                            if let Some(pk_str) = mint_pk_str {
-                                if let Ok(mint_pk) = point_from_hex(pk_str) {
-                                    if let Ok(c_prime) = point_from_hex(c_hex) {
-                                        let dleq = crate::melt::parse_dleq(&sig_val);
-                                        let sess = BlindingSession::new(secret);
-                                        let mut proof = sess.unblind(&c_prime, &mint_pk, amt, sig_id, dleq);
-                                        proof.derivation_index = *idx;
-                                        max_used_index = std::cmp::max(max_used_index, *idx as i64);
+                                }
+                                if matched_session.is_none() {
+                                    if let Some(ref dleq_val) = dleq {
+                                        for (cand_sess_str, cand_idx) in session_map.values() {
+                                            let cand = BlindingSession::new(cand_sess_str);
+                                            if ecash_core::dhke::verify_dleq(&mint_pk, &c_prime, &cand.b_prime, dleq_val) {
+                                                matched_session = Some((cand_sess_str.clone(), *cand_idx));
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
 
-                                        // Extend scan limit past discovered index (gap limit)
-                                        scan_limit = std::cmp::max(scan_limit, (*idx) + 35);
+                                if let Some((secret, idx)) = matched_session {
+                                    let sess = BlindingSession::new(&secret);
+                                    let mut proof = sess.unblind(&c_prime, &mint_pk, amt, sig_id, dleq);
+                                    proof.derivation_index = idx;
+                                    max_used_index = std::cmp::max(max_used_index, idx as i64);
 
+                                    // Extend scan limit past discovered index (gap limit)
+                                    scan_limit = std::cmp::max(scan_limit, idx + 35);
+
+                                    if seen_batch_secrets.insert(proof.secret.clone()) {
                                         let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(proof.secret.as_bytes()));
                                         ys.push(y);
                                         batch_restored_proofs.push(proof);
@@ -673,37 +692,6 @@ pub async fn clean_wallet_proofs(
                 }
             }
         }
-
-        // 4c. Actively verify & consolidate proofs with the mint to purge unverified tokens
-        let remaining_proofs = state.proofs.get(&mint_url).cloned().unwrap_or_default();
-        if !remaining_proofs.is_empty() {
-            let total_amt: u64 = remaining_proofs.iter().map(|p| p.amount).sum();
-            let all_keysets = client.fetch_keysets().await.unwrap_or_default();
-            let fee = crate::client::calculate_input_fee(&remaining_proofs, &all_keysets);
-            if total_amt > fee {
-                if let Some(tx) = &progress_tx {
-                    tx.send(format!("Verifying and consolidating {} proof(s) on {}", remaining_proofs.len(), mint_url)).ok();
-                }
-                let desired = ecash_core::types::split_into_powers_of_2(total_amt - fee);
-                match crate::swap::swap_proofs(
-                    state,
-                    wallet_path,
-                    passphrase,
-                    &mint_url,
-                    remaining_proofs,
-                    desired,
-                    vec![],
-                    None,
-                ).await {
-                    Ok(_) => {
-                        println!("[clean_wallet] Successfully verified and consolidated proofs on {}", mint_url);
-                    }
-                    Err(e) => {
-                        println!("[clean_wallet] Note on consolidating {}: {}", mint_url, e);
-                    }
-                }
-            }
-        }
     }
 
     // 5. Clean up stuck Pending Send transactions where swap failed or aborted
@@ -740,7 +728,55 @@ pub async fn clean_wallet_proofs(
         0
     };
 
-    // 7. Find maximum derivation index across all proofs and advance safely past it
+    // 7. Final heal, deduplication, and authoritative spend-state check on all remaining proofs
+    state.heal_corrupt_proofs();
+    for (_, proofs) in state.proofs.iter_mut() {
+        let mut seen = std::collections::HashSet::new();
+        proofs.retain(|p| seen.insert(p.secret.clone()));
+    }
+
+    for (mint_url, proofs) in state.proofs.clone().into_iter() {
+        if proofs.is_empty() { continue; }
+        let client = MintClient::new(&mint_url);
+        let mut ys = Vec::new();
+        let mut y_to_secret = std::collections::HashMap::new();
+        for p in &proofs {
+            let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()));
+            ys.push(y.clone());
+            y_to_secret.insert(y, p.secret.clone());
+        }
+        let mut states = std::collections::HashMap::new();
+        for (chunk_idx, chunk) in ys.chunks(100).enumerate() {
+            if chunk_idx > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            }
+            if let Ok(st) = client.check_state(chunk).await {
+                states.extend(st);
+            }
+        }
+        let mut newly_found_spent = std::collections::HashSet::new();
+        for (y, s) in states {
+            if s == "SPENT" || s == "PENDING" {
+                if let Some(secret) = y_to_secret.get(&y) {
+                    newly_found_spent.insert(secret.clone());
+                }
+            }
+        }
+        if !newly_found_spent.is_empty() {
+            if let Some(mint_proofs) = state.proofs.get_mut(&mint_url) {
+                mint_proofs.retain(|p| {
+                    if newly_found_spent.contains(&p.secret) {
+                        total_removed += p.amount;
+                        false
+                    } else {
+                        true
+                    }
+                });
+            }
+        }
+    }
+
+    // 8. Find maximum derivation index across all proofs and advance safely past it
     let max_proof_idx = state
         .proofs
         .values()
@@ -755,13 +791,6 @@ pub async fn clean_wallet_proofs(
             tx.send(format!("Derivation index safely normalized to {}", state.derivation_index)).ok();
         }
     }
-
-    // 8. Final deduplication and heal pass
-    for (_, proofs) in state.proofs.iter_mut() {
-        let mut seen = std::collections::HashSet::new();
-        proofs.retain(|p| seen.insert(p.secret.clone()));
-    }
-    state.heal_corrupt_proofs();
 
     // 9. Save encrypted wallet to disk
     state.save_encrypted(wallet_path, passphrase)?;

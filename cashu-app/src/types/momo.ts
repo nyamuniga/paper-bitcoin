@@ -61,6 +61,7 @@ export interface TransactionDetails {
   ecashToken: string | null; 
   paymentHash: string | null; 
   payoutReferenceId: string | null; 
+  invoicePaid?: boolean;
   status?: TransactionStatus; 
   timestamp?: number; 
   fulfillmentStep?: FulfillmentStep; 

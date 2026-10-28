@@ -32,7 +32,7 @@ export const initiateMomoPaymentRequest = async (
     const payload = {
       transaction: requestBody,
       security: {
-        nonce: Math.random().toString(36).substring(2, 15),
+        nonce: crypto.randomUUID(),
         timestamp: Date.now()
       }
     };
@@ -160,7 +160,7 @@ export const initiateMomoPayout = async (
     const payload = {
       transaction: requestBody,
       security: {
-        nonce: Math.random().toString(36).substring(2, 15),
+        nonce: crypto.randomUUID(),
         timestamp: Date.now()
       }
     };

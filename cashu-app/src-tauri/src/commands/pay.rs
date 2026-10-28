@@ -1,5 +1,4 @@
 use crate::error::CommandResult;
-use ecash_wallet::WalletState;
 
 use crate::commands::auth::AppState;
 use tauri::State;
@@ -10,20 +9,11 @@ pub async fn pay_invoice(
     mint_url: Option<String>,
     state: State<'_, AppState>,
 ) -> CommandResult<u64> {
-    let path = state.wallet_path.clone();
-
-    let passphrase = {
-        let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock
-            .clone()
-            .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
-    };
-
-    let _lock = state.wallet_lock.lock().await;
-    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
+    let w_state = wallet_guard.as_mut().unwrap();
 
     let (sats_paid, _preimage) =
-        ecash_wallet::pay_invoice(&mut w_state, &path, &passphrase, &invoice, mint_url).await?;
+        ecash_wallet::pay_invoice(w_state, &path, &passphrase, &invoice, mint_url).await?;
 
     Ok(sats_paid)
 }

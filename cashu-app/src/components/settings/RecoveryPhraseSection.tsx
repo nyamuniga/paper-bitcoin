@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Eye, EyeOff, Copy, CheckCircle2, ChevronDown, Shield } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { useAuth } from '../../hooks/useAuth';
 
 interface RecoveryPhraseSectionProps {
   isExpanded?: boolean;
@@ -22,14 +21,13 @@ export const RecoveryPhraseSection: React.FC<RecoveryPhraseSectionProps> = ({
   const [internalExpanded, setInternalExpanded] = useState(false);
   const isExpanded = isExpandedProp !== undefined ? isExpandedProp : internalExpanded;
   const toggleExpanded = onToggle || (() => setInternalExpanded((prev) => !prev));
-  const { unlockWallet } = useAuth();
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsVerifying(true);
 
-    const success = await unlockWallet(passphrase, false);
-    if (success) {
+    try {
+      await invoke<boolean>('verify_passphrase', { passphrase });
       try {
         const words = await invoke<string[]>('get_recovery_words');
         setMnemonic(words.join(' '));
@@ -38,10 +36,11 @@ export const RecoveryPhraseSection: React.FC<RecoveryPhraseSectionProps> = ({
       } catch (err: any) {
         toast.error('Failed to get recovery words');
       }
-    } else {
+    } catch {
       toast.error('Incorrect passphrase');
+    } finally {
+      setIsVerifying(false);
     }
-    setIsVerifying(false);
   };
 
   const copyMnemonic = () => {
@@ -63,7 +62,7 @@ export const RecoveryPhraseSection: React.FC<RecoveryPhraseSectionProps> = ({
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-body-md font-body-md font-bold text-on-surface mb-0.5">Recovery Phrase</h2>
-            <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">12-word wallet seed backup</p>
+            <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">24-word wallet seed backup</p>
           </div>
         </div>
 
@@ -84,7 +83,7 @@ export const RecoveryPhraseSection: React.FC<RecoveryPhraseSectionProps> = ({
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-surface-container-highest rounded-xl border border-outline-variant">
                 <div>
                   <div className="font-bold text-on-surface text-sm">Secret Seed Words</div>
-                  <div className="text-xs text-on-surface-variant mt-0.5">Enter passphrase to view your 12-word recovery phrase</div>
+                  <div className="text-xs text-on-surface-variant mt-0.5">Enter passphrase to view your 24-word recovery phrase</div>
                 </div>
                 <button
                   onClick={() => {
