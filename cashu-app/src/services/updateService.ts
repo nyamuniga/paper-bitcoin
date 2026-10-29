@@ -39,7 +39,7 @@ export async function getCurrentAppVersion(): Promise<string> {
     const version = await getVersion();
     if (version) return version;
   } catch {}
-  return '0.1.12';
+  return '0.1.13';
 }
 
 /**

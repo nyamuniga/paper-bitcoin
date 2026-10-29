@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, Phone, PhoneOutgoing, PhoneIncoming, ChevronDown, Check } from 'lucide-react';
+import { X, Phone, PhoneOutgoing, PhoneIncoming, ChevronDown, Check, BookUser } from 'lucide-react';
 import { AppPhase } from '../../types/momo';
 import { calculateQuote, calculateSendQuote, fetchCurrentRate, fetchProxyBlinkBalance } from '../../services/flowServices';
 import { MOMO_WITHDRAWAL_FIXED_FEE, ECASH_LIGHTNING_FEE, SPREAD } from '../../constants.local';
 import { useWalletStore } from '../../store/wallet';
 import { useTransactionStore } from '../../store/transactionStore';
+import { useAddressBookStore } from '../../store/addressBookStore';
+import { AddressBookPickerModal } from '../addressBook/AddressBookPickerModal';
+import { AddressBookAutocomplete } from '../addressBook/AddressBookAutocomplete';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
 import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
@@ -46,6 +49,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   const [activeTab, setActiveTab] = useState<'send' | 'receive'>(initialDerivedTab);
   const [amount, setAmount] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [showAddressBook, setShowAddressBook] = useState(false);
   const [stampDismissed, setStampDismissed] = useState(false);
 
   const [mintUrl, setMintUrl] = useState(initialMintUrl);
@@ -155,6 +159,20 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
 
   const isSuccess = phase === AppPhase.READY_TO_CLAIM || phase === AppPhase.PAYOUT_COMPLETE;
   const isFailed = phase === AppPhase.PAYMENT_FAILED || phase === AppPhase.PAYOUT_FAILED;
+
+  // Auto-record successfully used phone numbers into the address book
+  useEffect(() => {
+    if (isSuccess && phoneNumber) {
+      try {
+        useAddressBookStore.getState().recordSuccessfulUse('momo', phoneNumber, {
+          network: phoneNumber.startsWith('078') || phoneNumber.startsWith('079') ? 'mtn' : undefined,
+          currency: 'RWF',
+        });
+      } catch (e) {
+        console.warn('Failed to record MoMo address book entry:', e);
+      }
+    }
+  }, [isSuccess, phoneNumber]);
 
   const stampStatus: StampPaymentStatus | null = (!stampDismissed && isSuccess)
     ? 'success'
@@ -468,15 +486,45 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                 ) : (
                   <>
                     <div>
-                      <label className="text-label-md text-on-surface-variant block mb-2">Phone Number</label>
-                      <input
-                        type="text"
-                        spellCheck={false}
-                        placeholder="078..."
-                        className={`w-full bg-surface-container-highest rounded-2xl p-4 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${phoneError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
-                        value={phoneNumber}
-                        onChange={e => setPhoneNumber(e.target.value)}
-                      />
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-label-md text-on-surface-variant block">Phone Number</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddressBook(true)}
+                          className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                        >
+                          <BookUser size={13} />
+                          <span>Address Book</span>
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          spellCheck={false}
+                          placeholder="078..."
+                          className={`w-full bg-surface-container-highest rounded-2xl p-4 pr-12 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${phoneError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
+                          value={phoneNumber}
+                          onChange={e => setPhoneNumber(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAddressBook(true)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary p-1.5 rounded-xl hover:bg-surface-container transition-colors cursor-pointer"
+                          title="Open Address Book"
+                        >
+                          <BookUser size={18} />
+                        </button>
+
+                        <AddressBookAutocomplete
+                          type="momo"
+                          query={phoneNumber}
+                          visible={!!phoneNumber && !phoneError}
+                          onSelect={(c) => {
+                            setPhoneNumber(c.value);
+                          }}
+                          onClose={() => {}}
+                        />
+                      </div>
                       {phoneError && <p className="text-error text-label-sm mt-2 ml-2">{phoneError}</p>}
                     </div>
                     <div>
@@ -624,15 +672,45 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                 ) : (
                   <>
                     <div>
-                      <label className="text-label-md text-on-surface-variant block mb-2">Recipient Phone Number</label>
-                      <input
-                        type="text"
-                        spellCheck={false}
-                        placeholder="078..."
-                        className={`w-full bg-surface-container-highest rounded-2xl p-4 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${phoneError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
-                        value={phoneNumber}
-                        onChange={e => setPhoneNumber(e.target.value)}
-                      />
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-label-md text-on-surface-variant block">Recipient Phone Number</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddressBook(true)}
+                          className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                        >
+                          <BookUser size={13} />
+                          <span>Address Book</span>
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          spellCheck={false}
+                          placeholder="078..."
+                          className={`w-full bg-surface-container-highest rounded-2xl p-4 pr-12 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${phoneError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
+                          value={phoneNumber}
+                          onChange={e => setPhoneNumber(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAddressBook(true)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary p-1.5 rounded-xl hover:bg-surface-container transition-colors cursor-pointer"
+                          title="Open Address Book"
+                        >
+                          <BookUser size={18} />
+                        </button>
+
+                        <AddressBookAutocomplete
+                          type="momo"
+                          query={phoneNumber}
+                          visible={!!phoneNumber && !phoneError}
+                          onSelect={(c) => {
+                            setPhoneNumber(c.value);
+                          }}
+                          onClose={() => {}}
+                        />
+                      </div>
                       {phoneError && <p className="text-error text-label-sm mt-2 ml-2">{phoneError}</p>}
                     </div>
                     <div>
@@ -741,6 +819,14 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           setStampDismissed(false);
           updateTransactionPhase(activeTab === 'receive' ? AppPhase.VERIFYING_PAYMENT : (activeTransaction?.invoicePaid ? AppPhase.INITIATING_PAYOUT : AppPhase.AWAITING_INVOICE_PAYMENT));
         } : undefined}
+      />
+      <AddressBookPickerModal
+        isOpen={showAddressBook}
+        onClose={() => setShowAddressBook(false)}
+        type="momo"
+        onSelect={(contact) => {
+          setPhoneNumber(contact.value);
+        }}
       />
     </div>,
     document.body
