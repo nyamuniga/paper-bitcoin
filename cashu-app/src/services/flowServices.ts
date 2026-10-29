@@ -29,6 +29,7 @@ import {
 } from "../constants.local";
 import { useTransactionStore } from "../store/transactionStore";
 import { useWalletStore } from "../store/wallet";
+import { useAddressBookStore } from "../store/addressBookStore";
 
 export const fetchCurrentRate = async (): Promise<number> => {
   const response = await fetch(EXCHANGE_RATE_API_URL);
@@ -215,6 +216,17 @@ export const handleFulfillOrder = async () => {
     currentTx = useTransactionStore.getState().activeTransaction!;
     store.moveToHistory(currentTx);
     useWalletStore.getState().refreshWallet();
+
+    if (currentTx.momoPhoneNumber) {
+      try {
+        useAddressBookStore.getState().recordSuccessfulUse('momo', currentTx.momoPhoneNumber, {
+          network: currentTx.momoPhoneNumber.startsWith('078') || currentTx.momoPhoneNumber.startsWith('079') ? 'mtn' : undefined,
+          currency: 'RWF',
+        });
+      } catch (e) {
+        console.warn('Failed to record address book contact:', e);
+      }
+    }
   } catch (err: any) {
     console.error("Fulfillment error:", err);
     store.setError(err.message || "Failed to fulfill order. Please try again.");
@@ -449,6 +461,17 @@ export const initiateAndVerifyPayout = async (
         });
         store.moveToHistory(useTransactionStore.getState().activeTransaction!);
         useWalletStore.getState().refreshWallet();
+
+        if (currentTx.momoPhoneNumber) {
+          try {
+            useAddressBookStore.getState().recordSuccessfulUse('momo', currentTx.momoPhoneNumber, {
+              network: currentTx.momoPhoneNumber.startsWith('078') || currentTx.momoPhoneNumber.startsWith('079') ? 'mtn' : undefined,
+              currency: 'RWF',
+            });
+          } catch (e) {
+            console.warn('Failed to record address book contact:', e);
+          }
+        }
       } else if (status === "FAILED") {
         store.setError(message || "MoMo payout failed or was rejected.");
         store.updateTransaction({

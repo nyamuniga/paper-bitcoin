@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Loader2, Zap, QrCode } from 'lucide-react';
+import { Loader2, Zap, QrCode, BookUser } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { useWalletStore } from '../store/wallet';
 import { useBitcoin } from '../hooks/useBitcoin';
+import { useAddressBookStore } from '../store/addressBookStore';
+import { AddressBookPickerModal } from '../components/addressBook/AddressBookPickerModal';
+import { AddressBookAutocomplete } from '../components/addressBook/AddressBookAutocomplete';
 import { SovereignStampOverlay, StampPaymentStatus } from '../components/shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../components/shared/FullScreenLoader';
 import { PageHeader } from '../components/shared/PageHeader';
@@ -36,6 +39,7 @@ export const Pay = () => {
 
   const [invoice, setInvoice] = useState('');
   const [showScanner, setShowScanner] = useState(false);
+  const [showAddressBook, setShowAddressBook] = useState(false);
   const { paying, payInvoice } = useBitcoin(mintUrl);
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const availableBalance = mintUrl ? (mintBalances[mintUrl] || 0) : 0;
@@ -159,8 +163,18 @@ export const Pay = () => {
       silent: true,
       onError: (message) => { mintError = message; },
     });
-    if (success) setPaymentStatus('success');
-    else failWith(mintError || 'The mint could not complete this payment.');
+    if (success) {
+      setPaymentStatus('success');
+      if (invoice && (isLightningAddress(invoice) || isLnurl(invoice))) {
+        try {
+          useAddressBookStore.getState().recordSuccessfulUse('lightning', invoice);
+        } catch (e) {
+          console.warn('Failed to record lightning contact:', e);
+        }
+      }
+    } else {
+      failWith(mintError || 'The mint could not complete this payment.');
+    }
   };
 
   return (
@@ -235,10 +249,25 @@ export const Pay = () => {
                   <textarea 
                     value={invoice}
                     onChange={(e) => setInvoice(e.target.value)}
-                    className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInvalidAmount && invoice ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`} 
+                    className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInvalidAmount && invoice ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`} 
                     placeholder="lnbc... or user@domain.com" 
                     rows={4}
                     spellCheck="false"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAddressBook(true)}
+                    className="absolute right-3 top-3 p-2 bg-surface-container-highest rounded-lg text-primary hover:bg-surface-bright transition-colors cursor-pointer"
+                    title="Open Address Book"
+                  >
+                    <BookUser size={18} />
+                  </button>
+                  <AddressBookAutocomplete
+                    type="lightning"
+                    query={invoice}
+                    visible={invoice.length >= 2 && !invoice.startsWith('lnbc')}
+                    onSelect={(c) => setInvoice(c.value)}
+                    onClose={() => {}}
                   />
                 </div>
               ) : (
@@ -323,6 +352,14 @@ export const Pay = () => {
           else setPaymentStatus(null);
         }}
         onRetry={handlePay}
+      />
+      <AddressBookPickerModal
+        isOpen={showAddressBook}
+        onClose={() => setShowAddressBook(false)}
+        type="lightning"
+        onSelect={(contact) => {
+          setInvoice(contact.value);
+        }}
       />
     </main>
   );

@@ -7,6 +7,7 @@ import { LockedEcashSection } from '../components/settings/LockedEcashSection';
 import { NWCSection } from '../components/settings/NWCSection';
 import { LearnSection } from '../components/settings/LearnSection';
 import { CurrencySection } from '../components/settings/CurrencySection';
+import { AddressBookSection } from '../components/settings/AddressBookSection';
 import { PageHeader } from '../components/shared/PageHeader';
 
 export const Settings = () => {
@@ -48,6 +49,10 @@ export const Settings = () => {
           <CurrencySection
             isExpanded={activeSection === 'currency'}
             onToggle={() => toggleSection('currency')}
+          />
+          <AddressBookSection
+            isExpanded={activeSection === 'address-book'}
+            onToggle={() => toggleSection('address-book')}
           />
           <RecoveryPhraseSection
             isExpanded={activeSection === 'recovery'}

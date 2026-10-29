@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Copy, Check, Loader2, Zap, Bitcoin, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
+import { X, Copy, Check, Loader2, Zap, Bitcoin, ArrowUp, ArrowDown, QrCode, ChevronDown, BookUser } from 'lucide-react';
 import { OnchainSendEstimate, OnchainLimits, getOnchainSendLimits } from '../../services/fixedFloatService';
+import { useAddressBookStore } from '../../store/addressBookStore';
+import { AddressBookPickerModal } from '../addressBook/AddressBookPickerModal';
+import { AddressBookAutocomplete } from '../addressBook/AddressBookAutocomplete';
 
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
@@ -22,6 +25,7 @@ import { useLnurlValidation, validateLnurlPay } from '../../hooks/useLnurlValida
 import { LnurlValidationStatus } from '../shared/LnurlValidationStatus';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { openMempoolTx, openMempoolAddress } from '../../utils/mempool';
+import { SlidingSegmentedControl } from '../shared/SlidingSegmentedControl';
 
 interface BitcoinModalProps {
   mintUrl: string;
@@ -60,6 +64,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   // Send state
   const [destinationInput, setDestinationInput] = useState(initialInvoice);
   const [showScanner, setShowScanner] = useState(false);
+  const [showAddressBook, setShowAddressBook] = useState(false);
   const parsedInput = parseBitcoinInput(destinationInput);
   const isLnurlInput = parsedInput.type === 'lnurl' || parsedInput.type === 'lnurl-pay';
   // Live, debounced check that the Lightning Address / LNURL actually resolves
@@ -91,6 +96,11 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
 
   const { transactions } = useHistory();
   const { paying, requesting, payInvoice, receiveLightning, receiveOnChain, estimateOnChain, executeOnChain } = useBitcoin(mintUrl);
+
+  const isReceiveDisabled =
+    requesting ||
+    parsedReceiveAmount <= 0 ||
+    (receiveMode === 'onchain' && (parsedReceiveAmount < 12500 || parsedReceiveAmount > 18000000));
 
 
   const currentTx = quoteId ? transactions.find(t => t.id === quoteId) : null;
@@ -139,6 +149,13 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
     });
     if (success) {
       setPaymentStatus('success');
+      if (destinationInput && (isLnurlInput || destinationInput.includes('@'))) {
+        try {
+          useAddressBookStore.getState().recordSuccessfulUse('lightning', destinationInput);
+        } catch (e) {
+          console.warn('Failed to record lightning contact:', e);
+        }
+      }
     } else {
       setPaymentErrorMessage(mintErr || 'The mint could not complete this payment.');
       setPaymentStatus('failed');
@@ -218,6 +235,13 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
         });
         if (success) {
           setPaymentStatus('success');
+          if (destinationInput) {
+            try {
+              useAddressBookStore.getState().recordSuccessfulUse('lightning', destinationInput);
+            } catch (e) {
+              console.warn('Failed to record lightning contact:', e);
+            }
+          }
         } else {
           setPaymentErrorMessage(mintErr || 'The mint could not complete this payment.');
           setPaymentStatus('failed');
@@ -245,6 +269,13 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
       if (res && res.txid) {
         setOnchainTxid(res.txid);
         setPaymentStatus('success');
+        if (parsedInput.addressOrInvoice) {
+          try {
+            useAddressBookStore.getState().recordSuccessfulUse('onchain', parsedInput.addressOrInvoice);
+          } catch (e) {
+            console.warn('Failed to record onchain contact:', e);
+          }
+        }
       } else {
         setPaymentErrorMessage('On-chain transaction execution failed.');
         setPaymentStatus('failed');
@@ -257,11 +288,11 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
 
   const handleRequestInvoice = async () => {
     if (receiveMode === 'onchain') {
-      const amt = parsedReceiveAmount >= 12500 ? parsedReceiveAmount : 12500;
-      const res = await receiveOnChain(amt);
+      if (parsedReceiveAmount < 12500 || parsedReceiveAmount > 18000000) return;
+      const res = await receiveOnChain(parsedReceiveAmount);
       if (res) {
         setBoardingAddress(res.boardingAddress);
-        setDepositSats(res.amountSats || amt);
+        setDepositSats(res.amountSats || parsedReceiveAmount);
         if (res.quoteId) {
           setQuoteId(res.quoteId);
         }
@@ -458,22 +489,85 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         <button onClick={() => setShowScanner(false)} className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-highest px-4 py-2 rounded-full text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface">Cancel Scanner</button>
                       </div>
                     ) : (
-                      <div className={`relative glow-effect transition-shadow duration-300 rounded-lg ${isInsufficient || lnurlValidation.status === 'invalid' ? 'shadow-[0_0_15px_rgba(239,68,68,0.3)]' : ''}`}>
-                        <textarea
-                          value={destinationInput}
-                          onChange={(e) => setDestinationInput(e.target.value)}
-                          className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInsufficient || lnurlValidation.status === 'invalid' ? 'focus:ring-error ring-1 ring-error/50' : lnurlValidation.status === 'valid' ? 'ring-1 ring-emerald-500/40 focus:ring-emerald-500/60' : 'focus:ring-primary'}`}
-                          placeholder="Lightning, LNURL, or On-Chain..."
-                          rows={4}
-                          spellCheck={false}
-                        />
-                        <button
-                          onClick={() => setShowScanner(true)}
-                          className="absolute right-3 top-3 p-2 bg-surface-container-highest rounded-lg text-primary hover:bg-surface-bright transition-colors"
-                          title="Scan QR Code"
-                        >
-                          <QrCode size={20} />
-                        </button>
+                      <div className="flex flex-col gap-1.5">
+                        <p className="text-body-md font-body-md text-on-surface-variant">Pay to:</p>
+                        <div className={`relative glow-effect transition-shadow duration-300 rounded-xl bg-surface-container-lowest border shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] overflow-hidden ${
+                          isInsufficient || lnurlValidation.status === 'invalid'
+                            ? 'border-error/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                            : lnurlValidation.status === 'valid'
+                            ? 'border-emerald-500/40'
+                            : 'border-outline-variant/20 focus-within:border-primary/50'
+                        }`}>
+                          <textarea
+                            value={destinationInput}
+                            onChange={(e) => setDestinationInput(e.target.value)}
+                            className="w-full bg-transparent text-on-surface font-label-caps text-label-caps p-3.5 pb-2 border-none focus:outline-none resize-none placeholder:text-on-surface-variant/50 min-h-[76px]"
+                            placeholder="Lightning, LNURL, or On-Chain..."
+                            rows={3}
+                            spellCheck={false}
+                          />
+
+                          {/* Action Toolbar */}
+                          <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-outline-variant/10">
+                            <div>
+                              {destinationInput ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setDestinationInput('')}
+                                  className="text-[12px] font-bold text-on-surface-variant hover:text-error transition-colors cursor-pointer"
+                                >
+                                  Clear
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      const text = await navigator.clipboard.readText();
+                                      if (text) setDestinationInput(text.trim());
+                                    } catch (e) {
+                                      console.warn('Clipboard read failed', e);
+                                    }
+                                  }}
+                                  className="text-[12px] font-bold text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+                                >
+                                  Paste
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setShowAddressBook(true)}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary text-[12px] font-bold transition-all cursor-pointer border border-outline-variant/20 shadow-sm"
+                                title="Open Address Book"
+                              >
+                                <BookUser size={14} />
+                                <span>Contacts</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setShowScanner(true)}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary text-[12px] font-bold transition-all cursor-pointer border border-outline-variant/20 shadow-sm"
+                                title="Scan QR Code"
+                              >
+                                <QrCode size={14} />
+                                <span>Scan</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <AddressBookAutocomplete
+                            type="all"
+                            query={destinationInput}
+                            visible={destinationInput.length >= 2 && !destinationInput.startsWith('lnbc')}
+                            onSelect={(c) => {
+                              setDestinationInput(c.value);
+                            }}
+                            onClose={() => {}}
+                          />
+                        </div>
                       </div>
                     )}
                     {parsedInput.type === 'lightning' && parsedInput.amountSats !== null && !showScanner && (
@@ -542,7 +636,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       <div className="flex items-center justify-between mb-1">
                         <button onClick={() => setSendStep('input')} className="text-on-surface-variant hover:text-on-surface text-sm font-bold cursor-pointer">← Back</button>
                         <p className="text-label-caps font-label-caps text-on-surface-variant">
-                          {isOnchain ? 'SEND ON-CHAIN (BITCOIN)' : 'SEND AMOUNT'}
+                          {isOnchain ? 'SEND ON-CHAIN' : 'SEND AMOUNT'}
                         </p>
                       </div>
 
@@ -819,33 +913,38 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
               ) : (
                 <div className="flex flex-col gap-3.5 sm:gap-4">
                   {/* Mode Toggle */}
-                  <div className="flex bg-surface-container-highest rounded-lg p-1 border border-outline-variant/10">
-                    <button
-                      onClick={() => { setReceiveMode('lightning'); setReceiveAmount(''); }}
-                      className={`flex-1 py-2 text-[13px] font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${receiveMode === 'lightning'
-                        ? 'bg-surface-bright text-on-surface shadow-sm'
-                        : 'text-on-surface-variant hover:text-on-surface'
-                        }`}
-                    >
-                      Lightning
-                    </button>
-                    <button
-                      onClick={() => { setReceiveMode('onchain'); setReceiveAmount(''); }}
-                      className={`flex-1 py-2 text-[13px] font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${receiveMode === 'onchain'
-                        ? 'bg-surface-bright text-on-surface shadow-sm'
-                        : 'text-on-surface-variant hover:text-on-surface'
-                        }`}
-                    >
-                      On-Chain (Bitcoin)
-                    </button>
-                  </div>
+                  <SlidingSegmentedControl<ReceiveMode>
+                    value={receiveMode}
+                    onChange={(mode) => {
+                      setReceiveMode(mode);
+                      setReceiveAmount('');
+                    }}
+                    options={[
+                      { id: 'lightning', label: 'Lightning', icon: <Zap size={15} /> },
+                      { id: 'onchain', label: 'On-Chain', icon: <Bitcoin size={20} /> },
+                    ]}
+                  />
 
                   <div className="flex flex-col gap-2.5 sm:gap-3">
-                    <div className="flex flex-col gap-2.5 sm:gap-3 animate-fade-in">
+                    <div key={receiveMode} className="flex flex-col gap-2.5 sm:gap-3 animate-fade-in">
                       <AmountDisplay amount={receiveAmount} compact />
+
+                      <NumberPad
+                        value={receiveAmount}
+                        onChange={(val) => {
+                          setReceiveAmount(val);
+                          setReceiveInvoice(null);
+                          setQuoteId(null);
+                          setBoardingAddress(null);
+                          setDepositSats(null);
+                        }}
+                        compact
+                      />
 
                       {/* On-Chain Receive Limits & Real-Time Feedback */}
                       {receiveMode === 'onchain' && (
+                        (parsedReceiveAmount > 0 && parsedReceiveAmount < 12500) || parsedReceiveAmount > 18000000
+                      ) && (
                         <div className="flex flex-col items-center gap-1.5 w-full">
                           {parsedReceiveAmount > 0 && parsedReceiveAmount < 12500 && (
                             <div className="text-[12px] font-medium text-amber-400 bg-amber-500/15 px-3 py-1.5 rounded-lg border border-amber-500/30 text-center animate-fade-in shadow-sm">
@@ -859,33 +958,13 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                           )}
                         </div>
                       )}
-
-                      <NumberPad
-                        value={receiveAmount}
-                        onChange={(val) => {
-                          setReceiveAmount(val);
-                          setReceiveInvoice(null);
-                          setQuoteId(null);
-                          setBoardingAddress(null);
-                          setDepositSats(null);
-                        }}
-                        compact
-                      />
                     </div>
 
                     <button
                       onClick={handleRequestInvoice}
-                      disabled={
-                        requesting ||
-                        (receiveMode === 'lightning' && parsedReceiveAmount <= 0) ||
-                        (receiveMode === 'onchain' && parsedReceiveAmount > 0 && parsedReceiveAmount < 12500) ||
-                        (receiveMode === 'onchain' && parsedReceiveAmount > 18000000)
-                      }
+                      disabled={isReceiveDisabled}
                       className={`bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] w-full py-3.5 sm:py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center mt-1 cursor-pointer ${
-                        requesting ||
-                        (receiveMode === 'lightning' && parsedReceiveAmount <= 0) ||
-                        (receiveMode === 'onchain' && parsedReceiveAmount > 0 && parsedReceiveAmount < 12500) ||
-                        (receiveMode === 'onchain' && parsedReceiveAmount > 18000000)
+                        isReceiveDisabled
                           ? 'opacity-50 cursor-not-allowed'
                           : 'hover:opacity-90 active:scale-[0.98]'
                       }`}
@@ -935,6 +1014,14 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
             }
           }}
           onRetry={lastPayAction}
+        />
+        <AddressBookPickerModal
+          isOpen={showAddressBook}
+          onClose={() => setShowAddressBook(false)}
+          type="all"
+          onSelect={(contact) => {
+            setDestinationInput(contact.value);
+          }}
         />
       </div>
     </div>,

@@ -3,6 +3,7 @@ import { PageHeader } from '../shared/PageHeader';
 import { formatMintUrl } from '../../utils/format';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
+import { SlidingSegmentedControl } from '../shared/SlidingSegmentedControl';
 
 interface IssueSummaryStepProps {
   sats: string;
@@ -89,32 +90,14 @@ export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
               </span>
               <div className="bg-[#10241b]/70 border border-[#1a3828] rounded-2xl p-3 flex flex-col gap-2.5">
                 {/* Segmented Switch */}
-                <div className="bg-[#081710] p-1 rounded-xl flex items-center border border-[#183626]">
-                  <button
-                    type="button"
-                    onClick={() => setFundMethod('lightning')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-display-hero text-[13px] sm:text-[14px] font-bold transition-all cursor-pointer ${
-                      fundMethod === 'lightning'
-                        ? 'bg-[#153a27] text-white border border-primary/50 shadow-[0_2px_8px_rgba(0,0,0,0.3),0_0_12px_rgba(242,169,59,0.15)]'
-                        : 'text-[#8b9e94] hover:text-[#f7f4eb] border border-transparent'
-                    }`}
-                  >
-                    <Zap size={15} className={fundMethod === 'lightning' ? 'text-primary fill-primary/20' : 'text-[#8b9e94]'} />
-                    External
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFundMethod('wallet')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-display-hero text-[13px] sm:text-[14px] font-bold transition-all cursor-pointer ${
-                      fundMethod === 'wallet'
-                        ? 'bg-[#153a27] text-white border border-primary/50 shadow-[0_2px_8px_rgba(0,0,0,0.3),0_0_12px_rgba(242,169,59,0.15)]'
-                        : 'text-[#8b9e94] hover:text-[#f7f4eb] border border-transparent'
-                    }`}
-                  >
-                    <Wallet size={15} className={fundMethod === 'wallet' ? 'text-primary' : 'text-[#8b9e94]'} />
-                    Local
-                  </button>
-                </div>
+                <SlidingSegmentedControl<'lightning' | 'wallet'>
+                  value={fundMethod}
+                  onChange={setFundMethod}
+                  options={[
+                    { id: 'lightning', label: 'External', icon: <Zap size={15} /> },
+                    { id: 'wallet', label: 'Local', icon: <Wallet size={15} /> },
+                  ]}
+                />
 
                 {/* Active Description */}
                 <div className="flex items-center gap-2 px-1">
@@ -137,32 +120,14 @@ export const IssueSummaryStep: React.FC<IssueSummaryStepProps> = ({
               </span>
               <div className="bg-[#10241b]/70 border border-[#1a3828] rounded-2xl p-3 flex flex-col gap-2.5">
                 {/* Segmented Switch */}
-                <div className="bg-[#081710] p-1 rounded-xl flex items-center border border-[#183626]">
-                  <button
-                    type="button"
-                    onClick={() => setStrategy('dynamic')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-display-hero text-[13px] sm:text-[14px] font-bold transition-all cursor-pointer ${
-                      strategy === 'dynamic'
-                        ? 'bg-[#153a27] text-white border border-primary/50 shadow-[0_2px_8px_rgba(0,0,0,0.3),0_0_12px_rgba(242,169,59,0.15)]'
-                        : 'text-[#8b9e94] hover:text-[#f7f4eb] border border-transparent'
-                    }`}
-                  >
-                    <Gauge size={15} className={strategy === 'dynamic' ? 'text-primary' : 'text-[#8b9e94]'} />
-                    Dynamic
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStrategy('static')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-display-hero text-[13px] sm:text-[14px] font-bold transition-all cursor-pointer ${
-                      strategy === 'static'
-                        ? 'bg-[#153a27] text-white border border-primary/50 shadow-[0_2px_8px_rgba(0,0,0,0.3),0_0_12px_rgba(242,169,59,0.15)]'
-                        : 'text-[#8b9e94] hover:text-[#f7f4eb] border border-transparent'
-                    }`}
-                  >
-                    <Shield size={15} className={strategy === 'static' ? 'text-primary' : 'text-[#8b9e94]'} />
-                    Static
-                  </button>
-                </div>
+                <SlidingSegmentedControl<'dynamic' | 'static'>
+                  value={strategy}
+                  onChange={setStrategy}
+                  options={[
+                    { id: 'dynamic', label: 'Dynamic', icon: <Gauge size={15} /> },
+                    { id: 'static', label: 'Static', icon: <Shield size={15} /> },
+                  ]}
+                />
 
                 {/* Active Description */}
                 <div className="flex items-center gap-2 px-1">
