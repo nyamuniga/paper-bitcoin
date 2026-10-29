@@ -11,6 +11,7 @@ import { SovereignStampOverlay, StampPaymentStatus } from '../components/shared/
 import { FullScreenLoader } from '../components/shared/FullScreenLoader';
 import { PageHeader } from '../components/shared/PageHeader';
 import { formatMintUrl } from '../utils/format';
+import { readClipboardText } from '../utils/clipboard';
 import { MintIcon } from '../components/shared/MintIcon';
 import {
   isLightningAddress,
@@ -275,7 +276,7 @@ export const Pay = () => {
                           type="button"
                           onClick={async () => {
                             try {
-                              const text = await navigator.clipboard.readText();
+                              const text = await readClipboardText();
                               if (text) setInvoice(text.trim());
                             } catch (e) {
                               console.warn('Clipboard read failed', e);

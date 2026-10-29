@@ -7,6 +7,7 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 ## [0.1.14] - 2026-10-29
 
 ### 🎨 UI Unification & Component Polish
+- **Android Native Clipboard Integration**: Resolved paste and copy button failures on Android WebViews by integrating Tauri v2's native clipboard plugin (`@tauri-apps/plugin-clipboard-manager` and `tauri-plugin-clipboard-manager`) with universal fallback across all forms, dialogs, and screens.
 - **Harmonized Field Palette**: Standardized all input fields, textareas, and credential containers across Modals, Scan, Issue, Settings, and Auth flows with the dark obsidian green surface (`bg-[#0c1b14]`, `border border-[#142d20]`, `focus:ring-1 focus:ring-primary`).
 - **Consistent Action Toolbars**: Relocated action and QR scanning buttons to the bottom-right action bar across Receive Ecash, Send Bitcoin, Scan, Pay, and Redeem Note flows for uniform ergonomics.
 - **Dynamic Ecash Token Generation**: Automatically hides the "Create Token" button once tokens are generated to streamline the workflow and prevent duplicate submissions.
