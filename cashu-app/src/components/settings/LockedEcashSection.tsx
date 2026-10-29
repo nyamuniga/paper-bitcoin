@@ -79,7 +79,7 @@ export const LockedEcashSection: React.FC<LockedEcashSectionProps> = ({
           <div className={`accordion-inner-content ${isExpanded ? 'accordion-inner-content-open' : 'accordion-inner-content-closed'}`}>
             <div className="px-6 pb-6 pt-2 border-t border-outline-variant flex flex-col gap-4">
               {hexPubkey && (
-                <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant flex items-center justify-between gap-4">
+                <div className="bg-[#0c1b14] p-4 rounded-xl border border-[#142d20] flex items-center justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <p className="text-[12px] font-label-caps text-on-surface-variant mb-1">YOUR PUBKEY (HEX)</p>
                     <p className="text-body-md font-mono text-on-surface truncate">{hexPubkey}</p>
@@ -87,14 +87,14 @@ export const LockedEcashSection: React.FC<LockedEcashSectionProps> = ({
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={handleCopyHex}
-                      className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-lg transition-colors border border-outline-variant"
+                      className="p-2 text-on-surface-variant hover:text-primary hover:bg-[#12261d] rounded-lg transition-colors border border-[#142d20] cursor-pointer"
                       title="Copy hex pubkey"
                     >
                       {copiedHex ? <Check size={18} className="text-emerald-500" /> : <Copy size={18} />}
                     </button>
                     <button
                       onClick={() => setShowQr(true)}
-                      className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-lg transition-colors border border-outline-variant"
+                      className="p-2 text-on-surface-variant hover:text-primary hover:bg-[#12261d] rounded-lg transition-colors border border-[#142d20] cursor-pointer"
                       title="Show QR Code"
                     >
                       <QrCode size={18} />

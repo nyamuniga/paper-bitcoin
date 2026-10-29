@@ -1,14 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Phone, Zap, Star } from 'lucide-react';
 import { Contact, ContactType } from '../../types/addressBook';
 import { useAddressBookStore } from '../../store/addressBookStore';
 
+export type AutocompleteTarget = 'phone' | 'bitcoin' | 'all' | ContactType;
+
 interface AddressBookAutocompleteProps {
-  type: ContactType | 'all';
+  type: AutocompleteTarget;
   query: string;
   onSelect: (contact: Contact) => void;
   visible: boolean;
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 export const AddressBookAutocomplete: React.FC<AddressBookAutocompleteProps> = ({
@@ -16,8 +18,17 @@ export const AddressBookAutocomplete: React.FC<AddressBookAutocompleteProps> = (
   query,
   onSelect,
   visible,
+  onClose,
 }) => {
   const contacts = useAddressBookStore((state) => state.contacts);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    setDismissed(false);
+  }, [query]);
+
+  const isPhoneField = type === 'phone' || type === 'momo';
+  const isBitcoinField = type === 'bitcoin' || type === 'lightning' || type === 'onchain';
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -25,7 +36,14 @@ export const AddressBookAutocomplete: React.FC<AddressBookAutocompleteProps> = (
 
     return contacts
       .filter((c) => {
-        if (type !== 'all' && c.type !== type) return false;
+        // Intelligently omit lightning/on-chain addresses if it's a phone field
+        if (isPhoneField && c.type !== 'momo') return false;
+
+        // Intelligently omit phone numbers if it's a bitcoin field
+        if (isBitcoinField && c.type === 'momo') return false;
+
+        if (type !== 'all' && !isPhoneField && !isBitcoinField && c.type !== type) return false;
+
         // Don't show if query is already the exact full value
         if (c.value.toLowerCase() === q) return false;
 
@@ -41,12 +59,15 @@ export const AddressBookAutocomplete: React.FC<AddressBookAutocompleteProps> = (
         return (b.lastUsedAt || 0) - (a.lastUsedAt || 0);
       })
       .slice(0, 4);
-  }, [contacts, type, query]);
+  }, [contacts, isPhoneField, isBitcoinField, type, query]);
 
-  if (!visible || matches.length === 0) return null;
+  if (!visible || dismissed || matches.length === 0) return null;
 
   return (
-    <div className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-surface-container-high border border-outline-variant/30 rounded-xl shadow-xl overflow-hidden animate-fade-in backdrop-blur-md">
+    <div
+      className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-surface-container-high border border-outline-variant/30 rounded-xl shadow-xl overflow-hidden animate-fade-in backdrop-blur-md"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="p-1 text-[10px] font-bold text-on-surface-variant/70 uppercase tracking-wider px-3 pt-2 pb-1 flex items-center justify-between">
         <span>Address Book Suggestions</span>
         <span>{matches.length} found</span>
@@ -56,7 +77,12 @@ export const AddressBookAutocomplete: React.FC<AddressBookAutocompleteProps> = (
           <button
             key={c.id}
             type="button"
-            onClick={() => onSelect(c)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setDismissed(true);
+              onSelect(c);
+              if (onClose) onClose();
+            }}
             className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-surface-container transition-colors cursor-pointer group"
           >
             <div className="flex items-center gap-2.5 min-w-0">

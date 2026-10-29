@@ -98,23 +98,64 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
                   </div>
                 </div>
               )}
-              <div className={`relative glow-effect rounded-lg ${isInvalidAmount ? 'shadow-[0_0_15px_rgba(239,68,68,0.3)]' : ''}`}>
+              <div className={`relative glow-effect rounded-xl transition-all duration-300 bg-[#0c1b14] border overflow-hidden flex flex-col ${
+                isInvalidAmount
+                  ? 'border-error/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                  : 'border-[#142d20] focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/40'
+              }`}>
                 <textarea
                   value={invoice}
                   onChange={(e) => setInvoice(e.target.value)}
                   disabled={isSpent}
-                  className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 h-[80px] ${isInvalidAmount ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'} ${isSpent ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`w-full bg-transparent text-on-surface font-label-caps text-label-caps p-3.5 pb-2 border-none focus:outline-none resize-none placeholder:text-on-surface-variant/50 min-h-[64px] ${isSpent ? 'opacity-50 cursor-not-allowed' : ''}`}
                   placeholder="Paste lnbc..."
+                  rows={2}
                   spellCheck="false"
                 />
-                <button 
-                  onClick={() => !isSpent && setShowScanner(true)}
-                  disabled={isSpent}
-                  className="absolute right-3 top-3 p-2 bg-surface-container-highest rounded-lg text-primary hover:bg-surface-bright transition-colors disabled:opacity-50"
-                  title="Scan QR Code"
-                >
-                  <QrCode size={20} />
-                </button>
+
+                {/* Action Toolbar */}
+                <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-[#142d20]">
+                  <div>
+                    {invoice ? (
+                      <button
+                        type="button"
+                        onClick={() => setInvoice('')}
+                        disabled={isSpent}
+                        className="text-[12px] font-bold text-on-surface-variant hover:text-error transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        Clear
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const text = await navigator.clipboard.readText();
+                            if (text) setInvoice(text.trim());
+                          } catch (e) {
+                            console.warn('Clipboard read failed', e);
+                          }
+                        }}
+                        disabled={isSpent}
+                        className="text-[12px] font-bold text-on-surface-variant hover:text-primary transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        Paste
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => !isSpent && setShowScanner(true)}
+                      disabled={isSpent}
+                      className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center disabled:opacity-50"
+                      title="Scan QR Code"
+                    >
+                      <QrCode size={15} />
+                    </button>
+                  </div>
+                </div>
               </div>
               {invoiceAmount !== null && !showScanner && (
                 <div className={`text-[12px] font-label-caps px-1 ${isInvalidAmount ? 'text-error' : 'text-on-surface-variant'}`}>
