@@ -99,11 +99,11 @@ export const PayInvoiceModal: React.FC<PayInvoiceModalProps> = ({ mintUrl, onClo
           </div>
 
           <div className="relative flex flex-col gap-2">
-            <div className={`relative glow-effect transition-shadow duration-300 rounded-lg ${isInsufficient ? 'shadow-[0_0_15px_rgba(239,68,68,0.3)]' : ''}`}>
+            <div className={`relative glow-effect transition-all duration-300 rounded-xl ${isInsufficient ? 'shadow-[0_0_15px_rgba(239,68,68,0.3)]' : ''}`}>
               <textarea 
                 value={invoice}
                 onChange={(e) => setInvoice(e.target.value)}
-                className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInsufficient ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`} 
+                className={`w-full bg-[#0c1b14] text-on-surface font-label-caps text-label-caps p-4 rounded-xl border border-[#142d20] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 transition-colors ${isInsufficient ? 'focus:ring-error ring-1 ring-error/50 border-error/50' : 'focus:border-primary/50 focus:ring-primary'}`} 
                 placeholder="lnbc..." 
                 rows={3}
               />
@@ -119,7 +119,7 @@ export const PayInvoiceModal: React.FC<PayInvoiceModalProps> = ({ mintUrl, onClo
           <button 
             onClick={handlePay}
             disabled={paying || !invoice || isInsufficient}
-            className={`btn-gradient w-full py-4 rounded-full text-on-primary font-headline-lg-mobile text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${
+            className={`btn-gradient w-full py-4 rounded-xl text-on-primary font-headline-lg-mobile text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${
               paying || !invoice || isInsufficient ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
             }`}
           >

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, User, Phone, Zap, Star } from 'lucide-react';
 import { Contact, ContactType } from '../../types/addressBook';
 import { useAddressBookStore } from '../../store/addressBookStore';
@@ -141,9 +142,18 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-md bg-surface-container-high border border-outline-variant/30 rounded-2xl p-5 sm:p-6 shadow-2xl flex flex-col gap-4">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      <div
+        className="relative w-full max-w-md bg-surface-container-high border border-outline-variant/30 rounded-2xl p-5 sm:p-6 shadow-2xl flex flex-col gap-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -154,7 +164,10 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container transition-colors cursor-pointer"
           >
             <X size={20} />
@@ -263,20 +276,24 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
           <div className="flex gap-2 pt-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
               className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-[#0c1b14] hover:bg-[#12261d] active:scale-[0.98] border border-primary/50 hover:border-primary text-primary transition-all shadow-sm cursor-pointer"
+              className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-primary hover:bg-primary/90 text-on-primary active:scale-[0.98] transition-all shadow-md shadow-primary/20 cursor-pointer"
             >
               {initialContact ? 'Save Changes' : 'Add Contact'}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

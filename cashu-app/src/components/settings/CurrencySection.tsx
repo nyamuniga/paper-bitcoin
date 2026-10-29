@@ -107,8 +107,8 @@ export const CurrencySection: React.FC<CurrencySectionProps> = ({
                     onClick={() => handleSelectCurrency(code)}
                     className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer border ${
                       isSelected
-                        ? 'bg-primary text-on-primary border-primary shadow-sm'
-                        : 'bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface border-outline-variant/30'
+                        ? 'bg-[#0c1b14] text-primary border-primary shadow-sm'
+                        : 'bg-[#0c1b14] hover:bg-[#12261d] text-on-surface-variant hover:text-on-surface border-[#142d20]'
                     }`}
                   >
                     {code}
@@ -125,7 +125,7 @@ export const CurrencySection: React.FC<CurrencySectionProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search currency..."
-                className="w-full pl-9 pr-3 py-2 bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant/40 rounded-xl text-xs sm:text-sm border border-outline-variant/30 focus:border-primary/50 focus:outline-none transition-colors"
+                className="w-full pl-9 pr-3 py-2 bg-[#0c1b14] text-on-surface placeholder:text-on-surface-variant/40 rounded-xl text-xs sm:text-sm border border-[#142d20] focus:border-primary/50 focus:ring-1 focus:ring-primary focus:outline-none transition-colors"
               />
             </div>
 

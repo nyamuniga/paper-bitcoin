@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
-import { QrCode, Loader2 } from 'lucide-react';
+import { QrCode, Loader2, BookUser } from 'lucide-react';
 import { useUrDecoder } from '../../hooks/useUrDecoder';
 import { parseBitcoinInput } from '../../utils/bitcoinValidation';
 import { useLnurlValidation } from '../../hooks/useLnurlValidation';
 import { LnurlValidationStatus } from '../shared/LnurlValidationStatus';
+import { AddressBookPickerModal } from '../addressBook/AddressBookPickerModal';
+import { AddressBookAutocomplete } from '../addressBook/AddressBookAutocomplete';
 
 interface ScanNoteFormProps {
   showScanner: boolean;
@@ -20,6 +22,7 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
   showScanner, setShowScanner, binB64, setBinB64, onDecode, loading, error
 }) => {
   const urDecoder = useUrDecoder();
+  const [showAddressBook, setShowAddressBook] = useState(false);
 
   // Live-validate pasted Lightning Addresses / LNURLs before allowing "Process"
   const parsed = parseBitcoinInput(binB64);
@@ -91,20 +94,65 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="relative group">
+          <div className="relative bg-[#0c1b14] rounded-xl px-3.5 pt-3 pb-2.5 border border-[#142d20] focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/40 transition-all flex flex-col gap-2">
             <textarea
               value={binB64}
               onChange={(e) => setBinB64(e.target.value)}
-              className={`w-full bg-surface-container-lowest text-on-background rounded-lg border-none px-4 py-4 min-h-[100px] resize-none focus:ring-1 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] text-body-md font-body-md placeholder:text-on-surface-variant/40 transition-all glow-effect focus:bg-surface-container-lowest/80 ${
-                lnurlValidation.status === 'invalid'
-                  ? 'ring-1 ring-error/50 focus:ring-error'
-                  : lnurlValidation.status === 'valid'
-                  ? 'ring-1 ring-emerald-500/40 focus:ring-emerald-500/60'
-                  : 'focus:ring-primary/50'
-              }`}
+              className="w-full bg-transparent text-on-surface border-none p-0 min-h-[50px] resize-none focus:outline-none text-body-md font-body-md placeholder:text-on-surface-variant/40"
               placeholder="Ecash token, address, invoice, or note data..."
               spellCheck="false"
-            ></textarea>
+            />
+
+            {/* Action Bar inside the input field */}
+            <div className="flex items-center justify-between pt-2 border-t border-[#142d20]">
+              <div>
+                {binB64 ? (
+                  <button
+                    type="button"
+                    onClick={() => setBinB64('')}
+                    className="text-[12px] font-bold text-on-surface-variant hover:text-error transition-colors cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText();
+                        if (text) setBinB64(text.trim());
+                      } catch (e) {
+                        console.warn('Clipboard read failed', e);
+                      }
+                    }}
+                    className="text-[12px] font-bold text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+                  >
+                    Paste
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowAddressBook(true)}
+                  className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
+                  title="Open Address Book"
+                >
+                  <BookUser size={15} />
+                </button>
+              </div>
+            </div>
+
+            <AddressBookAutocomplete
+              type="bitcoin"
+              query={binB64}
+              visible={binB64.length >= 2 && !binB64.startsWith('cashuA') && !binB64.startsWith('lnbc')}
+              onSelect={(c) => {
+                setBinB64(c.value);
+              }}
+              onClose={() => {}}
+            />
           </div>
 
           {isLnurlInput && (
@@ -128,6 +176,15 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
           </button>
         </div>
       </div>
+
+      <AddressBookPickerModal
+        isOpen={showAddressBook}
+        onClose={() => setShowAddressBook(false)}
+        type="bitcoin"
+        onSelect={(contact) => {
+          setBinB64(contact.value);
+        }}
+      />
     </div>
   );
 };

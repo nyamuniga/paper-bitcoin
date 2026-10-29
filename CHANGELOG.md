@@ -4,10 +4,21 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 
 ---
 
+## [0.1.14] - 2026-10-29
+
+### 🎨 UI Unification & Component Polish
+- **Harmonized Field Palette**: Standardized all input fields, textareas, and credential containers across Modals, Scan, Issue, Settings, and Auth flows with the dark obsidian green surface (`bg-[#0c1b14]`, `border border-[#142d20]`, `focus:ring-1 focus:ring-primary`).
+- **Consistent Action Toolbars**: Relocated action and QR scanning buttons to the bottom-right action bar across Receive Ecash, Send Bitcoin, Scan, Pay, and Redeem Note flows for uniform ergonomics.
+- **Dynamic Ecash Token Generation**: Automatically hides the "Create Token" button once tokens are generated to streamline the workflow and prevent duplicate submissions.
+- **Clean Ecash Format Tabs**: Replaced verbose format labels with minimal `cashuA` and `cashuB` segmented selectors powered by the smooth animated `SlidingSegmentedControl`.
+- **Address Book Modal & Form Polish**: Pinned the search bar and "+ Add New Contact" button above the contacts list with independent scrollability; prevented parent sheet dismissals on contact selection; styled new contact modal action button with primary orange ochre.
+- **Button Radius Normalization**: Standardized modal action buttons and "Add New Mint" controls to `rounded-xl` / square geometry for visual consistency across cards and dialogs.
+- **Interactive Quick-Pick Chips**: Currency quick-pick chips now use an orange outline border (`border-primary`) when active instead of solid fill, matching the design system.
+
 ## [0.1.13] - 2026-10-29
 
 ### 📇 Integrated Address Book & Contact Management
-- **Full Contact Management**: Dedicated Address Book route (`/address-book`) supporting full CRUD operations for frequent Mobile Money (MoMo) phone numbers and Lightning addresses (LNURL / Lightning addresses).
+- **Full Contact Management**: Dedicated Address Book route (`/address-book`) supporting full CRUD operations for frequent Mobile Money phone numbers and Lightning addresses (LNURL / Lightning addresses).
 - **Automated Contact Capture**: Successfully completing a MoMo Cash Out, MoMo Top-Up, or Lightning payment prompts an automatic contact-saving workflow or auto-updates last-used timestamps.
 - **Smart Auto-Complete & Inline Picker**: Instant contact suggestion overlay in Bitcoin Send and MoMo modals with one-tap destination autofill.
 - **Unified Settings Card**: Added an Address Book accordion in Settings featuring quick-action buttons, recently used contacts, and instant management navigation.
@@ -52,7 +63,7 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 - **Live Currency Support**: Integrated live exchange rates for all 34 global fiat currencies from `https://blockchain.info/ticker` (USD, EUR, GBP, NGN, GHS, CAD, AUD, JPY, CHF, CNY, INR, BRL, and more) alongside Rwandan Franc (RWF).
 - **Settings Currency Selector**: Added a new **Currency** settings accordion card with quick-pick chips for popular currencies and a searchable list of all 35 currencies displaying live 1 BTC exchange rates.
 - **Intelligent Spread Handling**:
-  - `RWF`: Retains the configured spread (`SPREAD = 0.021`) to reflect actual mobile money (MoMo) cash-out settlement value.
+  - `RWF`: Retains the configured spread (`SPREAD = 0.021`) to reflect actual mobile money cash-out settlement value.
   - All other global currencies: Rendered at **pure spot market rates** without spread, matching standard Bitcoin wallet valuations.
 - **Auto-Closing Accordion**: Selecting any currency instantly saves preferences and closes the selector card.
 - **Persistent & Fast**: Cached rates in `localStorage` ensure zero-delay startup with smooth animated rolling counters during balance or rate fluctuations.
