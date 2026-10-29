@@ -5,6 +5,7 @@ import { useNostr } from '../../hooks/useNostr';
 import { useNostrStore } from '../../store/nostrStore';
 import { LightningAddressModal } from './LightningAddressModal';
 import { LightningAddressSkeleton } from '../shared/Skeleton';
+import { writeClipboardText } from '../../utils/clipboard';
 
 export const LightningAddressCard: React.FC = () => {
   const { lightningAddress } = useNostr();
@@ -20,7 +21,7 @@ export const LightningAddressCard: React.FC = () => {
 
   const handleCopy = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    navigator.clipboard.writeText(lightningAddress);
+    writeClipboardText(lightningAddress);
     setCopied(true);
     toast.success('Lightning Address copied!');
     setTimeout(() => setCopied(false), 2000);

@@ -3,6 +3,7 @@ import { Loader2, Copy, Check, ArrowLeft } from 'lucide-react';
 import { PageHeader } from '../shared/PageHeader';
 import QRCode from 'react-qr-code';
 import { toast } from 'react-hot-toast';
+import { writeClipboardText } from '../../utils/clipboard';
 
 interface InvoicePaymentPendingProps {
   invoicePayload: any;
@@ -27,7 +28,7 @@ export const InvoicePaymentPending: React.FC<InvoicePaymentPendingProps> = ({
   const handleCopyInvoice = async () => {
     if (!invoicePayload?.invoice) return;
     try {
-      await navigator.clipboard.writeText(invoicePayload.invoice);
+      await writeClipboardText(invoicePayload.invoice);
       setCopied(true);
       toast.success('Invoice copied to clipboard');
       setTimeout(() => setCopied(false), 2000);

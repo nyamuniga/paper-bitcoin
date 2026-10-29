@@ -17,6 +17,7 @@ import {
   MinusCircle
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { writeClipboardText } from '../../utils/clipboard';
 
 export interface CleanWalletResult {
   removed_sats: number;
@@ -58,7 +59,7 @@ export const CleanWalletModal: React.FC<CleanWalletModalProps> = ({
   const handleCopyLogs = async () => {
     if (logs.length === 0) return;
     try {
-      await navigator.clipboard.writeText(logs.join('\n'));
+      await writeClipboardText(logs.join('\n'));
       setCopied(true);
       toast.success('Logs copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
