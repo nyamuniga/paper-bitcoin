@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { formatMintUrl } from '../../utils/format';
+import { writeClipboardText } from '../../utils/clipboard';
 import { MintIcon } from '../shared/MintIcon';
 import { useMintInfo } from '../../hooks/useMintInfo';
 import { useWalletStore } from '../../store/wallet';
@@ -45,7 +46,7 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(mintUrl);
+      await writeClipboardText(mintUrl);
       setCopied(true);
       toast.success('Mint URL copied!');
       setTimeout(() => setCopied(false), 2000);

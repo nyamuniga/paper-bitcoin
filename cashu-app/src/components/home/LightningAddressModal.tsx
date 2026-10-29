@@ -6,6 +6,7 @@ import QRCode from 'react-qr-code';
 import { useNostr } from '../../hooks/useNostr';
 import { NPUB_DOMAIN } from '../../constants.local';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
+import { writeClipboardText } from '../../utils/clipboard';
 
 interface LightningAddressModalProps {
   onClose: () => void;
@@ -29,7 +30,7 @@ export const LightningAddressModal: React.FC<LightningAddressModalProps> = ({ on
   if (!lightningAddress) return null;
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(lightningAddress);
+    writeClipboardText(lightningAddress);
     setCopied(true);
     toast.success('Lightning Address copied!');
     setTimeout(() => setCopied(false), 2000);

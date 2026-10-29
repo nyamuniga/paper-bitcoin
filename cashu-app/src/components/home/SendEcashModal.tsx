@@ -6,6 +6,7 @@ import { useEcash } from '../../hooks/useEcash';
 import { SafeQRCode } from '../shared/SafeQRCode';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
 import { formatMintUrl } from '../../utils/format';
+import { writeClipboardText } from '../../utils/clipboard';
 import { MintIcon } from '../shared/MintIcon';
 import { AmountDisplay } from '../shared/AmountDisplay';
 import { NumberPad } from '../shared/NumberPad';
@@ -90,7 +91,7 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
   const handleCopy = async () => {
     if (!token) return;
     try {
-      await navigator.clipboard.writeText(token);
+      await writeClipboardText(token);
       setCopied(true);
       toast.success('Token copied!');
       setTimeout(() => setCopied(false), 2000);

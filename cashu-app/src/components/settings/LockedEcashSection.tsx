@@ -4,6 +4,7 @@ import { useNostrStore } from '../../store/nostrStore';
 import QRCode from 'react-qr-code';
 import toast from 'react-hot-toast';
 import { nip19 } from 'nostr-tools';
+import { writeClipboardText } from '../../utils/clipboard';
 
 interface LockedEcashSectionProps {
   isExpanded?: boolean;
@@ -38,7 +39,7 @@ export const LockedEcashSection: React.FC<LockedEcashSectionProps> = ({
 
   const handleCopyHex = () => {
     if (!hexPubkey) return;
-    navigator.clipboard.writeText(hexPubkey);
+    writeClipboardText(hexPubkey);
     setCopiedHex(true);
     toast.success('Hex pubkey copied to clipboard');
     setTimeout(() => setCopiedHex(false), 2000);

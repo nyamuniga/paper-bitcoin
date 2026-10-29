@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Loader2, Zap, Wallet, QrCode } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import { readClipboardText } from '../../utils/clipboard';
 import { getInvoiceAmountSats } from '../../services/lnurlService';
 
 interface RedeemNoteFormProps {
@@ -130,7 +131,7 @@ export const RedeemNoteForm: React.FC<RedeemNoteFormProps> = ({
                         type="button"
                         onClick={async () => {
                           try {
-                            const text = await navigator.clipboard.readText();
+                            const text = await readClipboardText();
                             if (text) setInvoice(text.trim());
                           } catch (e) {
                             console.warn('Clipboard read failed', e);
