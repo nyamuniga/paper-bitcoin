@@ -24,14 +24,21 @@ pub struct MintClient {
     pub url: String,
 }
 
+static SHARED_HTTP_CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+
 impl MintClient {
     pub fn new(mint_url: &str) -> Self {
+        let http = SHARED_HTTP_CLIENT
+            .get_or_init(|| {
+                reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(60))
+                    .pool_idle_timeout(std::time::Duration::from_secs(30))
+                    .build()
+                    .unwrap_or_default()
+            })
+            .clone();
         Self {
-            http: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(60))
-                .pool_max_idle_per_host(0)
-                .build()
-                .unwrap_or_default(),
+            http,
             url: crate::state::normalize_mint_url(mint_url),
         }
     }

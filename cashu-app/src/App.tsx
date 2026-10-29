@@ -11,6 +11,7 @@ import { Home } from './pages/Home';
 import Mints from './pages/Mints';
 import DiscoverMints from './pages/DiscoverMints';
 import { Pay } from './pages/Pay';
+import { AddressBook } from './pages/AddressBook';
 import { TopNav } from './components/navigation/TopNav';
 import { PageTransition } from './components/navigation/PageTransition';
 import { TransactionProcessor } from './hooks/useTransactionProcessor';
@@ -54,6 +55,7 @@ export default function App() {
             <Route path="/mints" element={<Mints />} />
             <Route path="/discover" element={<DiscoverMints />} />
             <Route path="/pay" element={<Pay />} />
+            <Route path="/address-book" element={<AddressBook />} />
           </Routes>
         </PageTransition>
       </div>

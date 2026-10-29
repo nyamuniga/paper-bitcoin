@@ -1549,7 +1549,7 @@
 
             <!-- Right Actions -->
             <div class="header-actions">
-                <span class="nav-link-version" id="version-text">v0.1.12</span>
+                <span class="nav-link-version" id="version-text">v0.1.13</span>
                 <a href="#download" class="btn-header-cta">
                     <span>Get Wallet</span>
                 </a>
@@ -1607,7 +1607,7 @@
                 <span>Get Wallet</span>
             </a>
             <div class="mobile-menu-version">
-                <span>Release Version </span><span class="version-tag" id="mobile-version-text">v0.1.12</span>
+                <span>Release Version </span><span class="version-tag" id="mobile-version-text">v0.1.13</span>
             </div>
         </div>
     </div>
@@ -1875,7 +1875,7 @@
                     payments, or fund your wallet with Mobile Money.</p>
 
                 <div class="cta-buttons">
-                    <a href="#" id="download-link" class="btn-banner-primary">
+                    <a href="#" id="cta-download-link" class="btn-banner-primary">
                         <span>Download Apk</span>
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1884,7 +1884,7 @@
                         </svg>
                     </a>
 
-                    <a href="#" id="mac-download-link" class="btn-banner-secondary">
+                    <a href="#" id="cta-mac-download-link" class="btn-banner-secondary">
                         <span>macOS Desktop</span>
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1970,7 +1970,7 @@
     </footer>
 
     <!-- Config + Dynamic Version Resolution (cache-busted with version tag) -->
-    <script src="config.js?v=0.1.12"></script>
+    <script src="config.js?v=0.1.13"></script>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             if (window.ENV) {
@@ -1978,11 +1978,11 @@
                 const macLink = window.ENV.MAC_LINK;
 
                 if (apkLink) {
-                    const downloadLinks = document.querySelectorAll('#download-link');
+                    const downloadLinks = document.querySelectorAll('#download-link, #cta-download-link');
                     downloadLinks.forEach(el => el.href = apkLink);
                 }
                 if (macLink) {
-                    const macDownloadLinks = document.querySelectorAll('#mac-download-link');
+                    const macDownloadLinks = document.querySelectorAll('#mac-download-link, #cta-mac-download-link');
                     macDownloadLinks.forEach(el => el.href = macLink);
                 }
 
@@ -2073,6 +2073,7 @@
             function openMobileMenu() {
                 if (mobileMenuDrawer && mobileMenuOverlay) {
                     mobileMenuDrawer.classList.add('active');
+                    mobileMenuDrawer.setAttribute('aria-hidden', 'false');
                     mobileMenuOverlay.classList.add('active');
                     document.body.style.overflow = 'hidden';
                 }
@@ -2081,6 +2082,7 @@
             function closeMobileMenu() {
                 if (mobileMenuDrawer && mobileMenuOverlay) {
                     mobileMenuDrawer.classList.remove('active');
+                    mobileMenuDrawer.setAttribute('aria-hidden', 'true');
                     mobileMenuOverlay.classList.remove('active');
                     document.body.style.overflow = '';
                 }

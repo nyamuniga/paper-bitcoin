@@ -83,6 +83,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
     let isMounted = true;
 
     const poll = async (isInitial = false) => {
+      if (!isInitial && typeof document !== 'undefined' && document.hidden) return;
       try {
         await fetchRates();
       } catch (e) {
@@ -95,7 +96,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
     };
 
     poll(true);
-    const interval = setInterval(() => poll(false), 10000);
+    const interval = setInterval(() => poll(false), 60000);
 
     return () => {
       isMounted = false;

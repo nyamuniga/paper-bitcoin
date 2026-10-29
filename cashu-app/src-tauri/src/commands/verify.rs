@@ -1,5 +1,4 @@
 use crate::error::CommandResult;
-use ecash_wallet::WalletState;
 
 use crate::commands::auth::AppState;
 use tauri::State;
@@ -73,28 +72,29 @@ pub async fn verify_note(
         }
     }
 
-    let path = state.wallet_path.clone();
-
-    let passphrase = {
-        let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock
-            .clone()
-            .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
+    let (trusted_keys, known_mints) = match state.lock_and_get_wallet().await {
+        Ok((wallet_guard, _, _)) => {
+            if let Some(ref w_state) = *wallet_guard {
+                (w_state.trusted_keys.clone(), w_state.mints.clone())
+            } else {
+                (std::collections::HashMap::new(), Vec::new())
+            }
+        }
+        Err(_) => (std::collections::HashMap::new(), Vec::new()),
     };
-
-    let w_state = WalletState::load_encrypted(&path, &passphrase)?;
 
     let mut verifier = ecash_verifier::OfflineVerifier::new();
     for entry in &pub_data.entries {
         let url = &entry.mint;
-        if let Some(keys) = w_state.trusted_keys.get(url) {
+        if let Some(keys) = trusted_keys.get(url) {
             let mut keys_u64 = std::collections::HashMap::new();
             for (amt, pk) in keys {
                 keys_u64.insert(*amt, pk.clone());
             }
             verifier.trust_mint(url.clone(), "Trusted Mint".to_string(), keys_u64);
         } else {
-            // Keys not in local database. If we are online, we can fetch them to verify DLEQ!
+            // Keys not in local database. If we are online, fetch them to verify DLEQ
+            // without marking an unknown mint as trusted!
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(3))
                 .build()
@@ -114,11 +114,15 @@ pub async fn verify_note(
                                         keys_u64.insert(amt, pk_str.to_string());
                                     }
                                 }
-                                verifier.trust_mint(
-                                    url.clone(),
-                                    "Fetched Mint".to_string(),
-                                    keys_u64,
-                                );
+                                if known_mints.contains(url) {
+                                    verifier.trust_mint(
+                                        url.clone(),
+                                        "Trusted Mint".to_string(),
+                                        keys_u64,
+                                    );
+                                } else {
+                                    verifier.add_untrusted_mint_keys(url.clone(), keys_u64);
+                                }
                             }
                         }
                     }

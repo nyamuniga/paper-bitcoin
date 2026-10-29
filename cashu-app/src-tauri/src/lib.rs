@@ -23,12 +23,20 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .setup(|app| {
             use tauri::Manager;
+            use tauri_plugin_store::StoreExt;
             let wallet_path = app.path().app_data_dir().unwrap().join("gui-wallet.json");
+            let initial_nwc_enabled = app
+                .store("settings.bin")
+                .ok()
+                .and_then(|s| s.get("nwc_enabled"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             app.manage(commands::auth::AppState {
                 passphrase: std::sync::Mutex::new(None),
                 wallet_path,
-                wallet_lock: tokio::sync::Mutex::new(()),
+                wallet: tokio::sync::Mutex::new(None),
                 pending_nwc_requests: std::sync::Mutex::new(Vec::new()),
+                nwc_enabled: std::sync::atomic::AtomicBool::new(initial_nwc_enabled),
             });
             
             app.manage(commands::fixedfloat::FixedFloatState::new());
@@ -81,6 +89,7 @@ pub fn run() {
             commands::auth::unlock_wallet,
             commands::auth::lock_wallet,
             commands::auth::is_wallet_unlocked,
+            commands::auth::verify_passphrase,
             commands::auth::reset_wallet,
             commands::auth::create_wallet,
             commands::auth::restore_wallet,
@@ -92,6 +101,7 @@ pub fn run() {
             commands::history::check_issue_status,
             crate::nwc::get_nwc_uri,
             crate::nwc::enable_nwc,
+            crate::nwc::disable_nwc,
             crate::nwc::reset_nwc_keys,
             crate::nwc::get_nwc_config,
             crate::nwc::set_nwc_config,

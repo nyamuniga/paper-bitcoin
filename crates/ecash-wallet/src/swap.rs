@@ -167,10 +167,6 @@ pub async fn swap_proofs(
                     let sig_hash: k256::schnorr::Signature = signing_key.sign(&msg_hash);
                     let sig_hash_hex = hex::encode(sig_hash.to_bytes());
 
-                    // Also compute raw secret signature for compatibility with mints that sign raw
-                    let sig_raw: k256::schnorr::Signature = signing_key.sign(p.secret.as_bytes());
-                    let sig_raw_hex = hex::encode(sig_raw.to_bytes());
-
                     // Preserve existing signatures from witness if present, and append our signature
                     let mut signatures = Vec::new();
                     if let Some(ref existing_witness) = p.witness {
@@ -195,9 +191,6 @@ pub async fn swap_proofs(
 
                     if !signatures.contains(&sig_hash_hex) {
                         signatures.push(sig_hash_hex);
-                    }
-                    if !signatures.contains(&sig_raw_hex) {
-                        signatures.push(sig_raw_hex);
                     }
 
                     if signatures.len() < n_sigs {
@@ -278,6 +271,7 @@ pub async fn swap_proofs(
         // First do desired amounts
         for &amt in &desired_amounts {
             let index = deriv.index;
+            let r_bytes = deriv.blinding_factor_at(index);
             let mut secret = deriv.next_secret();
             if let Some(ref pubkey) = target_pubkey {
                 let mut nonce = [0u8; 16];
@@ -298,7 +292,7 @@ pub async fn swap_proofs(
                     }
                 ]).to_string();
             }
-            let sess = BlindingSession::new(&secret);
+            let sess = BlindingSession::with_blinding_factor(&secret, &r_bytes);
             output_json.push(serde_json::json!({"amount": amt, "id": keyset.id, "B_": sess.b_prime_hex()}));
             current_sessions.push((amt, sess, index, true)); // true = is_desired
         }
@@ -306,8 +300,7 @@ pub async fn swap_proofs(
         // Then do change amounts
         for &amt in &change_amounts {
             let index = deriv.index;
-            let secret = deriv.next_secret();
-            let sess = BlindingSession::new(&secret);
+            let sess = deriv.next_session();
             output_json.push(serde_json::json!({"amount": amt, "id": keyset.id, "B_": sess.b_prime_hex()}));
             current_sessions.push((amt, sess, index, false)); // false = is_change
         }
@@ -438,8 +431,9 @@ pub async fn swap_proofs(
     Ok(desired_proofs)
 }
 
-/// Identifies which input proofs in a failed swap are cryptographically unverified or corrupt,
-/// permanently removes them from the wallet state, and saves the wallet.
+/// Identifies which input proofs in a failed swap are cryptographically unverified or already spent,
+/// removes only confirmed invalid/spent proofs from the wallet state, and saves the wallet.
+/// Never executes live single-input swaps (which would burn fees) or deletes valid low-denomination proofs.
 async fn isolate_and_purge_unverified_inputs(
     state: &mut WalletState,
     wallet_path: &PathBuf,
@@ -447,15 +441,19 @@ async fn isolate_and_purge_unverified_inputs(
     client: &MintClient,
     mint_url: &str,
     inputs: &[Proof],
-    input_json: &[serde_json::Value],
+    _input_json: &[serde_json::Value],
     active_keyset: &KeysetInfo,
     all_keysets: &[KeysetSummary],
 ) -> usize {
     let mut bad_secrets = std::collections::HashSet::new();
 
-    // 1. Check offline: keyset validity
-    // If a proof's keyset ID is completely unknown to the mint, it cannot be verified
+    // 1. Check offline: keyset validity and curve point validity
     for p in inputs {
+        if point_from_hex(&p.c).is_err() {
+            eprintln!("[isolate_unverified] Proof has invalid curve point C: {}", p.secret);
+            bad_secrets.insert(p.secret.clone());
+            continue;
+        }
         let keyset_known = all_keysets.iter().any(|ks| {
             ks.id == p.id
                 || (p.id.starts_with("01") && ks.id.starts_with(&p.id))
@@ -467,7 +465,8 @@ async fn isolate_and_purge_unverified_inputs(
         }
     }
 
-    // 2. Check offline: DLEQ proof (if present)
+    // 2. Check offline: DLEQ proof and unblinding consistency (if present)
+    let deriv_opt = TokenDerivation::from_hex(&state.seed_hex).ok();
     for p in inputs {
         if bad_secrets.contains(&p.secret) { continue; }
         if let (Some(c_prime), Some(b_prime), Some(dleq)) = (&p.c_prime, &p.b_prime, &p.dleq) {
@@ -482,108 +481,40 @@ async fn isolate_and_purge_unverified_inputs(
                         if !verify_dleq(&mint_pk, &c_p, &b_p, dleq) {
                             eprintln!("[isolate_unverified] Proof failed DLEQ verification: {}", p.secret);
                             bad_secrets.insert(p.secret.clone());
+                            continue;
+                        }
+                        if let Some(ref deriv) = deriv_opt {
+                            let seeded_c = deriv.session_at(p.derivation_index).unblind(&c_p, &mint_pk, p.amount, &p.id, None).c;
+                            let legacy_c = BlindingSession::new_legacy(&p.secret).unblind(&c_p, &mint_pk, p.amount, &p.id, None).c;
+                            if p.c != seeded_c && p.c != legacy_c {
+                                eprintln!("[isolate_unverified] Proof unblinded signature C mismatches both seeded and legacy derivation: {}", p.secret);
+                                bad_secrets.insert(p.secret.clone());
+                            }
                         }
                     }
                 }
+            } else {
+                bad_secrets.insert(p.secret.clone());
             }
         }
     }
 
-    // 3. If inputs.len() == 1 and no bad secret flagged yet:
-    // That single input MUST be the invalid one!
-    if inputs.len() == 1 {
+    // 3. Read-only /v1/checkstate check (zero fees!) to catch any already-spent proofs
+    let input_ys: Vec<String> = inputs.iter().map(|p| {
+        ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()))
+    }).collect();
+    if let Ok(states) = client.check_state(&input_ys).await {
+        for p in inputs {
+            let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(p.secret.as_bytes()));
+            if matches!(states.get(&y).map(|s| s.as_str()), Some("SPENT")) {
+                bad_secrets.insert(p.secret.clone());
+            }
+        }
+    }
+
+    // 4. If inputs.len() == 1 and the mint explicitly rejected that single input as unverified:
+    if inputs.len() == 1 && bad_secrets.is_empty() {
         bad_secrets.insert(inputs[0].secret.clone());
-    } else {
-        // 4. Test candidate inputs individually via single-input test swap
-        for (i, p) in inputs.iter().enumerate() {
-            if bad_secrets.contains(&p.secret) { continue; }
-
-            let fee = crate::client::calculate_input_fee(std::slice::from_ref(p), all_keysets);
-            if p.amount <= fee {
-                continue;
-            }
-
-            let output_amount = p.amount - fee;
-            let output_denoms = ecash_core::types::split_into_powers_of_2(output_amount);
-
-            let mut deriv = match TokenDerivation::from_hex(&state.seed_hex) {
-                Ok(d) => d,
-                Err(_) => continue,
-            };
-            deriv.index = state.derivation_index;
-
-            let mut test_sessions = Vec::new();
-            let mut test_outputs = Vec::new();
-            for &amt in &output_denoms {
-                let idx = deriv.index;
-                let sec = deriv.next_secret();
-                let sess = BlindingSession::new(&sec);
-                test_outputs.push(serde_json::json!({
-                    "amount": amt,
-                    "id": active_keyset.id,
-                    "B_": sess.b_prime_hex()
-                }));
-                test_sessions.push((amt, sess, idx));
-            }
-
-            state.derivation_index = deriv.index;
-
-            let single_input = vec![input_json[i].clone()];
-            match client.swap_tokens(single_input, test_outputs).await {
-                Ok(sigs) => {
-                    // Valid proof! Mint verified it and signed new outputs.
-                    let mut new_proofs = Vec::new();
-                    for (s_idx, sig_val) in sigs.iter().enumerate() {
-                        if let (Some(amt), Some(sig_id), Some(c_prime_str)) = (
-                            sig_val.get("amount").and_then(|a| a.as_u64()),
-                            sig_val.get("id").and_then(|id| id.as_str()),
-                            sig_val.get("C_").and_then(|c| c.as_str()),
-                        ) {
-                            if let Ok(c_prime) = point_from_hex(c_prime_str) {
-                                let mint_pk_str = if sig_id == active_keyset.id {
-                                    active_keyset.keys.get(&amt).cloned()
-                                } else {
-                                    client.fetch_keyset_by_id(sig_id).await.ok().and_then(|ks| ks.keys.get(&amt).cloned())
-                                };
-                                if let Some(pk_str) = mint_pk_str {
-                                    if let Ok(mint_pk) = point_from_hex(&pk_str) {
-                                        let (_, ref sess, idx) = test_sessions[s_idx];
-                                        let dleq = crate::melt::parse_dleq(sig_val);
-                                        let mut new_p = sess.unblind(&c_prime, &mint_pk, amt, sig_id, dleq);
-                                        new_p.derivation_index = idx;
-                                        new_proofs.push(new_p);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if !new_proofs.is_empty() {
-                        if let Some(mint_proofs) = state.proofs.get_mut(mint_url) {
-                            mint_proofs.retain(|x| x.secret != p.secret);
-                            mint_proofs.extend(new_proofs);
-                        }
-                    }
-                }
-                Err(test_err) => {
-                    let terr_lower = test_err.to_string().to_lowercase();
-                    if terr_lower.contains("not verified") || terr_lower.contains("already spent") {
-                        eprintln!("[isolate_unverified] Found bad proof ({} sats): {}", p.amount, p.secret);
-                        bad_secrets.insert(p.secret.clone());
-                    }
-                }
-            }
-        }
-
-        // If no bad secret was found yet, any input with amount <= fee must be the bad proof
-        if bad_secrets.is_empty() {
-            for p in inputs {
-                let fee = crate::client::calculate_input_fee(std::slice::from_ref(p), all_keysets);
-                if p.amount <= fee {
-                    eprintln!("[isolate_unverified] Low-denomination proof flagged as bad: {}", p.secret);
-                    bad_secrets.insert(p.secret.clone());
-                }
-            }
-        }
     }
 
     if !bad_secrets.is_empty() {

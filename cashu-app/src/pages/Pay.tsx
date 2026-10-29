@@ -1,16 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Loader2, Zap, QrCode } from 'lucide-react';
+import { Loader2, Zap, QrCode, BookUser } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { useWalletStore } from '../store/wallet';
 import { useBitcoin } from '../hooks/useBitcoin';
+import { useAddressBookStore } from '../store/addressBookStore';
+import { AddressBookPickerModal } from '../components/addressBook/AddressBookPickerModal';
+import { AddressBookAutocomplete } from '../components/addressBook/AddressBookAutocomplete';
 import { SovereignStampOverlay, StampPaymentStatus } from '../components/shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../components/shared/FullScreenLoader';
 import { PageHeader } from '../components/shared/PageHeader';
 import { formatMintUrl } from '../utils/format';
 import { MintIcon } from '../components/shared/MintIcon';
-import { bech32 } from 'bech32';
-import { Buffer } from 'buffer';
+import {
+  isLightningAddress,
+  isLnurl,
+  decodeLnurl,
+  lightningAddressToUrl,
+  resolveLnurlPay,
+  fetchLnurlPayInvoice,
+  getInvoiceAmountSats,
+} from '../services/lnurlService';
 import toast from 'react-hot-toast';
 
 interface LnurlParams {
@@ -29,6 +39,7 @@ export const Pay = () => {
 
   const [invoice, setInvoice] = useState('');
   const [showScanner, setShowScanner] = useState(false);
+  const [showAddressBook, setShowAddressBook] = useState(false);
   const { paying, payInvoice } = useBitcoin(mintUrl);
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const availableBalance = mintUrl ? (mintBalances[mintUrl] || 0) : 0;
@@ -41,66 +52,54 @@ export const Pay = () => {
 
   // Process input to detect LNURL / Lightning Address
   useEffect(() => {
-    const processInput = async () => {
-      const val = invoice.trim();
-      if (!val) {
-        setLnurlParams(null);
-        return;
-      }
-      
-      let url = '';
-      
-      // Lightning Address
-      if (val.match(/^[^@]+@[^@]+\.[^@]+$/)) {
-        const [user, domain] = val.split('@');
-        url = `https://${domain}/.well-known/lnurlp/${user}`;
-      } 
-      // LNURL (Bech32)
-      else if (val.toLowerCase().startsWith('lnurl1')) {
-        try {
-          const decoded = bech32.decode(val.toLowerCase(), 2000);
-          const bytes = bech32.fromWords(decoded.words);
-          url = Buffer.from(bytes).toString('utf8');
-        } catch (e) {
-          console.warn('Failed to decode LNURL', e);
-        }
-      }
+    const val = invoice.trim();
+    if (!val || val.toLowerCase().startsWith('lnbc')) {
+      setLnurlParams(null);
+      return;
+    }
 
-      if (url) {
+    if (!isLightningAddress(val) && !isLnurl(val)) {
+      setLnurlParams(null);
+      return;
+    }
+
+    let isCancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        setFetchingInvoice(true);
+        const data = await resolveLnurlPay(val);
+        if (isCancelled) return;
+        let domain = 'LNURL';
         try {
-          setFetchingInvoice(true);
-          const res = await fetch(url);
-          const data = await res.json();
-          if (data.status === 'ERROR') {
-            toast.error(data.reason || 'Failed to resolve LNURL');
-            setLnurlParams(null);
-          } else if (data.callback) {
-            setLnurlParams({
-              callback: data.callback,
-              maxSendable: data.maxSendable,
-              minSendable: data.minSendable,
-              metadata: data.metadata,
-              domain: new URL(url).hostname
-            });
-            setLnurlAmount(Math.floor((data.minSendable || 1000) / 1000).toString());
-          }
-        } catch (e) {
-          toast.error('Failed to fetch LNURL details');
+          const resolvedUrl = isLightningAddress(val) ? lightningAddressToUrl(val) : decodeLnurl(val);
+          domain = new URL(resolvedUrl).hostname;
+        } catch {
+          // fallback
+        }
+        setLnurlParams({
+          callback: data.callback,
+          maxSendable: data.maxSendable,
+          minSendable: data.minSendable,
+          metadata: data.metadata,
+          domain,
+        });
+        setLnurlAmount(Math.floor((data.minSendable || 1000) / 1000).toString());
+      } catch (e: any) {
+        if (!isCancelled) {
+          toast.error(e?.message || 'Failed to fetch LNURL details');
           setLnurlParams(null);
-        } finally {
+        }
+      } finally {
+        if (!isCancelled) {
           setFetchingInvoice(false);
         }
-      } else {
-        setLnurlParams(null);
       }
+    }, 300);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
     };
-    
-    // Only process if it doesn't look like a standard invoice
-    if (!invoice.toLowerCase().startsWith('lnbc')) {
-      processInput();
-    } else {
-      setLnurlParams(null);
-    }
   }, [invoice]);
 
   if (!mintUrl) {
@@ -113,27 +112,6 @@ export const Pay = () => {
       </main>
     );
   }
-
-  const getInvoiceAmountSats = (inv: string): number | null => {
-    try {
-      const hrp = inv.toLowerCase().split('1')[0];
-      if (!hrp) return null;
-      const match = hrp.match(/^ln[a-z]+(\d+)([munp]?)$/);
-      if (match) {
-        let val = parseInt(match[1], 10);
-        const mult = match[2];
-        if (mult === 'm') val *= 100000;
-        else if (mult === 'u') val *= 100;
-        else if (mult === 'n') val *= 0.1;
-        else if (mult === 'p') val *= 0.0001;
-        else val *= 100000000;
-        return Math.floor(val);
-      }
-    } catch (e) {
-      return null;
-    }
-    return null;
-  };
 
   let invoiceAmount = getInvoiceAmountSats(invoice);
   if (lnurlParams) {
@@ -168,10 +146,7 @@ export const Pay = () => {
       setPaymentStatus('pending');
       setFetchingInvoice(true);
       try {
-        const res = await fetch(`${lnurlParams.callback}${lnurlParams.callback.includes('?') ? '&' : '?'}amount=${amtSats * 1000}`);
-        const data = await res.json();
-        if (data.status === 'ERROR') return failWith(data.reason || 'The LNURL provider rejected the request.');
-        if (!data.pr) return failWith('The LNURL provider returned an invalid response.');
+        const data = await fetchLnurlPayInvoice(lnurlParams.callback, amtSats * 1000);
         bolt11 = data.pr;
       } catch (e: any) {
         return failWith(e?.message || 'Could not reach the LNURL provider.');
@@ -188,8 +163,18 @@ export const Pay = () => {
       silent: true,
       onError: (message) => { mintError = message; },
     });
-    if (success) setPaymentStatus('success');
-    else failWith(mintError || 'The mint could not complete this payment.');
+    if (success) {
+      setPaymentStatus('success');
+      if (invoice && (isLightningAddress(invoice) || isLnurl(invoice))) {
+        try {
+          useAddressBookStore.getState().recordSuccessfulUse('lightning', invoice);
+        } catch (e) {
+          console.warn('Failed to record lightning contact:', e);
+        }
+      }
+    } else {
+      failWith(mintError || 'The mint could not complete this payment.');
+    }
   };
 
   return (
@@ -264,10 +249,25 @@ export const Pay = () => {
                   <textarea 
                     value={invoice}
                     onChange={(e) => setInvoice(e.target.value)}
-                    className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInvalidAmount && invoice ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`} 
+                    className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInvalidAmount && invoice ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`} 
                     placeholder="lnbc... or user@domain.com" 
                     rows={4}
                     spellCheck="false"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAddressBook(true)}
+                    className="absolute right-3 top-3 p-2 bg-surface-container-highest rounded-lg text-primary hover:bg-surface-bright transition-colors cursor-pointer"
+                    title="Open Address Book"
+                  >
+                    <BookUser size={18} />
+                  </button>
+                  <AddressBookAutocomplete
+                    type="lightning"
+                    query={invoice}
+                    visible={invoice.length >= 2 && !invoice.startsWith('lnbc')}
+                    onSelect={(c) => setInvoice(c.value)}
+                    onClose={() => {}}
                   />
                 </div>
               ) : (
@@ -352,6 +352,14 @@ export const Pay = () => {
           else setPaymentStatus(null);
         }}
         onRetry={handlePay}
+      />
+      <AddressBookPickerModal
+        isOpen={showAddressBook}
+        onClose={() => setShowAddressBook(false)}
+        type="lightning"
+        onSelect={(contact) => {
+          setInvoice(contact.value);
+        }}
       />
     </main>
   );

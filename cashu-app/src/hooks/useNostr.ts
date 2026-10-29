@@ -278,7 +278,8 @@ export const useNostr = () => {
 
   // Manual claim trigger (pull-to-refresh)
   const claimNow = useCallback(async () => {
-    if (!privateKeyRef.current) return;
+    if (!privateKeyRef.current || globalIsClaiming) return;
+    globalIsClaiming = true;
     setClaiming(true);
     try {
       const claimResult = await fetchV1ClaimToken(privateKeyRef.current!);
@@ -307,6 +308,7 @@ export const useNostr = () => {
     } catch (e: any) {
       toast.error(`Claim failed: ${e.message || e}`);
     } finally {
+      globalIsClaiming = false;
       setClaiming(false);
     }
   }, [refreshWallet]);

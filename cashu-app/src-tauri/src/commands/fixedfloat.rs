@@ -1,12 +1,10 @@
 use tauri::{State, AppHandle, Manager};
 use crate::commands::auth::AppState;
 use ecash_core::derivation::TokenDerivation;
-use ecash_core::dhke::BlindingSession;
 use ecash_core::types::{
     split_into_powers_of_2, ReceiveOnchainTransactionData, Transaction, TransactionStatus,
     TransactionType,
 };
-use ecash_wallet::WalletState;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::path::PathBuf;
@@ -364,60 +362,89 @@ pub async fn fixedfloat_execute_onchain_send(
 ) -> Result<String, String> {
     let (api_key, api_secret) = load_credentials_from_env(&app, &state);
 
-    let path = app_state.wallet_path.clone();
-    let passphrase = {
-        let pass_lock = app_state.passphrase.lock().unwrap();
-        pass_lock.clone().ok_or_else(|| "Wallet is locked".to_string())?
-    };
-
-    let _wallet_lock = app_state.wallet_lock.lock().await;
-
     state.is_sending.store(true, std::sync::atomic::Ordering::SeqCst);
     let _guard = SendingGuard(&state.is_sending);
 
-    let mut w_state = ecash_wallet::WalletState::load_encrypted(&path, &passphrase)
-        .map_err(|e| format!("Failed to load Cashu wallet: {}", e))?;
+    let tx_id = format!(
+        "tx_onchain_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
 
-    let (sats_paid, _preimage) = ecash_wallet::pay_invoice(&mut w_state, &path, &passphrase, &bridging_invoice, Some(mint_url.clone()))
+    // Phase 1: Hold wallet lock while melting proofs and recording the Pending SendOnchain transaction
+    {
+        let (mut wallet_guard, path, passphrase) = app_state
+            .lock_and_get_wallet()
+            .await
+            .map_err(|e| e.0)?;
+        let w_state = wallet_guard.as_mut().unwrap();
+
+        let (sats_paid, _preimage) = ecash_wallet::pay_invoice(
+            w_state,
+            &path,
+            &passphrase,
+            &bridging_invoice,
+            Some(mint_url.clone()),
+        )
         .await
         .map_err(|e| format!("Failed to pay on-chain swap invoice from Cashu: {}", e))?;
 
-    let tx_id = format!("tx_onchain_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
-    let cashu_fee = if let Some(last_tx) = w_state.transactions.last() {
-        last_tx.fee
-    } else {
-        0
-    };
-    let swap_fee = if sats_paid > amount_sats { sats_paid - amount_sats } else { 0 };
+        let cashu_fee = if let Some(last_tx) = w_state.transactions.last() {
+            last_tx.fee
+        } else {
+            0
+        };
+        let swap_fee = if sats_paid > amount_sats {
+            sats_paid - amount_sats
+        } else {
+            0
+        };
 
-    // Remove the generic Melt transaction added by pay_invoice to avoid misleading "Sent Lightning"
-    if let Some(pos) = w_state.transactions.iter().rposition(|t| matches!(t.tx_type, ecash_core::types::TransactionType::Melt(_))) {
-        w_state.transactions.remove(pos);
+        // Remove the generic Melt transaction added by pay_invoice to avoid misleading "Sent Lightning"
+        if let Some(pos) = w_state
+            .transactions
+            .iter()
+            .rposition(|t| matches!(t.tx_type, ecash_core::types::TransactionType::Melt(_)))
+        {
+            w_state.transactions.remove(pos);
+        }
+
+        // Add proper SendOnchain transaction with Pending status
+        let pending_onchain_tx = ecash_core::types::Transaction {
+            id: tx_id.clone(),
+            tx_type: ecash_core::types::TransactionType::SendOnchain(
+                ecash_core::types::SendOnchainTransactionData {
+                    txid: None,
+                    address: address.clone(),
+                    amount: amount_sats,
+                    ark_fee: swap_fee,
+                    cashu_fee,
+                    bridging_invoice: bridging_invoice.clone(),
+                },
+            ),
+            amount: amount_sats,
+            fee: swap_fee + cashu_fee,
+            status: ecash_core::types::TransactionStatus::Pending,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            mint_url: mint_url.clone(),
+        };
+        w_state.transactions.insert(0, pending_onchain_tx);
+        w_state
+            .save_encrypted(&path, &passphrase)
+            .map_err(|e| e.to_string())?;
     }
 
-    // Add proper SendOnchain transaction with Pending status
-    let pending_onchain_tx = ecash_core::types::Transaction {
-        id: tx_id.clone(),
-        tx_type: ecash_core::types::TransactionType::SendOnchain(ecash_core::types::SendOnchainTransactionData {
-            txid: None,
-            address: address.clone(),
-            amount: amount_sats,
-            ark_fee: swap_fee,
-            cashu_fee,
-            bridging_invoice: bridging_invoice.clone(),
-        }),
-        amount: amount_sats,
-        fee: swap_fee + cashu_fee,
-        status: ecash_core::types::TransactionStatus::Pending,
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-        mint_url: mint_url.clone(),
-    };
-    w_state.transactions.insert(0, pending_onchain_tx);
-    w_state.save_encrypted(&path, &passphrase).map_err(|e| e.to_string())?;
-
+    // Phase 2: Poll FixedFloat order status WITHOUT holding the wallet lock
     let mut final_txid = None;
 
-    if let (Some(id), Some(token), Some(ref key), Some(ref sec)) = (order_id.clone(), order_token.clone(), api_key, api_secret) {
+    if let (Some(id), Some(token), Some(ref key), Some(ref sec)) =
+        (order_id.clone(), order_token.clone(), api_key, api_secret)
+    {
         let poll_payload = serde_json::json!({ "id": id, "token": token });
 
         for _attempt in 1..=15 {
@@ -441,16 +468,27 @@ pub async fn fixedfloat_execute_onchain_send(
         }
     }
 
-    let returned_txid = final_txid.unwrap_or_else(|| order_id.unwrap_or_else(|| "pending".to_string()));
+    let returned_txid = final_txid
+        .clone()
+        .unwrap_or_else(|| order_id.unwrap_or_else(|| "pending".to_string()));
 
-    // Update history record
-    if let Some(t) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
-        t.status = ecash_core::types::TransactionStatus::Success;
-        if let ecash_core::types::TransactionType::SendOnchain(ref mut data) = t.tx_type {
-            data.txid = Some(returned_txid.clone());
+    // Phase 3: Re-acquire wallet lock to record txid and mark Success
+    {
+        let (mut wallet_guard, path, passphrase) = app_state
+            .lock_and_get_wallet()
+            .await
+            .map_err(|e| e.0)?;
+        let w_state = wallet_guard.as_mut().unwrap();
+        if let Some(t) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
+            t.status = ecash_core::types::TransactionStatus::Success;
+            if let ecash_core::types::TransactionType::SendOnchain(ref mut data) = t.tx_type {
+                data.txid = final_txid;
+            }
         }
+        w_state
+            .save_encrypted(&path, &passphrase)
+            .map_err(|e| e.to_string())?;
     }
-    w_state.save_encrypted(&path, &passphrase).map_err(|e| e.to_string())?;
 
     Ok(returned_txid)
 }
@@ -471,18 +509,12 @@ pub async fn fixedfloat_get_deposit_address(
         "FixedFloat API Secret not configured. Please set FIXEDFLOAT_API_SECRET in .env".to_string()
     })?;
 
-    let path = app_state.wallet_path.clone();
-    let passphrase = {
-        let pass_lock = app_state.passphrase.lock().unwrap();
-        pass_lock.clone().ok_or_else(|| "Wallet is locked".to_string())?
-    };
-
-    let mut w_state = WalletState::load_encrypted(&path, &passphrase)
-        .map_err(|e| format!("Failed to load wallet: {}", e))?;
+    // Fail fast if wallet is locked
+    let _ = app_state.get_passphrase().map_err(|e| e.0)?;
 
     let mint_url = ecash_wallet::state::normalize_mint_url(&mint_url);
 
-    // 1. Request Cashu mint quote
+    // 1. Request Cashu mint quote and keyset (lock-free network I/O)
     let client = ecash_wallet::client::MintClient::new(&mint_url);
     let (quote_id, invoice) = client
         .request_mint_quote(amount_sats)
@@ -493,39 +525,6 @@ pub async fn fixedfloat_get_deposit_address(
         .fetch_keyset()
         .await
         .map_err(|e| format!("Failed to fetch keyset: {}", e))?;
-
-    let desired_amounts = split_into_powers_of_2(amount_sats);
-
-    let max_proof_idx = w_state
-        .proofs
-        .values()
-        .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
-        .max()
-        .unwrap_or(0);
-    if max_proof_idx > 0 && w_state.derivation_index <= max_proof_idx {
-        w_state.derivation_index = max_proof_idx + 1;
-    }
-
-    let mut deriv = TokenDerivation::from_hex(&w_state.seed_hex)
-        .map_err(|e| format!("Derivation error: {}", e))?;
-    deriv.index = w_state.derivation_index;
-
-    let mut sessions = Vec::new();
-    let mut outputs = Vec::new();
-
-    for &amt in &desired_amounts {
-        let index = deriv.index;
-        let secret = deriv.next_secret();
-        let sess = BlindingSession::new(&secret);
-        outputs.push(serde_json::json!({
-            "amount": amt,
-            "id": keyset.id,
-            "B_": sess.b_prime_hex()
-        }));
-        sessions.push((amt, sess, index));
-    }
-
-    w_state.derivation_index = deriv.index;
 
     let amount_btc = amount_sats as f64 / 100_000_000.0;
 
@@ -548,40 +547,77 @@ pub async fn fixedfloat_get_deposit_address(
         .ok_or_else(|| "FixedFloat did not return a Bitcoin address in from.address".to_string())?
         .to_string();
 
-    let from_amount_btc = parse_json_f64(&data["from"]["amount"])
-        .unwrap_or(amount_btc);
+    let from_amount_btc = parse_json_f64(&data["from"]["amount"]).unwrap_or(amount_btc);
     let deposit_sats = (from_amount_btc * 100_000_000.0).round() as u64;
 
     let order_id = data["id"].as_str().unwrap_or("").to_string();
     let order_token = data["token"].as_str().unwrap_or("").to_string();
 
-    // 3. Persist Pending ReceiveOnchain transaction in wallet so it appears in History and auto-claims!
-    let pending_tx = Transaction {
-        id: quote_id.clone(),
-        tx_type: TransactionType::ReceiveOnchain(ReceiveOnchainTransactionData {
-            address: btc_deposit_address.clone(),
-            txid: None,
-            quote_id: Some(quote_id.clone()),
-            outputs,
-            blinding_sessions_hex: sessions
-                .iter()
-                .map(|(_, sess, _)| sess.secret.clone())
-                .collect(),
-        }),
-        amount: amount_sats,
-        fee: 0,
-        status: TransactionStatus::Pending,
-        timestamp: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-        mint_url: mint_url.clone(),
-    };
-
+    // 3. Acquire wallet lock, derive blinding sessions, and persist Pending ReceiveOnchain transaction
+    let desired_amounts = split_into_powers_of_2(amount_sats);
     {
-        let _lock = app_state.wallet_lock.lock().await;
+        let (mut wallet_guard, path, passphrase) = app_state
+            .lock_and_get_wallet()
+            .await
+            .map_err(|e| e.0)?;
+        let w_state = wallet_guard.as_mut().unwrap();
+
+        let max_proof_idx = w_state
+            .proofs
+            .values()
+            .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
+            .max()
+            .unwrap_or(0);
+        if max_proof_idx > 0 && w_state.derivation_index <= max_proof_idx {
+            w_state.derivation_index = max_proof_idx + 1;
+        }
+
+        let mut deriv = TokenDerivation::from_hex(&w_state.seed_hex)
+            .map_err(|e| format!("Derivation error: {}", e))?;
+        deriv.index = w_state.derivation_index;
+
+        let mut sessions = Vec::new();
+        let mut outputs = Vec::new();
+
+        for &amt in &desired_amounts {
+            let index = deriv.index;
+            let sess = deriv.next_session();
+            outputs.push(serde_json::json!({
+                "amount": amt,
+                "id": keyset.id,
+                "B_": sess.b_prime_hex()
+            }));
+            sessions.push((amt, sess, index));
+        }
+
+        w_state.derivation_index = deriv.index;
+
+        let pending_tx = Transaction {
+            id: quote_id.clone(),
+            tx_type: TransactionType::ReceiveOnchain(ReceiveOnchainTransactionData {
+                address: btc_deposit_address.clone(),
+                txid: None,
+                quote_id: Some(quote_id.clone()),
+                outputs,
+                blinding_sessions_hex: sessions
+                    .iter()
+                    .map(|(_, sess, _)| sess.to_session_hex())
+                    .collect(),
+            }),
+            amount: amount_sats,
+            fee: 0,
+            status: TransactionStatus::Pending,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            mint_url: mint_url.clone(),
+        };
+
         w_state.transactions.insert(0, pending_tx);
-        w_state.save_encrypted(&path, &passphrase).map_err(|e| e.to_string())?;
+        w_state
+            .save_encrypted(&path, &passphrase)
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(FixedFloatDepositResponse {

@@ -27,8 +27,11 @@ impl TokenDerivation {
     /// Parse a hex-encoded 32-byte seed (64 hex chars).
     pub fn from_hex(seed_hex: &str) -> std::result::Result<Self, hex::FromHexError> {
         let bytes = hex::decode(seed_hex)?;
+        if bytes.len() != 32 {
+            return Err(hex::FromHexError::InvalidStringLength);
+        }
         let mut seed = [0u8; 32];
-        seed.copy_from_slice(&bytes[..32]);
+        seed.copy_from_slice(&bytes);
         Ok(Self { seed, index: 0 })
     }
 
@@ -60,6 +63,41 @@ impl TokenDerivation {
         mac.update(b"physical-ecash-v1-");
         mac.update(&index.to_le_bytes());
         hex::encode(mac.finalize().into_bytes())
+    }
+
+    /// Derive a 32-byte blinding factor seed at a fixed index without changing state.
+    ///
+    /// `r_bytes = HMAC-SHA256(seed, "physical-ecash-r-v1-" || index_le64)`
+    /// This keeps the blinding factor `r` independent of `secret` so the mint
+    /// cannot recompute `r` or `B'` when `secret` is revealed upon spending.
+    pub fn blinding_factor_at(&self, index: u64) -> [u8; 32] {
+        let mut mac =
+            HmacSha256::new_from_slice(&self.seed).expect("HMAC accepts any key size");
+        mac.update(b"physical-ecash-r-v1-");
+        mac.update(&index.to_le_bytes());
+        mac.finalize().into_bytes().into()
+    }
+
+    /// Derive both secret and blinding factor at `self.index`, advance `self.index`,
+    /// and return a `BlindingSession`.
+    pub fn next_session(&mut self) -> crate::dhke::BlindingSession {
+        let idx = self.index;
+        self.index += 1;
+        self.session_at(idx)
+    }
+
+    /// Derive a `BlindingSession` at a fixed index using the seed-derived blinding factor.
+    pub fn session_at(&self, index: u64) -> crate::dhke::BlindingSession {
+        let secret = self.secret_at(index);
+        let r_bytes = self.blinding_factor_at(index);
+        crate::dhke::BlindingSession::with_blinding_factor(&secret, &r_bytes)
+    }
+
+    /// Legacy `BlindingSession` derivation where `r` was derived directly from `secret`.
+    /// Retained strictly as a fallback for recovering or verifying pre-v0.1.13 notes/proofs.
+    pub fn session_at_legacy(&self, index: u64) -> crate::dhke::BlindingSession {
+        let secret = self.secret_at(index);
+        crate::dhke::BlindingSession::new_legacy(&secret)
     }
 
 

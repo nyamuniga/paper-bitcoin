@@ -92,6 +92,11 @@ export const NWCSection: React.FC<NWCSectionProps> = ({
         toast.error(`Failed to enable NWC: ${error}`);
       }
     } else {
+      try {
+        await invoke('disable_nwc');
+      } catch (error: any) {
+        console.error("Failed to disable NWC in backend:", error);
+      }
       setIsEnabled(false);
       setNwcUri(null);
       localStorage.setItem('nwc_enabled', 'false');

@@ -3,7 +3,7 @@ use ecash_core::types::{
     split_into_powers_of_2, Proof, ReceiveEcashTransactionData, SendTransactionData, Transaction,
     TransactionStatus, TransactionType,
 };
-use ecash_wallet::{swap::swap_proofs, WalletState};
+use ecash_wallet::swap::swap_proofs;
 
 use crate::commands::auth::AppState;
 use tauri::State;
@@ -41,20 +41,10 @@ pub async fn send_ecash(
     pubkey: Option<String>,
     state: State<'_, AppState>,
 ) -> CommandResult<SendEcashResult> {
-    let path = state.wallet_path.clone();
+    let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
+    let w_state = wallet_guard.as_mut().unwrap();
 
-    let passphrase = {
-        let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock
-            .clone()
-            .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
-    };
-
-    let _lock = state.wallet_lock.lock().await;
-    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
-
-    // Get proofs for this mint
-    let proofs = w_state
+    let mut proofs = w_state
         .proofs
         .get(&mint_url)
         .ok_or_else(|| anyhow::anyhow!("No proofs found for mint {}", mint_url))?
@@ -66,12 +56,54 @@ pub async fn send_ecash(
         ));
     }
 
+    let client = ecash_wallet::client::MintClient::new(&mint_url);
+    let mut exact_match = if pubkey.is_none() {
+        select_exact_proofs(&proofs, amount)
+    } else {
+        None
+    };
+
+    // If we found an exact denomination match, verify with the mint that none of those proofs are already spent.
+    if let Some(ref candidate_proofs) = exact_match {
+        let ys: Vec<String> = candidate_proofs
+            .iter()
+            .map(|p| {
+                ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(
+                    p.secret.as_bytes(),
+                ))
+            })
+            .collect();
+        if let Ok(states) = client.check_state(&ys).await {
+            let spent_secrets: std::collections::HashSet<String> = candidate_proofs
+                .iter()
+                .filter_map(|p| {
+                    let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(
+                        p.secret.as_bytes(),
+                    ));
+                    match states.get(&y).map(|s| s.as_str()) {
+                        Some("SPENT") | Some("PENDING") => Some(p.secret.clone()),
+                        _ => None,
+                    }
+                })
+                .collect();
+
+            if !spent_secrets.is_empty() {
+                if let Some(mint_proofs) = w_state.proofs.get_mut(&mint_url) {
+                    mint_proofs.retain(|p| !spent_secrets.contains(&p.secret));
+                }
+                w_state.save_encrypted(&path, &passphrase)?;
+                proofs.retain(|p| !spent_secrets.contains(&p.secret));
+                exact_match = select_exact_proofs(&proofs, amount);
+            }
+        }
+    }
+
     let final_send_proofs;
+    let mut pending_tx_id: Option<String> = None;
 
     // 1. Try to find exact proofs (ONLY if we are not locking to a pubkey)
     // If a pubkey is provided, we must do a swap to generate new P2PK-locked proofs.
-    if pubkey.is_none() && select_exact_proofs(&proofs, amount).is_some() {
-        let exact_proofs = select_exact_proofs(&proofs, amount).unwrap();
+    if let Some(exact_proofs) = exact_match {
         final_send_proofs = exact_proofs;
 
         // Remove exactly these proofs from the wallet
@@ -84,7 +116,6 @@ pub async fn send_ecash(
         w_state.save_encrypted(&path, &passphrase)?;
     } else {
         // 2. We need to split proofs via swap
-        let client = ecash_wallet::client::MintClient::new(&mint_url);
         let all_keysets = client.fetch_keysets().await.unwrap_or_default();
 
         // Select proofs summing to >= amount + swap_fee (prefer smallest to clean up dust)
@@ -119,6 +150,7 @@ pub async fn send_ecash(
                 .unwrap_or_default()
                 .as_millis()
         );
+        pending_tx_id = Some(tx_id.clone());
 
         let pending_tx = Transaction {
             id: tx_id.clone(),
@@ -144,7 +176,7 @@ pub async fn send_ecash(
 
         // perform_swap handles updating the wallet state with the change
         let swap_result = swap_proofs(
-            &mut w_state,
+            w_state,
             &path,
             &passphrase,
             &mint_url,
@@ -184,9 +216,10 @@ pub async fn send_ecash(
     let encoded = token_v3.clone();
 
     // Update transaction to Success
-    let tx_id_for_success = if let Some(tx) = w_state.transactions.iter_mut().find(|t| {
-        matches!(&t.tx_type, TransactionType::Send(_)) && t.status == TransactionStatus::Pending
-    }) {
+    let tx_id_for_success = if let Some(tx) = pending_tx_id
+        .as_ref()
+        .and_then(|id| w_state.transactions.iter_mut().find(|t| &t.id == id))
+    {
         if let TransactionType::Send(data) = &mut tx.tx_type {
             data.token_string = encoded.clone();
             data.proofs = final_send_proofs.clone();
@@ -237,17 +270,8 @@ pub async fn receive_ecash(
     nostr_key: Option<String>,
     state: State<'_, AppState>,
 ) -> CommandResult<u64> {
-    let path = state.wallet_path.clone();
-
-    let passphrase = {
-        let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock
-            .clone()
-            .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
-    };
-
-    let _lock = state.wallet_lock.lock().await;
-    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
+    let w_state = wallet_guard.as_mut().unwrap();
 
     if let Some(ref key) = nostr_key {
         if w_state.default_nostr_key.as_ref() != Some(key) {
@@ -340,7 +364,7 @@ pub async fn receive_ecash(
     // Swap proofs with the mint to re-blind them (prevents sender tracking)
     let desired_amounts = split_into_powers_of_2(net_amount);
     let swap_result = swap_proofs(
-        &mut w_state,
+        w_state,
         &path,
         &passphrase,
         &mint_url,
@@ -367,7 +391,7 @@ pub async fn receive_ecash(
                 let start_idx = w_state.derivation_index.saturating_sub(30);
                 let end_idx = w_state.derivation_index + 10;
                 let restore_result = ecash_wallet::restore::restore_from_mints_range(
-                    &mut w_state, &path, &passphrase, vec![mint_url.clone()], start_idx, end_idx, None
+                    w_state, &path, &passphrase, vec![mint_url.clone()], start_idx, end_idx, None
                 ).await;
 
                 let total_restored = restore_result.unwrap_or(0);

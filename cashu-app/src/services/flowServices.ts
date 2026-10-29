@@ -29,6 +29,7 @@ import {
 } from "../constants.local";
 import { useTransactionStore } from "../store/transactionStore";
 import { useWalletStore } from "../store/wallet";
+import { useAddressBookStore } from "../store/addressBookStore";
 
 export const fetchCurrentRate = async (): Promise<number> => {
   const response = await fetch(EXCHANGE_RATE_API_URL);
@@ -121,6 +122,18 @@ export const calculateQuote = async (
       throw new Error(`Failed to create lightning invoice: ${e}`);
     }
 
+    store.updateTransaction({
+      rwfAmount: totalRwfToPay,
+      satsAmount: netSats,
+      fee: feeRwf,
+      rate: rwfToSatsRate * (1 - SPREAD),
+      invoice: invoice,
+      mintQuoteId: quoteId,
+    });
+    if (useTransactionStore.getState().activeTransaction) {
+      store.moveToHistory(useTransactionStore.getState().activeTransaction!);
+    }
+
     const momoResponse = await initiateMomoPaymentRequest(
       txId,
       netSats,
@@ -142,10 +155,17 @@ export const calculateQuote = async (
       mintQuoteId: quoteId,
       currentPhase: AppPhase.PENDING_PAYMENT,
     });
+    if (useTransactionStore.getState().activeTransaction) {
+      store.moveToHistory(useTransactionStore.getState().activeTransaction!);
+    }
   } catch (err: any) {
     console.error("Quote error:", err);
     const errorMessage = typeof err === 'string' ? err : (err?.message || "Failed to fetch quote. Please try again.");
     store.setError(errorMessage);
+    if (useTransactionStore.getState().activeTransaction?.mintQuoteId) {
+      store.updateTransaction({ status: "FAILED", currentPhase: AppPhase.PAYMENT_FAILED });
+      store.moveToHistory(useTransactionStore.getState().activeTransaction!);
+    }
     store.updateTransactionPhase(AppPhase.IDLE);
   }
 };
@@ -196,6 +216,17 @@ export const handleFulfillOrder = async () => {
     currentTx = useTransactionStore.getState().activeTransaction!;
     store.moveToHistory(currentTx);
     useWalletStore.getState().refreshWallet();
+
+    if (currentTx.momoPhoneNumber) {
+      try {
+        useAddressBookStore.getState().recordSuccessfulUse('momo', currentTx.momoPhoneNumber, {
+          network: currentTx.momoPhoneNumber.startsWith('078') || currentTx.momoPhoneNumber.startsWith('079') ? 'mtn' : undefined,
+          currency: 'RWF',
+        });
+      } catch (e) {
+        console.warn('Failed to record address book contact:', e);
+      }
+    }
   } catch (err: any) {
     console.error("Fulfillment error:", err);
     store.setError(err.message || "Failed to fulfill order. Please try again.");
@@ -267,7 +298,10 @@ export const startPaymentVerification = async (
     stopPolling();
     if (useTransactionStore.getState().activeTransaction?.currentPhase === AppPhase.VERIFYING_PAYMENT) {
       store.setError("Payment verification timed out. Please try again.");
-      store.updateTransactionPhase(AppPhase.PAYMENT_FAILED);
+      store.updateTransaction({ status: "FAILED", currentPhase: AppPhase.PAYMENT_FAILED });
+      if (useTransactionStore.getState().activeTransaction) {
+        store.moveToHistory(useTransactionStore.getState().activeTransaction!);
+      }
     }
   }, POLLING_TIMEOUT_MS);
 };
@@ -350,17 +384,20 @@ export const executeSendPayment = async () => {
   try {
     store.updateTransactionPhase(AppPhase.PAYING_INVOICE);
 
-    try {
-      if (currentTx.mintUrl) {
-        await invoke('pay_invoice', { invoice: currentTx.invoice!, mintUrl: currentTx.mintUrl });
-      } else {
-        await invoke('pay_invoice', { invoice: currentTx.invoice! });
+    if (!currentTx.invoicePaid) {
+      try {
+        if (currentTx.mintUrl) {
+          await invoke('pay_invoice', { invoice: currentTx.invoice!, mintUrl: currentTx.mintUrl });
+        } else {
+          await invoke('pay_invoice', { invoice: currentTx.invoice! });
+        }
+        store.updateTransaction({ invoicePaid: true });
+      } catch (e: any) {
+        throw new Error(`Failed to pay invoice from wallet: ${e}`);
       }
-    } catch (e: any) {
-      throw new Error(`Failed to pay invoice from wallet: ${e}`);
-    }
 
-    await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
 
     store.updateTransaction({
       currentPhase: AppPhase.INITIATING_PAYOUT
@@ -424,6 +461,17 @@ export const initiateAndVerifyPayout = async (
         });
         store.moveToHistory(useTransactionStore.getState().activeTransaction!);
         useWalletStore.getState().refreshWallet();
+
+        if (currentTx.momoPhoneNumber) {
+          try {
+            useAddressBookStore.getState().recordSuccessfulUse('momo', currentTx.momoPhoneNumber, {
+              network: currentTx.momoPhoneNumber.startsWith('078') || currentTx.momoPhoneNumber.startsWith('079') ? 'mtn' : undefined,
+              currency: 'RWF',
+            });
+          } catch (e) {
+            console.warn('Failed to record address book contact:', e);
+          }
+        }
       } else if (status === "FAILED") {
         store.setError(message || "MoMo payout failed or was rejected.");
         store.updateTransaction({

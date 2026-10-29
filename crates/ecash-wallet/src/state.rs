@@ -40,13 +40,57 @@ impl WalletState {
         dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")).join(".ecash").join("wallet.json")
     }
 
+    /// Overwrite sensitive secret strings in memory before dropping the in-memory wallet state.
+    pub fn zeroize_secrets(&mut self) {
+        unsafe {
+            self.seed_hex.as_bytes_mut().fill(0);
+        }
+        self.seed_hex.clear();
+        if let Some(ref mut m) = self.mnemonic {
+            unsafe {
+                m.as_bytes_mut().fill(0);
+            }
+            m.clear();
+        }
+        self.mnemonic = None;
+        if let Some(ref mut k) = self.custom_nostr_key {
+            unsafe {
+                k.as_bytes_mut().fill(0);
+            }
+            k.clear();
+        }
+        self.custom_nostr_key = None;
+        if let Some(ref mut k) = self.default_nostr_key {
+            unsafe {
+                k.as_bytes_mut().fill(0);
+            }
+            k.clear();
+        }
+        self.default_nostr_key = None;
+        for proofs in self.proofs.values_mut() {
+            for p in proofs.iter_mut() {
+                unsafe {
+                    p.secret.as_bytes_mut().fill(0);
+                }
+                p.secret.clear();
+            }
+        }
+        self.proofs.clear();
+    }
+
     /// Save wallet state as AES-256-GCM encrypted JSON (Argon2id key derivation).
+    /// Uses an atomic write-to-temp-and-rename so crashes mid-write never corrupt the wallet file.
     pub fn save_encrypted(&mut self, path: &PathBuf, passphrase: &str) -> Result<()> {
         self.dedup_proofs();
-        let plaintext = serde_json::to_vec(self)?;
-        let encrypted = encrypt_wallet(&plaintext, passphrase)?;
+        let mut plaintext = serde_json::to_vec(self)?;
+        let encrypted = encrypt_wallet(&plaintext, passphrase);
+        plaintext.fill(0);
+        let encrypted = encrypted?;
         if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
-        std::fs::write(path, serde_json::to_string_pretty(&encrypted)?)?;
+        let serialized = serde_json::to_string_pretty(&encrypted)?;
+        let tmp_path = path.with_extension("json.tmp");
+        std::fs::write(&tmp_path, &serialized)?;
+        std::fs::rename(&tmp_path, path)?;
         Ok(())
     }
 
@@ -109,7 +153,7 @@ impl WalletState {
         use ecash_core::dhke::{point_from_hex, verify_dleq, BlindingSession};
         use ecash_core::derivation::TokenDerivation;
 
-        let mut deriv = match TokenDerivation::from_hex(&self.seed_hex) {
+        let deriv = match TokenDerivation::from_hex(&self.seed_hex) {
             Ok(d) => d,
             Err(_) => return 0,
         };
@@ -126,13 +170,8 @@ impl WalletState {
             300,
         );
 
-        // Pre-compute all sessions up to max_index
-        let mut all_sessions = Vec::with_capacity(max_index as usize);
-        for _ in 0..max_index {
-            let idx = deriv.index;
-            let secret = deriv.next_secret();
-            all_sessions.push((idx, BlindingSession::new(&secret)));
-        }
+        // Lazily pre-compute candidate sessions only if a corrupt proof is actually encountered
+        let mut all_sessions: Option<Vec<(u64, BlindingSession)>> = None;
 
         let mut healed_count = 0;
 
@@ -155,13 +194,24 @@ impl WalletState {
                 let mut needs_healing = false;
                 if let (Some(c_p_str), Some(dleq)) = (&p.c_prime, &p.dleq) {
                     if let Ok(c_p) = point_from_hex(c_p_str) {
-                        let sess = BlindingSession::new(&p.secret);
-                        let b_prime_valid = p.b_prime.as_ref() == Some(&sess.b_prime_hex());
-                        let dleq_valid = verify_dleq(&mint_pk, &c_p, &sess.b_prime, dleq);
-                        let unblinded = sess.unblind(&c_p, &mint_pk, p.amount, &p.id, Some(dleq.clone()));
-                        let c_valid = unblinded.c == p.c;
+                        let check_sess = |sess: &BlindingSession| -> bool {
+                            p.b_prime.as_ref() == Some(&sess.b_prime_hex())
+                                && verify_dleq(&mint_pk, &c_p, &sess.b_prime, dleq)
+                                && sess.unblind(&c_p, &mint_pk, p.amount, &p.id, Some(dleq.clone())).c == p.c
+                        };
 
-                        if !b_prime_valid || !dleq_valid || !c_valid {
+                        let seeded_sess = BlindingSession::with_blinding_factor(
+                            &p.secret,
+                            &deriv.blinding_factor_at(p.derivation_index),
+                        );
+                        let is_valid = if check_sess(&seeded_sess) {
+                            true
+                        } else {
+                            let legacy_sess = BlindingSession::new_legacy(&p.secret);
+                            check_sess(&legacy_sess)
+                        };
+
+                        if !is_valid {
                             needs_healing = true;
                         }
                     } else {
@@ -172,7 +222,15 @@ impl WalletState {
                 if needs_healing {
                     if let (Some(c_p_str), Some(dleq)) = (&p.c_prime, &p.dleq) {
                         if let Ok(c_p) = point_from_hex(c_p_str) {
-                            for (idx, sess) in &all_sessions {
+                            let sessions = all_sessions.get_or_insert_with(|| {
+                                let mut list = Vec::with_capacity((max_index as usize) * 2);
+                                for idx in 0..max_index {
+                                    list.push((idx, deriv.session_at(idx)));
+                                    list.push((idx, deriv.session_at_legacy(idx)));
+                                }
+                                list
+                            });
+                            for (idx, sess) in sessions.iter() {
                                 if verify_dleq(&mint_pk, &c_p, &sess.b_prime, dleq) {
                                     tracing::info!(
                                         "Auto-healed proof for amount {}! Restored from secret idx {}",
@@ -382,4 +440,50 @@ pub fn decrypt_wallet(enc: &EncryptedWallet, passphrase: &str) -> Result<Vec<u8>
     cipher.decrypt(&nonce, ciphertext.as_ref())
         .map_err(|_| anyhow!("Decryption failed — wrong passphrase?"))
 }
+
+pub fn encrypt_local_secret(secret: &str, context_key: &str) -> Result<(String, String)> {
+    use aes_gcm::{Aes256Gcm, KeyInit};
+    use aes_gcm::aead::Aead;
+    use k256::sha2::{Sha256, Digest};
+    use rand::RngCore;
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"physical-ecash-local-auth-v1:");
+    hasher.update(context_key.as_bytes());
+    let key_bytes: [u8; 32] = hasher.finalize().into();
+
+    let mut nonce_bytes = [0u8; 12];
+    rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
+
+    let cipher = Aes256Gcm::new_from_slice(&key_bytes)
+        .map_err(|e| anyhow!("Key init failed: {}", e))?;
+    let nonce = aes_gcm::Nonce::from(nonce_bytes);
+    let ciphertext = cipher.encrypt(&nonce, secret.as_bytes())
+        .map_err(|e| anyhow!("Encryption failed: {}", e))?;
+
+    Ok((hex::encode(nonce_bytes), hex::encode(ciphertext)))
+}
+
+pub fn decrypt_local_secret(nonce_hex: &str, ciphertext_hex: &str, context_key: &str) -> Result<String> {
+    use aes_gcm::{Aes256Gcm, KeyInit};
+    use aes_gcm::aead::Aead;
+    use k256::sha2::{Sha256, Digest};
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"physical-ecash-local-auth-v1:");
+    hasher.update(context_key.as_bytes());
+    let key_bytes: [u8; 32] = hasher.finalize().into();
+
+    let nonce_bytes = hex::decode(nonce_hex).context("Invalid nonce")?;
+    let ciphertext = hex::decode(ciphertext_hex).context("Invalid ciphertext")?;
+    let nonce_arr: [u8; 12] = nonce_bytes.try_into().map_err(|_| anyhow!("Nonce must be 12 bytes"))?;
+    let nonce = aes_gcm::Nonce::from(nonce_arr);
+    let cipher = Aes256Gcm::new_from_slice(&key_bytes)
+        .map_err(|e| anyhow!("Key init failed: {}", e))?;
+
+    let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref())
+        .map_err(|_| anyhow!("Decryption failed"))?;
+    String::from_utf8(plaintext).context("Invalid UTF-8 in secret")
+}
+
 
