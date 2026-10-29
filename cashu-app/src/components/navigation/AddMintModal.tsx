@@ -95,7 +95,7 @@ export const AddMintModal: React.FC<AddMintModalProps> = ({ onClose }) => {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
-              className="w-full bg-surface-container text-on-surface px-4 py-3 rounded-xl border border-outline-variant/50 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none transition-all font-body-md"
+              className="w-full bg-[#0c1b14] text-on-surface px-4 py-3 rounded-xl border border-[#142d20] focus:border-primary/50 focus:ring-1 focus:ring-primary outline-none transition-all font-body-md"
             />
             <p className="text-body-sm font-body-sm text-on-surface-variant mt-1">
               Enter the full URL of the mint you want to add.
@@ -107,14 +107,14 @@ export const AddMintModal: React.FC<AddMintModalProps> = ({ onClose }) => {
         <div className="p-4 sm:p-6 border-t border-outline-variant/10 bg-surface-container-high/60 relative z-10 flex justify-end gap-3">
           <button
             onClick={closeWithAnimation}
-            className="px-6 py-2.5 rounded-full text-body-md font-bold text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
+            className="px-6 py-2.5 rounded-xl text-body-md font-bold text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={handleAddMint}
             disabled={adding || !mintUrl.trim()}
-            className="bg-primary hover:bg-primary/90 text-on-primary px-6 py-2.5 rounded-full text-body-md font-bold transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer shadow-md"
+            className="bg-primary hover:bg-primary/90 text-on-primary px-6 py-2.5 rounded-xl text-body-md font-bold transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer shadow-md"
           >
             {adding ? (
               <Loader2 className="w-5 h-5 animate-spin" />

@@ -18,11 +18,11 @@ export const PayInvoiceCard: React.FC<PayInvoiceCardProps> = ({
         <div className="absolute inset-0 texture-overlay opacity-30"></div>
         <p className="text-body-md font-body-md text-on-surface-variant relative z-10">Pay any lightning invoice directly from your E-Cash balance.</p>
         <div className="relative z-10 flex flex-col gap-4">
-          <div className="relative glow-effect transition-shadow duration-300 rounded-lg">
+          <div className="relative glow-effect transition-all duration-300 rounded-xl">
             <textarea 
               value={invoice}
               onChange={(e) => setInvoice(e.target.value)}
-              className="w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:ring-primary focus:outline-none resize-none placeholder:text-on-surface-variant/50" 
+              className="w-full bg-[#0c1b14] text-on-surface font-label-caps text-label-caps p-4 rounded-xl border border-[#142d20] focus:ring-1 focus:ring-primary focus:outline-none resize-none placeholder:text-on-surface-variant/50 transition-colors" 
               placeholder="lnbc..." 
               rows={2}
             />

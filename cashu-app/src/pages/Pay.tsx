@@ -245,23 +245,61 @@ export const Pay = () => {
 
             <div className="relative flex flex-col gap-2">
               {!lnurlParams ? (
-                <div className={`relative glow-effect transition-shadow duration-300 rounded-lg ${isInvalidAmount && invoice ? 'shadow-[0_0_15px_rgba(239,68,68,0.3)]' : ''}`}>
+                <div className={`relative glow-effect transition-all duration-300 rounded-xl bg-[#0c1b14] border overflow-hidden flex flex-col ${
+                  isInvalidAmount && invoice
+                    ? 'border-error/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                    : 'border-[#142d20] focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/40'
+                }`}>
                   <textarea 
                     value={invoice}
                     onChange={(e) => setInvoice(e.target.value)}
-                    className={`w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:outline-none resize-none placeholder:text-on-surface-variant/50 ${isInvalidAmount && invoice ? 'focus:ring-error ring-1 ring-error/50' : 'focus:ring-primary'}`} 
+                    className="w-full bg-transparent text-on-surface font-label-caps text-label-caps p-3.5 pb-2 border-none focus:outline-none resize-none placeholder:text-on-surface-variant/50 min-h-[76px]"
                     placeholder="lnbc... or user@domain.com" 
-                    rows={4}
+                    rows={3}
                     spellCheck="false"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowAddressBook(true)}
-                    className="absolute right-3 top-3 p-2 bg-surface-container-highest rounded-lg text-primary hover:bg-surface-bright transition-colors cursor-pointer"
-                    title="Open Address Book"
-                  >
-                    <BookUser size={18} />
-                  </button>
+
+                  {/* Action Toolbar */}
+                  <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-[#142d20]">
+                    <div>
+                      {invoice ? (
+                        <button
+                          type="button"
+                          onClick={() => setInvoice('')}
+                          className="text-[12px] font-bold text-on-surface-variant hover:text-error transition-colors cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const text = await navigator.clipboard.readText();
+                              if (text) setInvoice(text.trim());
+                            } catch (e) {
+                              console.warn('Clipboard read failed', e);
+                            }
+                          }}
+                          className="text-[12px] font-bold text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+                        >
+                          Paste
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddressBook(true)}
+                        className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
+                        title="Open Address Book"
+                      >
+                        <BookUser size={15} />
+                      </button>
+                    </div>
+                  </div>
+
                   <AddressBookAutocomplete
                     type="lightning"
                     query={invoice}
@@ -271,7 +309,7 @@ export const Pay = () => {
                   />
                 </div>
               ) : (
-                <div className="flex flex-col gap-4 bg-surface-container-lowest p-4 rounded-lg shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]">
+                <div className="flex flex-col gap-4 bg-[#0c1b14] border border-[#142d20] p-4 rounded-xl">
                   <div className="flex justify-between items-center">
                     <span className="text-on-surface-variant font-label-caps text-xs">Paying</span>
                     <span className="text-primary font-bold truncate">{lnurlParams.domain || 'LNURL'}</span>
@@ -283,7 +321,7 @@ export const Pay = () => {
                         type="number"
                         value={lnurlAmount}
                         onChange={(e) => setLnurlAmount(e.target.value)}
-                        className="flex-1 bg-surface-container text-on-surface font-bold text-xl p-3 rounded-lg border-none focus:ring-1 focus:ring-primary outline-none"
+                        className="flex-1 bg-[#12261d] text-on-surface font-bold text-xl p-3 rounded-xl border border-[#1e3c2e] focus:border-primary/50 focus:ring-1 focus:ring-primary outline-none transition-colors"
                         placeholder="0"
                       />
                       <span className="text-primary font-bold">sats</span>

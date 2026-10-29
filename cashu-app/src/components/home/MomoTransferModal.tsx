@@ -233,14 +233,16 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isProcessPhase]);
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
-      style={backdropStyle}
-      onClick={() => {
-        if (!isProcessPhase) handleClose();
-      }}
-    >
+  return (
+    <>
+      {createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
+          style={backdropStyle}
+          onClick={() => {
+            if (!isProcessPhase) handleClose();
+          }}
+        >
       <div
         onClick={e => e.stopPropagation()}
         style={sheetStyle}
@@ -268,7 +270,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                 <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
                   <Phone className=" text-primary" size={20} />
                 </div>
-                <h2 className="text-headline-sm font-headline-sm text-on-surface">Mobile Money (MoMo)</h2>
+                <h2 className="text-headline-sm font-headline-sm text-on-surface">Mobile Money</h2>
               </div>
               <button
                 onClick={handleClose}
@@ -486,23 +488,13 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                 ) : (
                   <>
                     <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-label-md text-on-surface-variant block">Phone Number</label>
-                        <button
-                          type="button"
-                          onClick={() => setShowAddressBook(true)}
-                          className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-                        >
-                          <BookUser size={13} />
-                          <span>Address Book</span>
-                        </button>
-                      </div>
+                      <label className="text-label-md text-on-surface-variant block mb-2">Phone Number</label>
                       <div className="relative">
                         <input
                           type="text"
                           spellCheck={false}
                           placeholder="078..."
-                          className={`w-full bg-surface-container-highest rounded-2xl p-4 pr-12 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${phoneError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
+                          className={`w-full bg-[#0c1b14] rounded-xl p-4 pr-12 text-body-lg text-on-surface border focus:outline-none focus:ring-1 ${phoneError ? 'border-error focus:ring-error' : 'border-[#142d20] focus:border-primary/50 focus:ring-primary'}`}
                           value={phoneNumber}
                           onChange={e => setPhoneNumber(e.target.value)}
                         />
@@ -533,7 +525,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                         type="number"
                         spellCheck={false}
                         placeholder="Amount in RWF"
-                        className={`w-full bg-surface-container-highest rounded-2xl p-4 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${amountError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
+                        className={`w-full bg-[#0c1b14] rounded-xl p-4 text-body-lg text-on-surface border focus:outline-none focus:ring-1 ${amountError ? 'border-error focus:ring-error' : 'border-[#142d20] focus:border-primary/50 focus:ring-primary'}`}
                         value={amount}
                         onChange={e => setAmount(e.target.value)}
                       />
@@ -672,23 +664,13 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                 ) : (
                   <>
                     <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-label-md text-on-surface-variant block">Recipient Phone Number</label>
-                        <button
-                          type="button"
-                          onClick={() => setShowAddressBook(true)}
-                          className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-                        >
-                          <BookUser size={13} />
-                          <span>Address Book</span>
-                        </button>
-                      </div>
+                      <label className="text-label-md text-on-surface-variant block mb-2">Recipient Phone Number</label>
                       <div className="relative">
                         <input
                           type="text"
                           spellCheck={false}
                           placeholder="078..."
-                          className={`w-full bg-surface-container-highest rounded-2xl p-4 pr-12 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${phoneError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
+                          className={`w-full bg-[#0c1b14] rounded-xl p-4 pr-12 text-body-lg text-on-surface border focus:outline-none focus:ring-1 ${phoneError ? 'border-error focus:ring-error' : 'border-[#142d20] focus:border-primary/50 focus:ring-primary'}`}
                           value={phoneNumber}
                           onChange={e => setPhoneNumber(e.target.value)}
                         />
@@ -730,7 +712,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
                         type="number"
                         spellCheck={false}
                         placeholder="Amount in RWF"
-                        className={`w-full bg-surface-container-highest rounded-2xl p-4 text-body-lg text-on-surface focus:outline-none focus:ring-2 ${amountError ? 'border border-error focus:ring-error/50' : 'focus:ring-primary/50'}`}
+                        className={`w-full bg-[#0c1b14] rounded-xl p-4 text-body-lg text-on-surface border focus:outline-none focus:ring-1 ${amountError ? 'border-error focus:ring-error' : 'border-[#142d20] focus:border-primary/50 focus:ring-primary'}`}
                         value={amount}
                         onChange={e => setAmount(e.target.value)}
                       />
@@ -820,15 +802,18 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           updateTransactionPhase(activeTab === 'receive' ? AppPhase.VERIFYING_PAYMENT : (activeTransaction?.invoicePaid ? AppPhase.INITIATING_PAYOUT : AppPhase.AWAITING_INVOICE_PAYMENT));
         } : undefined}
       />
-      <AddressBookPickerModal
-        isOpen={showAddressBook}
-        onClose={() => setShowAddressBook(false)}
-        type="momo"
-        onSelect={(contact) => {
-          setPhoneNumber(contact.value);
-        }}
-      />
-    </div>,
-    document.body
-  );
-};
+          </div>,
+          document.body
+        )}
+
+        <AddressBookPickerModal
+          isOpen={showAddressBook}
+          onClose={() => setShowAddressBook(false)}
+          type="momo"
+          onSelect={(contact) => {
+            setPhoneNumber(contact.value);
+          }}
+        />
+      </>
+    );
+  };

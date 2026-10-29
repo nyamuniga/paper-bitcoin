@@ -53,12 +53,12 @@ export const IssueNoteForm: React.FC<IssueNoteFormProps> = ({
 
           <div>
             <label className="block text-on-surface-variant text-label-caps font-label-caps mb-2">AMOUNT (SATS)</label>
-            <div className="relative glow-effect rounded-lg">
+            <div className="relative glow-effect rounded-xl">
               <input
                 type="number"
                 value={sats}
                 onChange={(e) => setSats(e.target.value)}
-                className="w-full bg-surface-container-lowest text-on-surface text-center font-headline-lg-mobile text-[32px] p-6 rounded-lg border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-on-surface-variant/50 transition-all"
+                className="w-full bg-[#0c1b14] text-on-surface text-center font-headline-lg-mobile text-[32px] p-6 rounded-xl border border-[#142d20] focus:ring-1 focus:ring-primary focus:border-primary/50 focus:outline-none placeholder:text-on-surface-variant/50 transition-all"
                 placeholder="0"
               />
             </div>
@@ -69,8 +69,8 @@ export const IssueNoteForm: React.FC<IssueNoteFormProps> = ({
             <div className="space-y-2">
               {mintUrls.map((url, i) => (
                 <div key={i} className="flex gap-2">
-                  <div className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg p-4 text-on-surface text-sm overflow-x-hidden truncate shadow-inner">{url}</div>
-                  <button onClick={() => setMintUrls(mintUrls.filter((_, idx) => idx !== i))} className="bg-error/10 hover:bg-error/20 text-error px-4 rounded-lg transition-colors flex items-center justify-center">
+                  <div className="w-full bg-[#0c1b14] border border-[#142d20] rounded-xl p-4 text-on-surface text-sm overflow-x-hidden truncate">{url}</div>
+                  <button onClick={() => setMintUrls(mintUrls.filter((_, idx) => idx !== i))} className="bg-error/10 hover:bg-error/20 text-error px-4 rounded-xl transition-colors flex items-center justify-center">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
@@ -83,12 +83,12 @@ export const IssueNoteForm: React.FC<IssueNoteFormProps> = ({
                   type="text"
                   value={newMint}
                   onChange={(e) => setNewMint(e.target.value)}
-                  className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg p-4 text-on-surface text-sm shadow-inner focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-on-surface-variant/50"
+                  className="w-full bg-[#0c1b14] border border-[#142d20] rounded-xl p-4 text-on-surface text-sm focus:ring-1 focus:ring-primary focus:border-primary/50 focus:outline-none placeholder:text-on-surface-variant/50 transition-colors"
                   placeholder="Add another mint URL..."
                 />
                 <button
                   onClick={handleAddMint}
-                  className="bg-surface-container-highest hover:bg-surface-bright border border-outline-variant/30 text-on-surface px-6 rounded-lg font-bold transition-colors text-sm"
+                  className="bg-surface-container-highest hover:bg-surface-bright border border-outline-variant/30 text-on-surface px-6 rounded-xl font-bold transition-colors text-sm"
                 >
                   Add
                 </button>

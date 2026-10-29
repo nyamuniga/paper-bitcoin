@@ -105,7 +105,7 @@ export const IssueMintsStep: React.FC<IssueMintsStepProps> = ({ mintUrls, setMin
                 value={newMint}
                 onChange={(e) => setNewMint(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-4 text-on-surface text-[14px] shadow-inner focus:ring-1 focus:ring-primary focus:outline-none placeholder:text-on-surface-variant/50"
+                className="w-full bg-[#0c1b14] border border-[#142d20] rounded-xl p-4 text-on-surface text-[14px] focus:ring-1 focus:ring-primary focus:border-primary/50 focus:outline-none placeholder:text-on-surface-variant/50 transition-colors"
                 placeholder="https://mint.example.com"
                 autoCapitalize="none"
                 autoCorrect="off"
