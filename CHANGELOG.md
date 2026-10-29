@@ -4,6 +4,31 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 
 ---
 
+## [0.1.13] - 2026-10-29
+
+### 📇 Integrated Address Book & Contact Management
+- **Full Contact Management**: Dedicated Address Book route (`/address-book`) supporting full CRUD operations for frequent Mobile Money (MoMo) phone numbers and Lightning addresses (LNURL / Lightning addresses).
+- **Automated Contact Capture**: Successfully completing a MoMo Cash Out, MoMo Top-Up, or Lightning payment prompts an automatic contact-saving workflow or auto-updates last-used timestamps.
+- **Smart Auto-Complete & Inline Picker**: Instant contact suggestion overlay in Bitcoin Send and MoMo modals with one-tap destination autofill.
+- **Unified Settings Card**: Added an Address Book accordion in Settings featuring quick-action buttons, recently used contacts, and instant management navigation.
+
+### 🎛️ Unified Sliding Segmented Controls
+- **Smooth Animated Pill Tabs**: Reusable `SlidingSegmentedControl` component featuring cubic-bezier spring easing, amber active highlights, and tactile interaction.
+- **Multi-Step Adoption**:
+  - **Top Navigation**: Replaced static buttons with the smooth sliding pill indicator.
+  - **Address Book**: Seamless toggle between All, MoMo, and Lightning contacts.
+  - **Note Issuance (`IssueSummaryStep`)**: Unified sliding selectors for Funding Method (Wallet Balance vs. Direct Lightning) and Denomination Strategy (Optimal Denominations vs. Uniform Notes).
+  - **Bitcoin Receive Modal**: Unified sliding toggle between Lightning and On-Chain deposit modes.
+
+### ⚡ Bitcoin Modal & Destination Input Refinements
+- **Redesigned Destination Card**: Redesigned the Bitcoin send destination textarea into a structured card with an unbroken placeholder and a dedicated bottom action bar.
+- **Quick Action Bar**: One-tap `Paste`/`Clear` on the left and dedicated `[ 📖 Contacts ]` and `[ 📷 Scan ]` pill buttons on the right.
+- **Balanced Spacing & Validations**: Equalized vertical rhythm between amount display and number pad in the Bitcoin Receive modal; added disabled state guards to prevent requesting on-chain addresses when deposit bounds are not satisfied (`12,500` to `18,000,000` sats).
+
+### ⚙️ UI Polish & Cleanups
+- **Settings Card Alignment**: Standardized Address Book card styling to match all other settings cards with obsidian glass containers, ambient glow, and circular badge icons.
+- **Clean Badges & Labels**: Removed redundant network badges ("MTN") and eliminated duplicate label text when contact names match their destination address.
+
 ## [0.1.12] - 2026-10-27
 
 ### 🛡️ Automatic Proof Self-Healing & Keyset Resolution

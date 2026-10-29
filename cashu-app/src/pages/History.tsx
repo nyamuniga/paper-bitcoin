@@ -5,9 +5,7 @@ import { TransactionCardSkeleton } from '../components/shared/Skeleton';
 import { PageHeader } from '../components/shared/PageHeader';
 import { useHistory } from '../hooks/useHistory';
 import { TransactionDetailsModal } from '../components/history/TransactionDetailsModal';
-import { useTransactionStore } from '../store/transactionStore';
 import { useWalletStore } from '../store/wallet';
-import { AppPhase } from '../types/momo';
 
 
 import { useNavigate } from 'react-router-dom';
@@ -32,42 +30,6 @@ export default function History() {
     handleCheckTokenSpendStatus,
     handleRetryReceiveEcash
   } = useHistory();
-  
-
-  const momoHistory = useTransactionStore((state) => state.history);
-
-  const mergedTransactions = transactions.map(tx => {
-    let status = tx.status;
-    let momo_direction: string | undefined = undefined;
-
-    const isMint = 'Mint' in tx.tx_type;
-    const isMelt = 'Melt' in tx.tx_type;
-    const quoteId = isMint ? tx.tx_type.Mint.quote_id : (isMelt ? tx.tx_type.Melt.quote_id : undefined);
-
-    if (tx.status === 'Pending' || quoteId || isMelt) {
-      const momoTx = momoHistory.find(t => {
-        if (t.id === tx.id) return true;
-        if (quoteId && t.mintQuoteId === quoteId) return true;
-        
-        // Strict timestamp window (2 minutes) to prevent false matches with normal lightning payments
-        if (isMelt && t.direction === 'SATS_TO_RWF') {
-          const timeDiff = Math.abs((t.timestamp || Date.now()) - tx.timestamp * 1000);
-          if (timeDiff < 120000 && Math.abs(t.satsAmount - tx.amount) <= (tx.amount * 0.05 + 100)) {
-            return true;
-          }
-        }
-        return false;
-      });
-      
-      if (momoTx) {
-        momo_direction = momoTx.direction;
-        if (tx.status === 'Pending' && (momoTx.currentPhase === AppPhase.PAYMENT_FAILED || momoTx.currentPhase === AppPhase.PAYOUT_FAILED)) {
-          status = 'Failed' as const;
-        }
-      }
-    }
-    return { ...tx, status, momo_direction };
-  });
 
   const handleCardClick = (tx: Transaction) => {
     setSelectedTx(tx);
@@ -101,13 +63,13 @@ export default function History() {
             <TransactionCardSkeleton key={i} />
           ))}
         </div>
-      ) : mergedTransactions.length === 0 ? (
+      ) : transactions.length === 0 ? (
         <div className="text-center py-10 text-on-surface-variant bg-surface-container-high rounded-xl border border-outline-variant/10">
           No transactions yet.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {mergedTransactions.map((tx) => (
+          {transactions.map((tx) => (
             <TransactionCard 
               key={tx.id} 
               tx={tx} 

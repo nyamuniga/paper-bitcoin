@@ -239,18 +239,26 @@ pub struct BlindingSession {
 }
 
 impl BlindingSession {
-    /// `B' = hash_to_curve(secret) + r·G`
-    pub fn new(secret: &str) -> Self {
-        // Derive `r` deterministically from `secret` so we can reconstruct the note later!
-        let mut h = Sha256::new();
-        h.update(b"physical-ecash-blinding-factor-");
-        h.update(secret.as_bytes());
-        let r_bytes = h.finalize();
-        
+    /// Create a blinding session from a serialized session string (`"{secret}:{r_hex}"`)
+    /// or fall back to legacy secret-derived blinding if no explicit `:r_hex` is attached.
+    pub fn new(secret_or_session: &str) -> Self {
+        if let Some((secret, r_hex)) = secret_or_session.rsplit_once(':') {
+            if r_hex.len() == 64 {
+                if let Ok(r_vec) = hex::decode(r_hex) {
+                    if let Ok(r_arr) = <[u8; 32]>::try_from(r_vec.as_slice()) {
+                        return Self::with_blinding_factor(secret, &r_arr);
+                    }
+                }
+            }
+        }
+        Self::new_legacy(secret_or_session)
+    }
+
+    /// Create a blinding session with an explicit 32-byte blinding factor seed `r_bytes`
+    /// derived independently from the wallet's master seed (preserving Chaumian blindness).
+    pub fn with_blinding_factor(secret: &str, r_bytes: &[u8; 32]) -> Self {
         use k256::elliptic_curve::ops::Reduce;
-        let r_arr: [u8; 32] = r_bytes.into();
-        let r = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(&r_arr.into());
-        
+        let r = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(&(*r_bytes).into());
         let y = hash_to_curve(secret.as_bytes());
         let b_prime = y + ProjectivePoint::GENERATOR * r;
         Self {
@@ -258,6 +266,28 @@ impl BlindingSession {
             b_prime,
             secret: secret.to_string(),
         }
+    }
+
+    /// Legacy blinding session where `r` was derived directly from `secret`.
+    /// Kept for backwards compatibility with pre-existing notes and proofs.
+    pub fn new_legacy(secret: &str) -> Self {
+        let mut h = Sha256::new();
+        h.update(b"physical-ecash-blinding-factor-");
+        h.update(secret.as_bytes());
+        let r_bytes = h.finalize();
+
+        let r_arr: [u8; 32] = r_bytes.into();
+        Self::with_blinding_factor(secret, &r_arr)
+    }
+
+    /// Export the blinding scalar `r` as a 64-character hex string.
+    pub fn r_hex(&self) -> String {
+        hex::encode(self.r.to_bytes())
+    }
+
+    /// Serialize both `secret` and `r` (`"{secret}:{r_hex}"`) for persisting pending sessions.
+    pub fn to_session_hex(&self) -> String {
+        format!("{}:{}", self.secret, self.r_hex())
     }
 
     /// The blinded message as hex (send this to the mint).

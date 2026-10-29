@@ -17,7 +17,7 @@ const queryBlink = async (query: string, variables: object) => {
     const payload = {
         transaction: { query, variables },
         security: {
-            nonce: Math.random().toString(36).substring(2, 15),
+            nonce: crypto.randomUUID(),
             timestamp: Date.now()
         },
     };

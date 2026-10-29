@@ -1,12 +1,10 @@
 use crate::error::CommandResult;
 use ecash_core::derivation::TokenDerivation;
-use ecash_core::dhke::BlindingSession;
 use ecash_core::types::{
     split_into_powers_of_2, ReceiveLightningTransactionData, Transaction, TransactionStatus,
     TransactionType,
 };
 use ecash_wallet::client::MintClient;
-use ecash_wallet::WalletState;
 use serde::{Deserialize, Serialize};
 
 use crate::commands::auth::AppState;
@@ -25,17 +23,8 @@ pub async fn receive_lightning(
     amount: u64,
     state: State<'_, AppState>,
 ) -> CommandResult<ReceiveLightningQuote> {
-    let path = state.wallet_path.clone();
-
-    let passphrase = {
-        let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock
-            .clone()
-            .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
-    };
-
-    // Load wallet state
-    let mut w_state = WalletState::load_encrypted(&path, &passphrase)?;
+    // Fail fast if wallet is locked
+    let _ = state.get_passphrase()?;
 
     let mint_url = ecash_wallet::state::normalize_mint_url(&mint_url);
     let client = MintClient::new(&mint_url);
@@ -51,6 +40,9 @@ pub async fn receive_lightning(
         .map_err(|e| crate::error::CommandError(format!("Failed to fetch keyset: {}", e)))?;
 
     let desired_amounts = split_into_powers_of_2(amount);
+
+    let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
+    let w_state = wallet_guard.as_mut().unwrap();
 
     let max_proof_idx = w_state
         .proofs
@@ -71,8 +63,7 @@ pub async fn receive_lightning(
 
     for &amt in &desired_amounts {
         let index = deriv.index;
-        let secret = deriv.next_secret();
-        let sess = BlindingSession::new(&secret);
+        let sess = deriv.next_session();
         outputs.push(serde_json::json!({
             "amount": amt,
             "id": keyset.id,
@@ -90,7 +81,7 @@ pub async fn receive_lightning(
             outputs: outputs.clone(),
             blinding_sessions_hex: sessions
                 .iter()
-                .map(|(_, sess, _)| sess.secret.clone())
+                .map(|(_, sess, _)| sess.to_session_hex())
                 .collect(),
         }),
         amount,
@@ -125,19 +116,8 @@ pub async fn batch_mint_external_quotes(
     quotes: Vec<ExternalQuote>,
     state: State<'_, AppState>,
 ) -> CommandResult<u64> {
-    let path = state.wallet_path.clone();
-
-    let passphrase = {
-        let pass_lock = state.passphrase.lock().unwrap();
-        pass_lock
-            .clone()
-            .ok_or_else(|| crate::error::CommandError("Wallet is locked".to_string()))?
-    };
-
-    let mut w_state = {
-        let _lock = state.wallet_lock.lock().await;
-        WalletState::load_encrypted(&path, &passphrase)?
-    };
+    let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
+    let w_state = wallet_guard.as_mut().unwrap();
 
     use std::collections::HashMap;
     let mut grouped_quotes: HashMap<String, Vec<ExternalQuote>> = HashMap::new();
@@ -190,8 +170,7 @@ pub async fn batch_mint_external_quotes(
             
             for &amt in &desired_amounts {
                 let index = deriv.index;
-                let secret = deriv.next_secret();
-                let sess = BlindingSession::new(&secret);
+                let sess = deriv.next_session();
                 outputs.push(serde_json::json!({
                     "amount": amt,
                     "id": keyset.id,
@@ -233,7 +212,7 @@ pub async fn batch_mint_external_quotes(
                         tx_type: TransactionType::ReceiveLightning(ReceiveLightningTransactionData {
                             quote_id: quote.quote_id.clone(),
                             outputs,
-                            blinding_sessions_hex: sessions.iter().map(|(_, sess, _)| sess.secret.clone()).collect(),
+                            blinding_sessions_hex: sessions.iter().map(|(_, sess, _)| sess.to_session_hex()).collect(),
                         }),
                         amount: quote.amount,
                         fee: 0,
@@ -248,10 +227,7 @@ pub async fn batch_mint_external_quotes(
         }
     }
 
-    {
-        let _lock = state.wallet_lock.lock().await;
-        w_state.save_encrypted(&path, &passphrase)?;
-    }
+    w_state.save_encrypted(&path, &passphrase)?;
 
     Ok(claimed_count)
 }

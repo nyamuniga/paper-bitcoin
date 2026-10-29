@@ -133,3 +133,28 @@ export const fetchLnurlPayInvoice = async (
     routes: data.routes || [],
   };
 };
+
+/**
+ * Extract the amount in satoshis from a BOLT11 invoice human-readable part (HRP).
+ */
+export const getInvoiceAmountSats = (inv: string): number | null => {
+  try {
+    const hrp = inv.trim().toLowerCase().split('1')[0];
+    if (!hrp) return null;
+    const match = hrp.match(/^ln[a-z]+(\d+)([munp]?)$/);
+    if (match) {
+      let val = parseInt(match[1], 10);
+      const mult = match[2];
+      if (mult === 'm') val *= 100000;
+      else if (mult === 'u') val *= 100;
+      else if (mult === 'n') val *= 0.1;
+      else if (mult === 'p') val *= 0.0001;
+      else val *= 100000000;
+      return Math.floor(val);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use ecash_core::{
-    dhke::{point_from_hex, BlindingSession},
+    dhke::point_from_hex,
     types::{PhysicalNote, TokenEntry, PublicNoteData, PrivateNoteData, Transaction, TransactionType, IssueTransactionData, TransactionStatus},
     derivation::TokenDerivation,
 };
@@ -116,8 +116,7 @@ pub async fn issue_direct_note(
         // Desired amounts (use note_deriv)
         for &d_amt in &desired_denoms {
             let index = note_deriv.index;
-            let secret = note_deriv.next_secret();
-            let sess = BlindingSession::new(&secret);
+            let sess = note_deriv.next_session();
             output_json.push(serde_json::json!({"amount": d_amt, "id": keyset.id, "B_": sess.b_prime_hex()}));
             sessions.push((d_amt, sess, index, true));
         }
@@ -127,8 +126,7 @@ pub async fn issue_direct_note(
         wallet_deriv.index = state.derivation_index;
         for &c_amt in &change_denoms {
             let index = wallet_deriv.index;
-            let secret = wallet_deriv.next_secret();
-            let sess = BlindingSession::new(&secret);
+            let sess = wallet_deriv.next_session();
             output_json.push(serde_json::json!({"amount": c_amt, "id": keyset.id, "B_": sess.b_prime_hex()}));
             sessions.push((c_amt, sess, index, false));
         }
@@ -155,10 +153,12 @@ pub async fn issue_direct_note(
         let mut change_proofs = Vec::new();
 
         for (i, sig_val) in sigs.iter().enumerate() {
-            let s_amt = sig_val["amount"].as_u64().unwrap();
-            let sig_id = sig_val["id"].as_str().unwrap().to_string();
-            let c_prime = point_from_hex(sig_val["C_"].as_str().unwrap()).unwrap();
-            let mint_pk = point_from_hex(keyset.keys.get(&s_amt).unwrap()).unwrap();
+            let s_amt = sig_val["amount"].as_u64().ok_or_else(|| anyhow!("Missing amount in swap signature"))?;
+            let sig_id = sig_val["id"].as_str().ok_or_else(|| anyhow!("Missing keyset id in swap signature"))?.to_string();
+            let c_prime_str = sig_val["C_"].as_str().ok_or_else(|| anyhow!("Missing C_ in swap signature"))?;
+            let c_prime = point_from_hex(c_prime_str)?;
+            let mint_pk_str = keyset.keys.get(&s_amt).ok_or_else(|| anyhow!("Unknown amount {} in keyset", s_amt))?;
+            let mint_pk = point_from_hex(mint_pk_str)?;
             
             let (_, ref sess, idx, is_desired) = sessions[i];
             let dleq = crate::melt::parse_dleq(sig_val);
