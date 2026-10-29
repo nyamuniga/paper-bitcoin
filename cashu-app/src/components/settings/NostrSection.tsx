@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { deriveNostrKeypair } from '../../services/nostrService';
 import { nip19 } from 'nostr-tools';
 import toast from 'react-hot-toast';
+import { writeClipboardText } from '../../utils/clipboard';
 
 const hexToBytes = (hex: string): Uint8Array => {
   const bytes = new Uint8Array(hex.length / 2);
@@ -78,7 +79,7 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
 
   const handleCopy = (text: string | null) => {
     if (!text) return;
-    navigator.clipboard.writeText(text);
+    writeClipboardText(text);
     toast.success('Copied to clipboard');
   };
 

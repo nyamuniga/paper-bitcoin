@@ -6,6 +6,7 @@ import QRCode from 'react-qr-code';
 import { useWalletStore } from '../../store/wallet';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
+import { writeClipboardText } from '../../utils/clipboard';
 
 interface NWCSectionProps {
   isExpanded?: boolean;
@@ -106,7 +107,7 @@ export const NWCSection: React.FC<NWCSectionProps> = ({
 
   const copyToClipboard = () => {
     if (nwcUri) {
-      navigator.clipboard.writeText(nwcUri);
+      writeClipboardText(nwcUri);
       toast.success('NWC URI copied to clipboard');
     }
   };

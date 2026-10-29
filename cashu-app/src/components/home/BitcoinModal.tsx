@@ -20,6 +20,7 @@ import { NumberPad } from '../shared/NumberPad';
 import QRCode from 'react-qr-code';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { parseBitcoinInput } from '../../utils/bitcoinValidation';
+import { readClipboardText, writeClipboardText } from '../../utils/clipboard';
 import { fetchLnurlPayInvoice } from '../../services/lnurlService';
 import { useLnurlValidation, validateLnurlPay } from '../../hooks/useLnurlValidation';
 import { LnurlValidationStatus } from '../shared/LnurlValidationStatus';
@@ -313,7 +314,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const handleCopy = async (text: string, type: string = 'text') => {
     if (!text) return;
     try {
-      await navigator.clipboard.writeText(text);
+      await writeClipboardText(text);
       setCopied(true);
       setCopiedType(type);
       toast.success(type === 'uri' ? 'Copied Payment URI (auto-fills amount in Sparrow)!' : 'Copied to clipboard!');
@@ -525,7 +526,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                                   type="button"
                                   onClick={async () => {
                                     try {
-                                      const text = await navigator.clipboard.readText();
+                                      const text = await readClipboardText();
                                       if (text) setDestinationInput(text.trim());
                                     } catch (e) {
                                       console.warn('Clipboard read failed', e);

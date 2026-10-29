@@ -8,6 +8,7 @@
     "main"
   ],
   "permissions": [
-    "biometric:default"
+    "biometric:default",
+    "clipboard-manager:default"
   ]
 }

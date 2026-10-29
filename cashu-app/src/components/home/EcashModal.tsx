@@ -15,6 +15,7 @@ import { MintName } from '../shared/MintName';
 import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { extractMintFromToken } from '../../utils/format';
+import { readClipboardText, writeClipboardText } from '../../utils/clipboard';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { SlidingSegmentedControl } from '../shared/SlidingSegmentedControl';
 
@@ -165,7 +166,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   const handleCopy = async () => {
     if (!token) return;
     try {
-      await navigator.clipboard.writeText(token);
+      await writeClipboardText(token);
       setCopied(true);
       toast.success('Token copied!');
       setTimeout(() => setCopied(false), 2000);
@@ -584,7 +585,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                               type="button"
                               onClick={async () => {
                                 try {
-                                  const text = await navigator.clipboard.readText();
+                                  const text = await readClipboardText();
                                   if (text) handleTokenInput(text.trim());
                                 } catch (e) {
                                   console.warn('Clipboard read failed', e);

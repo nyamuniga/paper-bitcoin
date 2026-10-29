@@ -9,6 +9,7 @@ import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { MintName } from '../shared/MintName';
 import { MintIcon } from '../shared/MintIcon';
 import { openMempoolTx, openMempoolAddress } from '../../utils/mempool';
+import { writeClipboardText } from '../../utils/clipboard';
 
 interface TransactionDetailsModalProps {
   tx: Transaction;
@@ -102,7 +103,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
 
   const copyToClipboard = async (text: string, label: string = 'Copied!') => {
     try {
-      await navigator.clipboard.writeText(text);
+      await writeClipboardText(text);
       toast.success(label);
     } catch {
       toast.error('Failed to copy');
@@ -112,7 +113,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   const handleCopyToken = async () => {
     if (!tokenString) return;
     try {
-      await navigator.clipboard.writeText(tokenString);
+      await writeClipboardText(tokenString);
       setCopied(true);
       toast.success('Token copied!');
       setTimeout(() => setCopied(false), 2000);

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { QrCode, Loader2, BookUser } from 'lucide-react';
 import { useUrDecoder } from '../../hooks/useUrDecoder';
+import { readClipboardText } from '../../utils/clipboard';
 import { parseBitcoinInput } from '../../utils/bitcoinValidation';
 import { useLnurlValidation } from '../../hooks/useLnurlValidation';
 import { LnurlValidationStatus } from '../shared/LnurlValidationStatus';
@@ -119,7 +120,7 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
                     type="button"
                     onClick={async () => {
                       try {
-                        const text = await navigator.clipboard.readText();
+                        const text = await readClipboardText();
                         if (text) setBinB64(text.trim());
                       } catch (e) {
                         console.warn('Clipboard read failed', e);

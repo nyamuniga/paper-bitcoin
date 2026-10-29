@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Eye, EyeOff, Copy, CheckCircle2, ChevronDown, Shield } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { writeClipboardText } from '../../utils/clipboard';
 
 interface RecoveryPhraseSectionProps {
   isExpanded?: boolean;
@@ -44,7 +45,7 @@ export const RecoveryPhraseSection: React.FC<RecoveryPhraseSectionProps> = ({
   };
 
   const copyMnemonic = () => {
-    navigator.clipboard.writeText(mnemonic);
+    writeClipboardText(mnemonic);
     setCopied(true);
     toast.success('Recovery phrase copied!');
     setTimeout(() => setCopied(false), 2000);
