@@ -300,10 +300,10 @@ export const TrustedMintsList: React.FC<TrustedMintsListProps> = ({ mintBalances
         {!hideAddCard && (
           <div 
             onClick={() => setShowAddMint(true)}
-            className={`bg-surface-container-lowest rounded-2xl p-3.5 md:p-4 flex items-center justify-center gap-3 border border-dashed border-primary/50 relative group hover:bg-surface-container-low hover:border-primary/80 transition-all duration-300 cursor-pointer ${showAll ? 'md:col-span-2' : ''}`}
+            className={`bg-[#0c1b14] rounded-xl p-3.5 md:p-4 flex items-center justify-center gap-3 border border-dashed border-primary/50 relative group hover:bg-[#12261d] hover:border-primary/80 transition-all duration-300 cursor-pointer ${showAll ? 'md:col-span-2' : ''}`}
           >
             <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
-            <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 relative z-10 pointer-events-none group-hover:scale-105 transition-transform border border-primary/30">
+            <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0 relative z-10 pointer-events-none group-hover:scale-105 transition-transform border border-primary/30">
               <Plus className="text-primary w-5 h-5" />
             </div>
             <span className="text-body-md font-body-md text-primary font-bold relative z-10 pointer-events-none tracking-wide">Add New Mint</span>

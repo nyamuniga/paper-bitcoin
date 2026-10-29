@@ -11,6 +11,7 @@ import { AmountDisplay } from '../shared/AmountDisplay';
 import { NumberPad } from '../shared/NumberPad';
 import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
+import { SlidingSegmentedControl } from '../shared/SlidingSegmentedControl';
 
 interface SendEcashModalProps {
   mintUrl: string;
@@ -144,36 +145,20 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
               </div>
 
               {/* Format Selector */}
-              <div className="flex items-center gap-1 bg-surface-container p-1 rounded-xl border border-outline-variant/15 text-[12px]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormatVersion('v3');
-                    if (tokenV3) setToken(tokenV3);
-                  }}
-                  className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${
-                    formatVersion === 'v3'
-                      ? 'bg-primary text-on-primary shadow-sm'
-                      : 'text-on-surface-variant hover:text-on-surface'
-                  }`}
-                >
-                  cashuA (v3 - Universal)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormatVersion('v4');
-                    if (tokenV4) setToken(tokenV4);
-                  }}
-                  className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${
-                    formatVersion === 'v4'
-                      ? 'bg-primary text-on-primary shadow-sm'
-                      : 'text-on-surface-variant hover:text-on-surface'
-                  }`}
-                >
-                  cashuB (v4 - Compact)
-                </button>
-              </div>
+              <SlidingSegmentedControl<'v3' | 'v4'>
+                options={[
+                  { id: 'v3', label: 'cashuA' },
+                  { id: 'v4', label: 'cashuB' },
+                ]}
+                value={formatVersion}
+                onChange={(val) => {
+                  setFormatVersion(val);
+                  if (val === 'v3' && tokenV3) setToken(tokenV3);
+                  if (val === 'v4' && tokenV4) setToken(tokenV4);
+                }}
+                className="w-48"
+                buttonClassName="py-1.5 px-3 text-xs"
+              />
 
               {/* QR Code */}
               <div className="relative">
@@ -257,7 +242,7 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
                         setPubkey(val);
                       }}
                     placeholder="npub1... or hex pubkey"
-                    className="w-full bg-surface-container-highest p-3 rounded-xl border border-outline-variant/10 text-[14px] text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 transition-colors"
+                    className="w-full bg-[#0c1b14] p-3 rounded-xl border border-[#142d20] text-[14px] text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary transition-colors"
                   />
                 </div>
                 

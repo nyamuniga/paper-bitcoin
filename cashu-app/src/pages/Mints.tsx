@@ -22,9 +22,9 @@ export default function Mints() {
           {/* Discover Mints Button */}
           <button
             onClick={() => navigate('/discover')}
-            className="h-[46px] sm:h-[50px] rounded-2xl bg-[#0c1b14] hover:bg-[#12261d] active:scale-[0.98] border border-[#1e3c2e] hover:border-primary/50 flex items-center justify-center gap-2 text-primary font-display-hero text-[13px] sm:text-[14px] font-bold transition-all shadow-sm cursor-pointer group"
+            className="h-[46px] sm:h-[50px] rounded-xl bg-[#0c1b14] hover:bg-[#12261d] active:scale-[0.98] border border-[#1e3c2e] hover:border-primary/50 flex items-center justify-center gap-2 text-primary font-display-hero text-[13px] sm:text-[14px] font-bold transition-all shadow-sm cursor-pointer group"
           >
-            <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+            <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
               <Compass size={15} className="text-primary" />
             </div>
             <span className="truncate">Discover Mints</span>
@@ -33,9 +33,9 @@ export default function Mints() {
           {/* Add New Mint Button */}
           <button
             onClick={() => setShowAddMint(true)}
-            className="h-[46px] sm:h-[50px] rounded-2xl bg-[#0c1b14] hover:bg-[#12261d] active:scale-[0.98] border border-dashed border-primary/50 hover:border-primary flex items-center justify-center gap-2 text-primary font-display-hero text-[13px] sm:text-[14px] font-bold transition-all shadow-sm cursor-pointer group"
+            className="h-[46px] sm:h-[50px] rounded-xl bg-[#0c1b14] hover:bg-[#12261d] active:scale-[0.98] border border-dashed border-primary/50 hover:border-primary flex items-center justify-center gap-2 text-primary font-display-hero text-[13px] sm:text-[14px] font-bold transition-all shadow-sm cursor-pointer group"
           >
-            <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+            <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
               <Plus size={15} className="text-primary stroke-[2.5]" />
             </div>
             <span className="truncate">Add New Mint</span>

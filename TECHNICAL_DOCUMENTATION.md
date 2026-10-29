@@ -170,7 +170,7 @@ The `WalletState` (saved in `~/.ecash/wallet.json`) acts as both the fallback sa
 - **Offline Ignorance:** When paying an invoice directly from the dashboard, the wallet iterates through the known mints. If a mint is offline (e.g., local mock mints), the CLI gracefully catches the network timeout and skips to the next mint, ensuring offline infrastructure doesn't block access to healthy funds.
 - **Change Collection:** Any Lightning invoice payment made from the wallet automatically calculates maximum possible change, generates blind signatures, and sweeps the change back into the local state.
 
-## 6. Mobile Money (MoMo) & Fiat Bridges
+## 6. Mobile Money & Fiat Bridges
 
 The app provides seamless fiat integration by leveraging a Blink proxy wallet. This allows users to directly convert Mobile Money (e.g., Rwandan Francs - RWF) to eCash and vice versa, entirely bypassing the need for manual Lightning invoice management.
 - **RWF to SATS:** The user initiates a MoMo deposit. The proxy generates a Lightning invoice, the app submits it to the Mint, and once the fiat clears, the proxy pays the Mint's invoice, issuing eCash to the wallet.

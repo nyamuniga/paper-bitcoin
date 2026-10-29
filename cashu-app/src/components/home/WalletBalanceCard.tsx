@@ -408,7 +408,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               }
             },
             {
-              label: 'Top Up (MoMo)',
+              label: 'Top Up',
               icon: <Phone size={20} />,
               colorClass: 'bg-primary/20 text-primary',
               onClick: () => {
@@ -449,7 +449,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               }
             },
             {
-              label: 'Cash Out (MoMo)',
+              label: 'Cash Out',
               icon: <Phone size={20} />,
               colorClass: 'bg-primary/20 text-primary',
               onClick: () => {

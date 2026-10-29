@@ -340,12 +340,14 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
     }
   };
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
-      style={backdropStyle}
-      onClick={closeWithAnimation}
-    >
+  return (
+    <>
+      {createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
+          style={backdropStyle}
+          onClick={closeWithAnimation}
+        >
       <div
         onClick={e => e.stopPropagation()}
         style={sheetStyle}
@@ -491,12 +493,12 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     ) : (
                       <div className="flex flex-col gap-1.5">
                         <p className="text-body-md font-body-md text-on-surface-variant">Pay to:</p>
-                        <div className={`relative glow-effect transition-shadow duration-300 rounded-xl bg-surface-container-lowest border shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] overflow-hidden ${
+                        <div className={`relative glow-effect transition-all duration-300 rounded-xl bg-[#0c1b14] border overflow-hidden ${
                           isInsufficient || lnurlValidation.status === 'invalid'
                             ? 'border-error/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
                             : lnurlValidation.status === 'valid'
                             ? 'border-emerald-500/40'
-                            : 'border-outline-variant/20 focus-within:border-primary/50'
+                            : 'border-[#142d20] focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/40'
                         }`}>
                           <textarea
                             value={destinationInput}
@@ -508,7 +510,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                           />
 
                           {/* Action Toolbar */}
-                          <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-outline-variant/10">
+                          <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-[#142d20]">
                             <div>
                               {destinationInput ? (
                                 <button
@@ -540,26 +542,24 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                               <button
                                 type="button"
                                 onClick={() => setShowAddressBook(true)}
-                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary text-[12px] font-bold transition-all cursor-pointer border border-outline-variant/20 shadow-sm"
+                                className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
                                 title="Open Address Book"
                               >
-                                <BookUser size={14} />
-                                <span>Contacts</span>
+                                <BookUser size={15} />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setShowScanner(true)}
-                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary text-[12px] font-bold transition-all cursor-pointer border border-outline-variant/20 shadow-sm"
+                                className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
                                 title="Scan QR Code"
                               >
-                                <QrCode size={14} />
-                                <span>Scan</span>
+                                <QrCode size={15} />
                               </button>
                             </div>
                           </div>
 
                           <AddressBookAutocomplete
-                            type="all"
+                            type="bitcoin"
                             query={destinationInput}
                             visible={destinationInput.length >= 2 && !destinationInput.startsWith('lnbc')}
                             onSelect={(c) => {
@@ -1015,16 +1015,19 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
           }}
           onRetry={lastPayAction}
         />
-        <AddressBookPickerModal
-          isOpen={showAddressBook}
-          onClose={() => setShowAddressBook(false)}
-          type="all"
-          onSelect={(contact) => {
-            setDestinationInput(contact.value);
-          }}
-        />
-      </div>
-    </div>,
-    document.body
+          </div>
+        </div>,
+        document.body
+      )}
+
+      <AddressBookPickerModal
+        isOpen={showAddressBook}
+        onClose={() => setShowAddressBook(false)}
+        type="bitcoin"
+        onSelect={(contact) => {
+          setDestinationInput(contact.value);
+        }}
+      />
+    </>
   );
 };

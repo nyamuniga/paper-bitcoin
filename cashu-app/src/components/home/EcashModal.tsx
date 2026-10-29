@@ -16,6 +16,7 @@ import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignSt
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { extractMintFromToken } from '../../utils/format';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
+import { SlidingSegmentedControl } from '../shared/SlidingSegmentedControl';
 
 interface EcashModalProps {
   mintUrl: string;
@@ -405,7 +406,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                           setPubkey(val);
                         }}
                         placeholder="npub1... or hex pubkey"
-                        className="w-full bg-surface-container py-2.5 px-3 rounded-xl border border-outline-variant/10 text-[13px] text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 transition-colors"
+                        className="w-full bg-[#0c1b14] py-2.5 px-3 rounded-xl border border-[#142d20] text-[13px] text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary transition-colors"
                       />
                     </div>
                   </>
@@ -414,52 +415,40 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                   <p className="text-error text-[12px] font-label-caps text-center">Insufficient balance</p>
                 )}
 
-                <button
-                  onClick={handleSend}
-                  disabled={sending || !isValid}
-                  className={`btn-gradient w-full py-3.5 sm:py-4 rounded-2xl text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center mt-1 cursor-pointer ${sending || !isValid ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
-                    }`}
-                >
-                  {sending ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Token'}
-                </button>
+                {!token && (
+                  <button
+                    onClick={handleSend}
+                    disabled={sending || !isValid}
+                    className={`btn-gradient w-full py-3.5 sm:py-4 rounded-2xl text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center mt-1 cursor-pointer ${sending || !isValid ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      }`}
+                  >
+                    {sending ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Token'}
+                  </button>
+                )}
               </div>
 
               {token && (
-                <div className="flex flex-col items-center gap-5 border-t border-outline-variant/10 pt-6">
+                <div className="flex flex-col items-center gap-5 pt-2">
                   <div className="text-center">
                     <p className="text-label-caps font-label-caps text-on-surface-variant mb-1">AMOUNT SENT</p>
                     <p className="text-[28px] font-display-lg text-primary">₿{parsedAmount.toLocaleString()}</p>
                   </div>
 
                   {/* Format Selector */}
-                  <div className="flex items-center gap-1 bg-surface-container p-1 rounded-xl border border-outline-variant/15 text-[12px]">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormatVersion('v3');
-                        if (tokenV3) setToken(tokenV3);
-                      }}
-                      className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${formatVersion === 'v3'
-                          ? 'bg-primary text-on-primary shadow-sm'
-                          : 'text-on-surface-variant hover:text-on-surface'
-                        }`}
-                    >
-                      cashuA (v3 - Universal)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormatVersion('v4');
-                        if (tokenV4) setToken(tokenV4);
-                      }}
-                      className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${formatVersion === 'v4'
-                          ? 'bg-primary text-on-primary shadow-sm'
-                          : 'text-on-surface-variant hover:text-on-surface'
-                        }`}
-                    >
-                      cashuB (v4 - Compact)
-                    </button>
-                  </div>
+                  <SlidingSegmentedControl<'v3' | 'v4'>
+                    options={[
+                      { id: 'v3', label: 'cashuA' },
+                      { id: 'v4', label: 'cashuB' },
+                    ]}
+                    value={formatVersion}
+                    onChange={(val) => {
+                      setFormatVersion(val);
+                      if (val === 'v3' && tokenV3) setToken(tokenV3);
+                      if (val === 'v4' && tokenV4) setToken(tokenV4);
+                    }}
+                    className="w-48"
+                    buttonClassName="py-1.5 px-3 text-xs"
+                  />
 
                   <div className="relative">
                     {isClaimed ? (
@@ -569,22 +558,56 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                       </button>
                     </div>
                   ) : (
-                    <div className="relative">
+                    <div className="relative rounded-xl bg-[#0c1b14] border border-[#142d20] focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/40 transition-all overflow-hidden flex flex-col">
                       <textarea
                         value={receiveToken}
                         onChange={(e) => handleTokenInput(e.target.value)}
-                        className="w-full bg-surface-container-lowest text-on-surface font-label-caps text-label-caps p-4 pr-12 rounded-xl border-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] focus:ring-1 focus:ring-primary focus:outline-none resize-none placeholder:text-on-surface-variant/50"
+                        className="w-full bg-transparent text-on-surface font-label-caps text-label-caps p-3.5 pb-2 border-none focus:outline-none resize-none placeholder:text-on-surface-variant/50 min-h-[76px]"
                         placeholder="Paste cashu token here to receive..."
-                        rows={4}
+                        rows={3}
                         spellCheck={false}
                       />
-                      <button
-                        onClick={() => setShowScanner(true)}
-                        className="absolute right-3 top-3 p-2 bg-surface-container-highest rounded-lg text-primary hover:bg-surface-bright transition-colors"
-                        title="Scan QR Code"
-                      >
-                        <QrCode size={20} />
-                      </button>
+
+                      {/* Action Toolbar */}
+                      <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-[#142d20]">
+                        <div>
+                          {receiveToken ? (
+                            <button
+                              type="button"
+                              onClick={() => setReceiveToken('')}
+                              className="text-[12px] font-bold text-on-surface-variant hover:text-error transition-colors cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const text = await navigator.clipboard.readText();
+                                  if (text) handleTokenInput(text.trim());
+                                } catch (e) {
+                                  console.warn('Clipboard read failed', e);
+                                }
+                              }}
+                              className="text-[12px] font-bold text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+                            >
+                              Paste
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setShowScanner(true)}
+                            className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
+                            title="Scan QR Code"
+                          >
+                            <QrCode size={15} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
 

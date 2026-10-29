@@ -106,7 +106,7 @@ export const RecoveryPhraseSection: React.FC<RecoveryPhraseSectionProps> = ({
                     type="password"
                     value={passphrase}
                     onChange={(e) => setPassphrase(e.target.value)}
-                    className="flex-1 bg-surface-container-high border border-outline-variant rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary"
+                    className="flex-1 bg-[#0c1b14] border border-[#142d20] rounded-xl px-4 py-3 text-on-surface focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary transition-colors"
                     placeholder="Wallet passphrase"
                     autoFocus
                   />

@@ -198,7 +198,7 @@ export const NWCSection: React.FC<NWCSectionProps> = ({
                 {/* CONNECTION Section */}
                 <div className="border-t border-outline-variant pt-6">
                   <h3 className="text-xs font-bold text-on-surface-variant/70 uppercase tracking-wider mb-3">Connection</h3>
-                  <div className="flex bg-surface-container-low border border-outline-variant p-4 rounded-xl items-center justify-between py-2">
+                  <div className="flex bg-[#0c1b14] border border-[#142d20] p-4 rounded-xl items-center justify-between py-2.5">
                     <div className="flex items-center gap-2 overflow-hidden">
                       <div className="w-2 h-2 rounded-full bg-green-500 shrink-0"></div>
                       <span className="font-mono text-sm text-on-surface truncate">{truncateUri(nwcUri)}</span>
@@ -247,7 +247,7 @@ export const NWCSection: React.FC<NWCSectionProps> = ({
                         <div className="flex items-center gap-2">
                           <input
                             type="text"
-                            className=" bg-surface-container-low rounded px-2 py-1 text-sm text-on-surface w-40 outline-none focus:ring-1 focus:ring-primary"
+                            className="bg-[#0c1b14] border border-[#142d20] rounded-lg px-2.5 py-1 text-sm text-on-surface w-44 outline-none focus:ring-1 focus:ring-primary transition-colors"
                             value={mintInput}
                             onChange={e => setMintInput(e.target.value)}
                             placeholder="https://..."
@@ -276,7 +276,7 @@ export const NWCSection: React.FC<NWCSectionProps> = ({
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
-                            className="bg-surface-container-low rounded px-2 py-1 text-sm text-on-surface w-32 outline-none focus:ring-1 focus:ring-primary"
+                            className="bg-[#0c1b14] border border-[#142d20] rounded-lg px-2.5 py-1 text-sm text-on-surface w-32 outline-none focus:ring-1 focus:ring-primary transition-colors"
                             value={limitInput}
                             onChange={e => setLimitInput(e.target.value)}
                             placeholder="No limit"

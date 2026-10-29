@@ -20,7 +20,7 @@ export const TransactionProcessor = () => {
   const backendPollingRef = useRef<any>(null);
   const isPollingRef = useRef<boolean>(false);
 
-  // 1. Transaction Resumption (MoMo)
+  // 1. Transaction Resumption (Mobile Money)
   useEffect(() => {
     if (!activeTransaction) {
       if (momoPollingRef.current) { clearInterval(momoPollingRef.current); momoPollingRef.current = null; }

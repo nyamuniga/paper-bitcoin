@@ -232,7 +232,7 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
                 type="text"
                 value={isInitializing ? 'Loading keys...' : (truncateKey(npub) || 'Not registered')}
                 readOnly
-                className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-4 py-3 text-body-md text-on-surface font-mono text-sm focus:outline-none pr-12"
+                className="w-full bg-[#0c1b14] border border-[#142d20] rounded-xl px-4 py-3 text-body-md text-on-surface font-mono text-sm focus:outline-none pr-12"
               />
               <button
                 onClick={() => handleCopy(npub)}
@@ -273,7 +273,7 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
                     onChange={(e) => setEditNsecValue(e.target.value.replace(/[^a-z0-9]/gi, '').toLowerCase())}
                     autoFocus
                     maxLength={63}
-                    className="flex-1 min-w-0 bg-surface-container-low border border-primary/50 rounded-xl px-4 py-3 text-body-md text-on-surface font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="flex-1 min-w-0 bg-[#0c1b14] border border-[#142d20] rounded-xl px-4 py-3 text-body-md text-on-surface font-mono text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary transition-colors"
                   />
                   <button
                     onClick={handleSaveNsec}
@@ -304,7 +304,7 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
                   type="text"
                   value={isInitializing ? 'Loading keys...' : (showNsec ? truncateKey(nsec) : '..............')}
                   readOnly
-                  className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-4 py-3 text-body-md text-on-surface font-mono text-sm focus:outline-none pr-20"
+                  className="w-full bg-[#0c1b14] border border-[#142d20] rounded-xl px-4 py-3 text-body-md text-on-surface font-mono text-sm focus:outline-none pr-20"
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
                   <button
@@ -328,7 +328,7 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
             {showPassphrasePrompt && !isEditingNsec && (
               <form
                 onSubmit={handleVerifyNsecPassphrase}
-                className="mt-2 p-3 bg-surface-container-lowest rounded-xl border border-outline-variant flex flex-col sm:flex-row gap-2"
+                className="mt-2 p-3 bg-[#0c1b14] rounded-xl border border-[#142d20] flex flex-col sm:flex-row gap-2"
               >
                 <input
                   type="password"
@@ -336,7 +336,7 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
                   onChange={(e) => setPassphraseInput(e.target.value)}
                   placeholder="Enter wallet passphrase to unlock nsec"
                   autoFocus
-                  className="flex-1 bg-surface-container-high border border-outline-variant rounded-lg px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary"
+                  className="flex-1 bg-[#0c1b14] border border-[#142d20] rounded-xl px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary transition-colors"
                 />
                 <button
                   type="submit"
@@ -387,7 +387,7 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
 
             <div className="space-y-2 mb-4">
               {relays.map((relay) => (
-                <div key={relay} className="flex items-center justify-between bg-surface-container-low border border-outline-variant rounded-xl px-4 py-3">
+                <div key={relay} className="flex items-center justify-between bg-[#0c1b14] border border-[#142d20] rounded-xl px-4 py-3">
                   <span className="text-body-md text-on-surface font-mono text-sm truncate mr-2">{relay}</span>
                   <button
                     onClick={() => handleRemoveRelay(relay)}
@@ -407,7 +407,7 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
                 value={newRelay}
                 onChange={(e) => setNewRelay(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddRelay()}
-                className="flex-1 min-w-0 bg-surface-container-low border border-outline-variant rounded-xl px-4 py-3 text-body-md text-on-surface focus:outline-none focus:border-primary/80"
+                className="flex-1 min-w-0 bg-[#0c1b14] border border-[#142d20] rounded-xl px-4 py-3 text-body-md text-on-surface focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary transition-colors"
               />
               <button
                 onClick={handleAddRelay}
