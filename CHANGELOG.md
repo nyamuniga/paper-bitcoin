@@ -4,6 +4,14 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 
 ---
 
+## [0.1.15] - 2026-10-30
+
+### 🔒 FixedFloat Security & In-Transit Encrypted Backend Proxy
+- **Zero-Secret Client Architecture**: Removed direct client-side FixedFloat API credential requirements, protecting open-source binaries and mobile builds from API key exposure.
+- **Secure Server Proxy Dispatch**: Routed swap limits, price quotes, order creations, and status checks through the payment backend proxy (`/api/fixedfloat`).
+- **End-to-End In-Transit Encryption**: Secured client-proxy communication using AES-256-CBC with PKCS7 padding, HMAC-SHA256 integrity verification, and dynamic 15-minute replay-prevention timestamps matching the MoMo processor security model.
+- **Dynamic Credential & Key Discovery**: Automatically detects transit encryption keys and proxy base URLs from runtime environments, compile-time flags, or local `.env` files without hardcoding any secrets into source code.
+
 ## [0.1.14] - 2026-10-29
 
 ### 🎨 UI Unification & Component Polish
