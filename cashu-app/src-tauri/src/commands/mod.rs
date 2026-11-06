@@ -1,10 +1,10 @@
 pub mod auth;
-pub mod fixedfloat;
 pub mod history;
 pub mod issue;
 pub mod pay;
 pub mod receive;
 pub mod redeem;
 pub mod send;
+pub mod spark;
 pub mod verify;
 pub mod wallet;

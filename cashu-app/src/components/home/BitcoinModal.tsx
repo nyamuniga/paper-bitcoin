@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Loader2, Zap, Bitcoin, ArrowUp, ArrowDown, QrCode, ChevronDown, BookUser } from 'lucide-react';
-import { OnchainSendEstimate, OnchainLimits, getOnchainSendLimits } from '../../services/fixedFloatService';
+import { OnchainSendEstimate, OnchainLimits, getOnchainSendLimits } from '../../services/sparkService';
 import { useAddressBookStore } from '../../store/addressBookStore';
 import { AddressBookPickerModal } from '../addressBook/AddressBookPickerModal';
 import { AddressBookAutocomplete } from '../addressBook/AddressBookAutocomplete';
@@ -32,6 +32,7 @@ interface BitcoinModalProps {
   mintUrl: string;
   initialTab?: 'send' | 'receive';
   initialInvoice?: string;
+  initialAmountSats?: number;
   onClose: () => void;
 }
 
@@ -39,7 +40,7 @@ type Tab = 'send' | 'receive';
 type SendStep = 'input' | 'amount' | 'confirm';
 type ReceiveMode = 'lightning' | 'onchain';
 
-export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialInvoice = '', onClose }) => {
+export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialInvoice = '', initialAmountSats, onClose }) => {
   const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [mintUrl, setMintUrl] = useState(initialMintUrl);
@@ -63,7 +64,10 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   };
 
   // Send state
-  const [destinationInput, setDestinationInput] = useState(initialInvoice);
+  const initialParsed = parseBitcoinInput(initialInvoice);
+  const [destinationInput, setDestinationInput] = useState(
+    initialParsed.type === 'onchain' ? initialParsed.addressOrInvoice : initialInvoice
+  );
   const [showScanner, setShowScanner] = useState(false);
   const [showAddressBook, setShowAddressBook] = useState(false);
   const parsedInput = parseBitcoinInput(destinationInput);
@@ -74,9 +78,14 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
 
   const [lnurlParams, setLnurlParams] = useState<any | null>(null);
 
-  const [lnurlSendAmount, setLnurlSendAmount] = useState('');
+  const [lnurlSendAmount, setLnurlSendAmount] = useState(() => {
+    const prefill = initialAmountSats ?? initialParsed.amountSats;
+    return prefill && prefill > 0 ? prefill.toString() : '';
+  });
   const [isFetchingLnurl, setIsFetchingLnurl] = useState(false);
-  const [sendStep, setSendStep] = useState<SendStep>('input');
+  const [sendStep, setSendStep] = useState<SendStep>(() =>
+    initialParsed.type === 'onchain' ? 'amount' : 'input'
+  );
   const [onchainEstimate, setOnchainEstimate] = useState<OnchainSendEstimate | null>(null);
   const [onchainLimits, setOnchainLimits] = useState<OnchainLimits | null>(null);
 
@@ -88,6 +97,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const [receiveInvoice, setReceiveInvoice] = useState<string | null>(null);
   const [boardingAddress, setBoardingAddress] = useState<string | null>(null);
   const [depositSats, setDepositSats] = useState<number | null>(null);
+  const [receiveFeeEstimateSats, setReceiveFeeEstimateSats] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
 
@@ -98,10 +108,13 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const { transactions } = useHistory();
   const { paying, requesting, payInvoice, receiveLightning, receiveOnChain, estimateOnChain, executeOnChain } = useBitcoin(mintUrl);
 
+  const minReceiveOnchain = onchainLimits?.min_sats ?? 2500;
+  const maxReceiveOnchain = onchainLimits?.max_sats ?? 100000000;
+
   const isReceiveDisabled =
     requesting ||
     parsedReceiveAmount <= 0 ||
-    (receiveMode === 'onchain' && (parsedReceiveAmount < 12500 || parsedReceiveAmount > 18000000));
+    (receiveMode === 'onchain' && (parsedReceiveAmount < minReceiveOnchain || parsedReceiveAmount > maxReceiveOnchain));
 
 
   const currentTx = quoteId ? transactions.find(t => t.id === quoteId) : null;
@@ -116,12 +129,12 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   const [lastPayAction, setLastPayAction] = useState<(() => void) | undefined>(undefined);
   const [hasTriggeredReceiveCelebration, setHasTriggeredReceiveCelebration] = useState(false);
 
-  // Preload on-chain limits when an on-chain address is detected
+  // Preload on-chain limits when an on-chain address or on-chain receive mode is active
   useEffect(() => {
-    if (parsedInput.type === 'onchain' && !onchainLimits) {
+    if ((parsedInput.type === 'onchain' || receiveMode === 'onchain') && !onchainLimits) {
       getOnchainSendLimits().then(setOnchainLimits).catch(console.error);
     }
-  }, [parsedInput.type, onchainLimits]);
+  }, [parsedInput.type, receiveMode, onchainLimits]);
 
   // Trigger sovereign stamp celebration when an incoming invoice is settled
   useEffect(() => {
@@ -202,8 +215,8 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
     }
 
     if (parsedInput.type === 'onchain' && parsedInput.addressOrInvoice) {
-      const minLimit = onchainLimits?.min_sats ?? 12500;
-      const maxLimit = onchainLimits?.max_sats ?? 150000000;
+      const minLimit = onchainLimits?.min_sats ?? 2500;
+      const maxLimit = onchainLimits?.max_sats ?? 100000000;
       if (amt < minLimit) {
         toast.error(`Minimum on-chain send is ${minLimit.toLocaleString()} sats`);
         return;
@@ -289,11 +302,12 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
 
   const handleRequestInvoice = async () => {
     if (receiveMode === 'onchain') {
-      if (parsedReceiveAmount < 12500 || parsedReceiveAmount > 18000000) return;
-      const res = await receiveOnChain(parsedReceiveAmount);
+      if (parsedReceiveAmount < minReceiveOnchain || parsedReceiveAmount > maxReceiveOnchain) return;
+      const res = await receiveOnChain(parsedReceiveAmount, mintUrl);
       if (res) {
         setBoardingAddress(res.boardingAddress);
         setDepositSats(res.amountSats || parsedReceiveAmount);
+        setReceiveFeeEstimateSats(res.estimatedFeeSats ?? null);
         if (res.quoteId) {
           setQuoteId(res.quoteId);
         }
@@ -302,7 +316,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
     }
 
     if (parsedReceiveAmount <= 0) return;
-    const res = await receiveLightning(parsedReceiveAmount);
+    const res = await receiveLightning(parsedReceiveAmount, mintUrl);
     if (res) {
       setQuoteId(res.quoteId);
       setReceiveInvoice(res.receiveInvoice);
@@ -452,7 +466,13 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <button
                       key={m}
                       style={{ animationDelay: `${index * 30}ms` }}
-                      onClick={() => { setMintUrl(m); closeMintDropdown(); }}
+                      onClick={async () => {
+                        setMintUrl(m);
+                        closeMintDropdown();
+                        if (activeTab === 'receive' && receiveMode === 'onchain' && boardingAddress) {
+                          await receiveOnChain(parsedReceiveAmount || 10000, m);
+                        }
+                      }}
                       className="flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left w-full border-b border-outline-variant/10 last:border-b-0 animate-dropdown-item cursor-pointer"
                     >
                       <div className="flex items-center gap-2 min-w-0 pr-2">
@@ -581,7 +601,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       <div className="flex items-center justify-between text-[12px] font-mono px-3 py-2 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-on-surface-variant">
                         <span>On-Chain Bitcoin Address</span>
                         <span className="text-primary font-semibold">
-                          Min: {(onchainLimits?.min_sats ?? 12500).toLocaleString()} sats
+                          Min: {(onchainLimits?.min_sats ?? 2500).toLocaleString()} sats
                         </span>
                       </div>
                     )}
@@ -625,8 +645,8 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                 {sendStep === 'amount' && (() => {
                   const typedAmount = parseInt(lnurlSendAmount) || 0;
                   const isOnchain = parsedInput.type === 'onchain';
-                  const minLimit = isOnchain ? (onchainLimits?.min_sats ?? 12500) : 1;
-                  const maxLimit = isOnchain ? (onchainLimits?.max_sats ?? 150000000) : availableBalance;
+                  const minLimit = isOnchain ? (onchainLimits?.min_sats ?? 2500) : 1;
+                  const maxLimit = isOnchain ? (onchainLimits?.max_sats ?? 100000000) : availableBalance;
                   const isBelowMin = isOnchain && typedAmount > 0 && typedAmount < minLimit;
                   const isAboveMax = isOnchain && typedAmount > maxLimit;
                   const isAboveBalance = typedAmount > availableBalance;
@@ -824,9 +844,16 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   <div className="text-center">
                     <p className="text-[20px] font-display-sm text-primary">Bitcoin On-Chain Deposit</p>
                     {depositSats && (
-                      <p className="text-[13px] font-mono text-on-surface-variant mt-1">
-                        Deposit: <strong className="text-on-surface">{depositSats.toLocaleString()} sats</strong> ({(depositSats / 100_000_000).toFixed(8)} BTC)
-                      </p>
+                      <div className="flex flex-col items-center gap-0.5 mt-1">
+                        <p className="text-[13px] font-mono text-on-surface-variant">
+                          Send: <strong className="text-on-surface">{depositSats.toLocaleString()} sats</strong> ({(depositSats / 100_000_000).toFixed(8)} BTC)
+                        </p>
+                        {receiveFeeEstimateSats !== null && receiveFeeEstimateSats > 0 && (
+                          <p className="text-[11px] font-mono text-emerald-400/90">
+                            You receive: ~<strong>{parsedReceiveAmount.toLocaleString()} sats</strong> (incl. ~{receiveFeeEstimateSats.toLocaleString()} sats claim &amp; bridge fee)
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -938,23 +965,24 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                           setQuoteId(null);
                           setBoardingAddress(null);
                           setDepositSats(null);
+                          setReceiveFeeEstimateSats(null);
                         }}
                         compact
                       />
 
                       {/* On-Chain Receive Limits & Real-Time Feedback */}
                       {receiveMode === 'onchain' && (
-                        (parsedReceiveAmount > 0 && parsedReceiveAmount < 12500) || parsedReceiveAmount > 18000000
+                        (parsedReceiveAmount > 0 && parsedReceiveAmount < minReceiveOnchain) || parsedReceiveAmount > maxReceiveOnchain
                       ) && (
                         <div className="flex flex-col items-center gap-1.5 w-full">
-                          {parsedReceiveAmount > 0 && parsedReceiveAmount < 12500 && (
+                          {parsedReceiveAmount > 0 && parsedReceiveAmount < minReceiveOnchain && (
                             <div className="text-[12px] font-medium text-amber-400 bg-amber-500/15 px-3 py-1.5 rounded-lg border border-amber-500/30 text-center animate-fade-in shadow-sm">
-                              ⚠️ Minimum on-chain deposit is 12,500 sats ({(12500 - parsedReceiveAmount).toLocaleString()} more needed)
+                              ⚠️ Minimum on-chain deposit is {minReceiveOnchain.toLocaleString()} sats ({(minReceiveOnchain - parsedReceiveAmount).toLocaleString()} more needed)
                             </div>
                           )}
-                          {parsedReceiveAmount > 18000000 && (
+                          {parsedReceiveAmount > maxReceiveOnchain && (
                             <div className="text-[12px] font-medium text-error bg-error/15 px-3 py-1.5 rounded-lg border border-error/30 text-center animate-fade-in shadow-sm">
-                              ⚠️ Maximum on-chain deposit is 18,000,000 sats
+                              ⚠️ Maximum on-chain deposit is {maxReceiveOnchain.toLocaleString()} sats
                             </div>
                           )}
                         </div>
@@ -973,10 +1001,10 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       {requesting ? (
                         <Loader2 className="animate-spin w-6 h-6" />
                       ) : receiveMode === 'onchain' ? (
-                        parsedReceiveAmount > 0 && parsedReceiveAmount < 12500 ? (
-                          'Min Deposit is 12,500 sats'
-                        ) : parsedReceiveAmount > 18000000 ? (
-                          'Exceeds 18,000,000 sats limit'
+                        parsedReceiveAmount > 0 && parsedReceiveAmount < minReceiveOnchain ? (
+                          `Min Deposit is ${minReceiveOnchain.toLocaleString()} sats`
+                        ) : parsedReceiveAmount > maxReceiveOnchain ? (
+                          `Exceeds ${maxReceiveOnchain.toLocaleString()} sats limit`
                         ) : (
                           'Get Bitcoin Address'
                         )

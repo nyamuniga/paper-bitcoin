@@ -54,7 +54,7 @@ export const Scan = () => {
 
   return (
     <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
-      <PageHeader title="Scan" subtitle="Scan notes, eCash tokens, or Lightning invoices" />
+      <PageHeader title="Scan" subtitle="Scan notes, eCash tokens, Bitcoin addresses, or Lightning invoices" />
 
       <div className="w-full max-w-2xl mx-auto flex flex-col items-center">
         {!noteInfo ? (

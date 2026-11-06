@@ -1,7 +1,7 @@
 {
   "name": "bitnotes",
   "private": true,
-  "version": "0.1.15",
+  "version": "0.1.16",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@breeztech/breez-sdk-spark": "^0.28.0",
     "@cashu/cashu-ts": "^4.7.2",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@fontsource/poppins": "^5.3.0",

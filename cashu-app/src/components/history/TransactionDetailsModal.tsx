@@ -54,7 +54,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   const onchainAddress = isSendOnchain
     ? tx.tx_type.SendOnchain.address
     : isReceiveOnchain
-    ? tx.tx_type.ReceiveOnchain.boarding_address
+    ? tx.tx_type.ReceiveOnchain.address || tx.tx_type.ReceiveOnchain.boarding_address
     : null;
 
   const quoteId = isMint 
@@ -323,7 +323,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               <>
                 <div className="border-b border-outline-variant/15"></div>
                 <div className="flex justify-between items-center gap-4">
-                  <span className="text-label-caps font-label-caps text-on-surface-variant flex-shrink-0">ARK BATCHING FEE</span>
+                  <span className="text-label-caps font-label-caps text-on-surface-variant flex-shrink-0">SPARK NETWORK FEE</span>
                   <span className="text-body-md font-medium text-on-surface text-right">₿{tx.tx_type.SendOnchain.ark_fee.toLocaleString()}</span>
                 </div>
                 <div className="border-b border-outline-variant/15"></div>
