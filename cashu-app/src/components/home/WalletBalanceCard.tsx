@@ -43,7 +43,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
   };
 
   const [ecashModalConfig, setEcashModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive', initialToken?: string } | null>(null);
-  const [bitcoinModalConfig, setBitcoinModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive', initialInvoice?: string } | null>(null);
+  const [bitcoinModalConfig, setBitcoinModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive', initialInvoice?: string, initialAmountSats?: number } | null>(null);
   const [momoModalConfig, setMomoModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive' } | null>(null);
 
   const mintUrls = Object.keys(mintBalances || {});
@@ -184,7 +184,12 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
         setEcashModalConfig({ isOpen: true, tab: 'receive', initialToken: state.ecashToken });
         navigate(location.pathname, { replace: true, state: {} });
       } else if (state.lnbcInvoice) {
-        setBitcoinModalConfig({ isOpen: true, tab: 'send', initialInvoice: state.lnbcInvoice });
+        setBitcoinModalConfig({
+          isOpen: true,
+          tab: 'send',
+          initialInvoice: state.lnbcInvoice,
+          initialAmountSats: state.onchainAmountSats,
+        });
         navigate(location.pathname, { replace: true, state: {} });
       }
     }
@@ -474,6 +479,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
           mintUrl={activeMint || mintUrls[0]}
           initialTab={bitcoinModalConfig.tab}
           initialInvoice={bitcoinModalConfig.initialInvoice}
+          initialAmountSats={bitcoinModalConfig.initialAmountSats}
           onClose={() => setBitcoinModalConfig(null)}
         />
       )}

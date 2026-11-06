@@ -3,11 +3,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { toast } from 'react-hot-toast';
 import {
-  estimateOnChainSendFixedFloat,
-  executeOnChainSendFixedFloat,
-  getDepositAddressFixedFloat,
+  estimateOnChainSendSpark,
+  executeOnChainSendSpark,
+  getDepositAddressSpark,
   OnchainSendEstimate,
-} from '../services/fixedFloatService';
+} from '../services/sparkService';
 
 export const useBitcoin = (mintUrl?: string) => {
   const [paying, setPaying] = useState(false);
@@ -82,11 +82,13 @@ export const useBitcoin = (mintUrl?: string) => {
     isRequestingRef.current = true;
     setRequesting(true);
     try {
-      const res = await getDepositAddressFixedFloat(amount, targetMint);
+      const res = await getDepositAddressSpark(amount, targetMint);
       await refreshWallet();
       return {
         boardingAddress: res.address,
         amountSats: res.amount_sats,
+        netReceiveSats: res.net_receive_sats,
+        estimatedFeeSats: res.estimated_fee_sats,
         quoteId: res.quote_id,
         orderId: res.order_id,
       };
@@ -110,7 +112,7 @@ export const useBitcoin = (mintUrl?: string) => {
     isRequestingRef.current = true;
     setRequesting(true);
     try {
-      return await estimateOnChainSendFixedFloat(address, amount, targetMint);
+      return await estimateOnChainSendSpark(address, amount, targetMint);
     } catch (e: any) {
       toast.error(`Estimation failed: ${e.message || e}`);
       return null;
@@ -131,13 +133,12 @@ export const useBitcoin = (mintUrl?: string) => {
     isPayingRef.current = true;
     setPaying(true);
     try {
-      const txid = await executeOnChainSendFixedFloat(
+      const txid = await executeOnChainSendSpark(
         estimate.bridging_invoice,
         address,
         estimate.amount,
         targetMint,
-        estimate.order_id,
-        estimate.order_token
+        estimate.ark_fee
       );
       await refreshWallet();
       return { txid };

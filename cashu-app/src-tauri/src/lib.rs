@@ -39,7 +39,7 @@ pub fn run() {
                 nwc_enabled: std::sync::atomic::AtomicBool::new(initial_nwc_enabled),
             });
             
-            app.manage(commands::fixedfloat::FixedFloatState::new());
+            app.manage(commands::spark::SparkState::new());
             
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -110,13 +110,19 @@ pub fn run() {
             crate::nwc::get_pending_nwc_requests,
             crate::nwc::approve_nwc_request,
             crate::nwc::reject_nwc_request,
-            commands::fixedfloat::fixedfloat_get_credentials_status,
-            commands::fixedfloat::fixedfloat_set_credentials,
-            commands::fixedfloat::fixedfloat_is_sending,
-            commands::fixedfloat::fixedfloat_estimate_onchain_send,
-            commands::fixedfloat::fixedfloat_execute_onchain_send,
-            commands::fixedfloat::fixedfloat_get_deposit_address,
-            commands::fixedfloat::fixedfloat_get_limits,
+            commands::spark::spark_get_config,
+            commands::spark::spark_set_credentials,
+            commands::spark::spark_get_limits,
+            commands::spark::spark_is_sending,
+            commands::spark::spark_validate_address,
+            commands::spark::spark_quote_cashu_melt,
+            commands::spark::spark_melt_to_spark,
+            commands::spark::spark_topup_for_send,
+            commands::spark::spark_finalize_onchain_send,
+            commands::spark::spark_prepare_onchain_receive,
+            commands::spark::spark_prepare_mint_from_spark,
+            commands::spark::spark_complete_mint_from_spark,
+            commands::spark::spark_abort_unpaid_mint_from_spark,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
