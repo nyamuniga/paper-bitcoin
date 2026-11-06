@@ -54,7 +54,7 @@ export const AppUpdatePrompt: React.FC = () => {
       if (simulateUpdate) {
         setUpdateInfo({
           hasUpdate: true,
-          currentVersion: '0.1.16',
+          currentVersion: '0.1.15',
           latestVersion: '0.2.0',
           releaseName: 'v0.2.0 - Major New Release',
           releaseNotes: 'New MoMo top up & cash out features, enhanced speed.',
