@@ -6,6 +6,7 @@ import { useTransactionStore } from '../store/transactionStore';
 import { AppPhase } from '../types/momo';
 import { getGlobalNostrPrivateKey } from './useNostr';
 import { Transaction } from '../components/history/TransactionCard';
+import { syncAndSweepSpark } from '../services/sparkService';
 
 export const useHistory = () => {
   const [rawTransactions, setRawTransactions] = useState<Transaction[]>([]);
@@ -106,6 +107,7 @@ export const useHistory = () => {
   const handleRecoverPendingTransaction = async (txId: string) => {
     try {
       toast.loading('Checking status...', { id: txId });
+      await syncAndSweepSpark().catch(() => {});
       const status = await invoke<string>('check_transaction_status', { txId });
       
       if (status === 'Success') {

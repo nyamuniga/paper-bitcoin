@@ -38,8 +38,8 @@ export async function getCurrentAppVersion(): Promise<string> {
     const { getVersion } = await import('@tauri-apps/api/app');
     const version = await getVersion();
     if (version) return version;
-  } catch {}
-  return '0.1.14';
+  } catch { }
+  return '0.1.15';
 }
 
 /**
@@ -98,7 +98,7 @@ export async function checkAppUpdate(ignoreSessionDismissal = false): Promise<Up
       if (sessionStorage.getItem(UPDATE_DISMISSED_SESSION_KEY) === 'true') {
         return null;
       }
-    } catch {}
+    } catch { }
   }
 
   const currentVersion = await getCurrentAppVersion();
@@ -127,7 +127,7 @@ export async function checkAppUpdate(ignoreSessionDismissal = false): Promise<Up
 export function dismissUpdateForSession(): void {
   try {
     sessionStorage.setItem(UPDATE_DISMISSED_SESSION_KEY, 'true');
-  } catch {}
+  } catch { }
 }
 
 /**

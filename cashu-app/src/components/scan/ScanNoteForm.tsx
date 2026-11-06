@@ -160,6 +160,17 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
             <LnurlValidationStatus input={parsed.addressOrInvoice} validation={lnurlValidation} />
           )}
 
+          {parsed.type === 'onchain' && (
+            <div className="flex items-center justify-between text-[12px] font-mono px-3 py-2 rounded-lg bg-surface-container-highest border border-emerald-500/30 text-emerald-400">
+              <span>✓ Bitcoin On-Chain Address Detected</span>
+              {parsed.amountSats && (
+                <span className="text-primary font-semibold">
+                  ₿{parsed.amountSats.toLocaleString()}
+                </span>
+              )}
+            </div>
+          )}
+
           {error && <div className="text-error text-sm text-center">{error}</div>}
 
           <button

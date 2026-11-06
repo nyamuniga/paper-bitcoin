@@ -8,8 +8,10 @@ import {
   executeSendPayment, 
   initiateAndVerifyPayout,
 } from '../services/flowServices';
+import { subscribeToSparkEvents, syncAndSweepSpark } from '../services/sparkService';
 
 const POLLING_INTERVAL = 2000;
+const SPARK_SWEEP_INTERVAL = 15000;
 
 export const TransactionProcessor = () => {
   const { activeTransaction } = useTransactionStore();
@@ -19,6 +21,7 @@ export const TransactionProcessor = () => {
   const momoTimeoutRef = useRef<any>(null);
   const backendPollingRef = useRef<any>(null);
   const isPollingRef = useRef<boolean>(false);
+  const lastSparkSweepRef = useRef<number>(0);
 
   // 1. Transaction Resumption (Mobile Money)
   useEffect(() => {
@@ -73,6 +76,21 @@ export const TransactionProcessor = () => {
           t.status === 'Pending' && 
           t.id !== activeQuoteId
         );
+        const pendingOnchainReceive = pendingTxs.find(
+          (t: any) => 'ReceiveOnchain' in t.tx_type && t.mint_url
+        );
+        const now = Date.now();
+        if (
+          now - lastSparkSweepRef.current >= SPARK_SWEEP_INTERVAL ||
+          pendingOnchainReceive
+        ) {
+          lastSparkSweepRef.current = now;
+          const swept = await syncAndSweepSpark(pendingOnchainReceive?.mint_url);
+          if (swept && isMounted) {
+            await refreshWallet();
+          }
+        }
+
         if (pendingTxs.length > 0) {
           const promises = pendingTxs.map(async (tx) => {
             if (
@@ -106,8 +124,23 @@ export const TransactionProcessor = () => {
 
     pollBackend(); // Initial check
 
+    const unsubscribeSpark = subscribeToSparkEvents(async (event) => {
+      if (
+        event.type === 'claimedDeposits' ||
+        event.type === 'unclaimedDeposits' ||
+        event.type === 'newDeposits' ||
+        event.type === 'paymentSucceeded'
+      ) {
+        const swept = await syncAndSweepSpark();
+        if (swept && isMounted) {
+          await refreshWallet();
+        }
+      }
+    });
+
     return () => {
       isMounted = false;
+      unsubscribeSpark();
       if (backendPollingRef.current) clearTimeout(backendPollingRef.current);
     };
   }, []);

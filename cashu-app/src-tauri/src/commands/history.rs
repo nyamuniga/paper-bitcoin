@@ -6,8 +6,66 @@ use tauri::State;
 
 #[tauri::command]
 pub async fn get_transactions(state: State<'_, AppState>) -> CommandResult<Vec<Transaction>> {
-    let (wallet_guard, _, _) = state.lock_and_get_wallet().await?;
-    let w_state = wallet_guard.as_ref().unwrap();
+    let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
+    let w_state = wallet_guard.as_mut().unwrap();
+
+    // Auto-deduplicate any multiple Pending ReceiveOnchain entries created by earlier sweep retries:
+    // keep the newest Pending ReceiveOnchain (preferring one with a real Bitcoin address if another is a bridge placeholder).
+    let pending_onchain_count = w_state
+        .transactions
+        .iter()
+        .filter(|t| {
+            t.status == ecash_core::types::TransactionStatus::Pending
+                && matches!(t.tx_type, ecash_core::types::TransactionType::ReceiveOnchain(_))
+        })
+        .count();
+
+    if pending_onchain_count > 1 {
+        let real_address_and_mint = w_state.transactions.iter().find_map(|t| {
+            if t.status == ecash_core::types::TransactionStatus::Pending {
+                if let ecash_core::types::TransactionType::ReceiveOnchain(ref d) = t.tx_type {
+                    if !d.address.is_empty() && d.address != "spark-onchain-bridge" {
+                        return Some((d.address.clone(), t.mint_url.clone()));
+                    }
+                }
+            }
+            None
+        });
+
+        // Pick the newest pending ReceiveOnchain to keep
+        if let Some(keep_id) = w_state
+            .transactions
+            .iter()
+            .filter(|t| {
+                t.status == ecash_core::types::TransactionStatus::Pending
+                    && matches!(t.tx_type, ecash_core::types::TransactionType::ReceiveOnchain(_))
+            })
+            .max_by_key(|t| t.timestamp)
+            .map(|t| t.id.clone())
+        {
+            w_state.transactions.retain(|t| {
+                t.id == keep_id
+                    || t.status != ecash_core::types::TransactionStatus::Pending
+                    || !matches!(t.tx_type, ecash_core::types::TransactionType::ReceiveOnchain(_))
+            });
+            if let Some((real_addr, real_mint)) = real_address_and_mint {
+                if let Some(kept) = w_state.transactions.iter_mut().find(|t| t.id == keep_id) {
+                    if !real_mint.is_empty() {
+                        kept.mint_url = real_mint;
+                    }
+                    if let ecash_core::types::TransactionType::ReceiveOnchain(ref mut d) =
+                        kept.tx_type
+                    {
+                        if d.address == "spark-onchain-bridge" || d.address.is_empty() {
+                            d.address = real_addr;
+                        }
+                    }
+                }
+            }
+            let _ = w_state.save_encrypted(&path, &passphrase);
+        }
+    }
+
     let mut txs = w_state.transactions.clone();
     txs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp)); // Newest first
     Ok(txs)
