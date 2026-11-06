@@ -39,6 +39,16 @@ export const useScan = () => {
       return;
     }
 
+    if (parsed.type === 'onchain') {
+      navigate('/', {
+        state: {
+          lnbcInvoice: parsed.addressOrInvoice,
+          onchainAmountSats: parsed.amountSats ?? undefined,
+        },
+      });
+      return;
+    }
+
     if (parsed.type === 'lnurl' || parsed.type === 'lnurl-pay') {
       // Validate the Lightning Address / LNURL before handing off to the send flow
       // (covers camera scans, which bypass the live check on the paste box).

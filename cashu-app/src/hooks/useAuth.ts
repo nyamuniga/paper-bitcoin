@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { useNostrStore } from '../store/nostrStore';
 import { useTransactionStore } from '../store/transactionStore';
+import { disconnectSparkSdk } from '../services/sparkService';
 
 export const useAuth = () => {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
@@ -144,6 +145,7 @@ export const useAuth = () => {
     setLoading(true);
     handleClearError();
     try {
+      await disconnectSparkSdk();
       await invoke('reset_wallet');
       useNostrStore.getState().reset();
       useTransactionStore.getState().reset();
@@ -165,6 +167,7 @@ export const useAuth = () => {
     setLoading(true);
     handleClearError();
     try {
+      await disconnectSparkSdk();
       await invoke('lock_wallet');
       localStorage.removeItem('rememberMe');
       useWalletStore.getState().clearWalletState();

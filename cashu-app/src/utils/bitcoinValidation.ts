@@ -44,14 +44,43 @@ export const parseBitcoinInput = (input: string): ParsedBitcoinInput => {
     };
   }
 
-  // 4. Check for On-Chain Bitcoin address
-  const onChainMatch = cleanInput.match(/^(bitcoin:)?([13mn2][a-km-zA-HJ-NP-Z1-9]{25,34}|(bc1|tb1|bcrt1)[a-z0-9]{11,87})$/i);
+  // 4. Check for On-Chain Bitcoin address or BIP-21 URI (e.g. bitcoin:bc1q...?amount=0.001&label=...)
+  const bip21Stripped = cleanInput.replace(/^bitcoin:(?:\/\/)?/i, '');
+  const [rawAddrPart, rawQueryPart] = bip21Stripped.split('?');
+  const candidateAddr = (rawAddrPart || '').trim();
+  const onChainMatch = candidateAddr.match(
+    /^([13mn2][a-km-zA-HJ-NP-Z1-9]{25,34}|(bc1|tb1|bcrt1)[a-z0-9]{11,87})$/i
+  );
   if (onChainMatch) {
-    const addr = onChainMatch[2];
+    const addr = candidateAddr.toLowerCase().startsWith('bc1') ||
+      candidateAddr.toLowerCase().startsWith('tb1') ||
+      candidateAddr.toLowerCase().startsWith('bcrt1')
+      ? candidateAddr.toLowerCase()
+      : candidateAddr;
+
+    let bip21AmountSats: number | null = null;
+    if (rawQueryPart) {
+      try {
+        const params = new URLSearchParams(rawQueryPart);
+        const lightningParam = params.get('lightning') || params.get('LIGHTNING');
+        const amountBtcStr = params.get('amount') || params.get('AMOUNT');
+        if (amountBtcStr) {
+          const btc = parseFloat(amountBtcStr);
+          if (!isNaN(btc) && btc > 0) {
+            bip21AmountSats = Math.round(btc * 100_000_000);
+          }
+        }
+        // If no valid on-chain address was provided but a lightning fallback exists, handled above
+        void lightningParam;
+      } catch {
+        // Ignore malformed query string
+      }
+    }
+
     return {
       type: 'onchain',
       addressOrInvoice: addr,
-      amountSats: null
+      amountSats: bip21AmountSats,
     };
   }
 

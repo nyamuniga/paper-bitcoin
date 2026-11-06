@@ -4,6 +4,15 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 
 ---
 
+## [0.1.16] - 2026-11-06
+
+### ⚡ Self-Custodial On-Chain Bitcoin via Breez SDK – Spark
+- **Replaced FixedFloat with Breez SDK – Spark (`@breeztech/breez-sdk-spark`)**: Transitioned on-chain Bitcoin sends and deposits from custodial exchange swaps to a fully self-custodial Spark L2 bridge derived deterministically from the user's BIP39 wallet seed.
+- **Exact Receiver Amount Guarantee (`feesExcluded` + Auto Deficit Top-Up)**: Calibrated pre-bridge cooperative exit fee estimation to match Spark SSP parameters (`750 sats` base service fee + `250 vB` L1 broadcast fee + Lightning bridge buffer) and added automatic deficit top-up (`spark_topup_for_send`) so recipients always receive the exact inputted satoshi amount on-chain.
+- **Fee-Inclusive On-Chain Deposits & Mint Binding**: Added Spark L1 deposit claim + Lightning sweep fee estimation into BIP-21 deposit URIs/QR codes so users receive their full requested amount in Cashu, while strictly preserving the user-selected mint and deduplicating pending receive entries across app restarts.
+- **Universal Bitcoin Address & BIP-21 Scanning**: Upgraded the Scan page (`Scan.tsx` & `bitcoinValidation.ts`) to detect on-chain Bitcoin addresses and BIP-21 URIs (`bitcoin:bc1q...?amount=...`) with instant pre-filled handoff to the Bitcoin send flow.
+- **Security Hardening & Android Build Support**: Added AES-256-GCM encryption for stored credentials in `settings.bin`, memory zeroization for temporary seed buffers, automatic SDK disconnect on wallet lock/reset, and compile-time `.env` key injection via `build.rs` and Vite `envPrefix` for Android APK builds with zero hardcoded keys in source code.
+
 ## [0.1.15] - 2026-10-30
 
 ### 🔒 FixedFloat Security & In-Transit Encrypted Backend Proxy
