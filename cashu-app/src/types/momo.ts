@@ -21,6 +21,7 @@ export enum AppPhase {
   PAYOUT_COMPLETE = "PAYOUT_COMPLETE", 
   PAYOUT_FAILED = "PAYOUT_FAILED",
   RETRYABLE_ERROR = "RETRYABLE_ERROR", 
+  RECOVERY_REQUIRED = "RECOVERY_REQUIRED",
   EXPIRED = "EXPIRED", 
   // Ark Protocol Phases
   AWAITING_ASP_BOARDING = "AWAITING_ASP_BOARDING",
@@ -62,6 +63,8 @@ export interface TransactionDetails {
   paymentHash: string | null; 
   payoutReferenceId: string | null; 
   invoicePaid?: boolean;
+  momoSubmission?: 'not_started' | 'submitting' | 'accepted' | 'rejected';
+  recoveryMessage?: string;
   status?: TransactionStatus; 
   timestamp?: number; 
   fulfillmentStep?: FulfillmentStep; 
