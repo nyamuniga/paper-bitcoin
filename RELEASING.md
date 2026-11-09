@@ -14,6 +14,8 @@ The release checker is a hygiene check, not a full security audit. Use `--histor
 
 Update `cashu-app/package.json`, its npm lockfile root versions, `cashu-app/src-tauri/tauri.conf.json`, and every workspace crate manifest together. The app's browser update fallback imports its version from `package.json`. Update website download URLs, desktop/mobile version text and the `config.js` cache query together. Add the corresponding changelog entry.
 
+When updating Rust dependencies, align the resolved `tauri` and `tauri-plugin-*` versions with their JavaScript counterparts: each pair must share its major/minor release. Keep the Tauri CLI on the corresponding release line. `check:release` checks these pairs in both lockfiles; a frontend build alone does not catch native version mismatches. Rebuild the native target after dependency updates.
+
 ## Required checks
 
 Use Node.js 24 (`nvm use`) and stable Rust with Tauri's platform prerequisites installed.

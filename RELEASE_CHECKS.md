@@ -39,6 +39,7 @@ RustSec still emits these upstream informational warnings; none has been silentl
 - Public-source checks reject credential/build/wallet/note paths and recognizable private keys, compare known local credentials without printing them, and check version consistency.
 - Authentication/payment payload logs, phone-number logs and proof-secret logs were removed. Proxy AES key/IV byte packing was corrected and checked against independent AES-256-CBC/HMAC decoding. Development update simulation is excluded from production behavior.
 - npm and Cargo lockfiles, Node.js 24, `npm ci`, payment tests and audit checks are part of release/CI setup.
+- Android build verification exposed Rust/JavaScript Tauri minor-version mismatches after the dependency updates. The JavaScript runtime/plugins and CLI have been aligned, and the release checker now rejects mismatched pairs in the lockfiles before a native build.
 
 ## Validation
 
