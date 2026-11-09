@@ -1,6 +1,6 @@
 import { Encryption } from '../utils/encryption';
 
-import { fetch } from '@tauri-apps/plugin-http';
+import { requestProxyJson } from './proxyRequest';
 
 import { LIGHTNING_API_ENDPOINT } from '../constants';
 
@@ -31,7 +31,7 @@ const queryBlink = async (query: string, variables: object) => {
         timestamp: encrypted.timestamp,
     };
 
-    const response = await fetch(targetUrl, {
+    const responseData = await requestProxyJson(targetUrl, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -41,12 +41,7 @@ const queryBlink = async (query: string, variables: object) => {
         body: JSON.stringify(requestData),
     });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Blink API Error: ${response.status} - ${errorText}`);
-    }
-
-    const { data, errors } = await response.json();
+    const { data, errors } = responseData;
 
     if (errors) {
         throw new Error(`Blink GraphQL Error: ${errors.map((e: any) => e.message).join(', ')}`);
