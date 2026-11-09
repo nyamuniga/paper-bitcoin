@@ -2,9 +2,10 @@ import { invoke } from '@tauri-apps/api/core';
 import type { BreezSdk, Payment, PrepareSendPaymentResponse, FetchConversionLimitsResponse } from '@breeztech/breez-sdk-spark/web';
 import { getSparkSdk } from './sparkService';
 import { TransferPendingError, TransferFailedError, transferErrorDetails } from './transferError';
+import { withConversionSpendGuard, UnsubmittedConversionError } from './conversionSpendGuard';
 import { withSparkBalanceLock } from './sparkBalanceLock';
 import { resizeTransferOutput, TransferMinimumError, providerMinimum } from './transferAmount';
-import { USDB_TOKEN_ID, USDB_TOKEN_HEX, USD_DECIMALS, SLIPPAGE_BPS, conversionCost, encodeQuote, decodeQuote } from './stableBalanceModel';
+import { USDB_TOKEN_ID, USDB_TOKEN_HEX, USD_DECIMALS, SLIPPAGE_BPS, PROTECTION_BPS, protectedCost, conversionCost, encodeQuote, decodeQuote } from './stableBalanceModel';
 import type { StableDirection, StableOperation, StableStage } from './stableBalanceModel';
 
 export const getStableOperations = () => invoke<StableOperation[]>('stable_operations');
@@ -13,6 +14,8 @@ function isUsdb(id: string): boolean { return id === USDB_TOKEN_ID || id === USD
 const verifiedAssets = new WeakMap<BreezSdk, Promise<void>>();
 const limitCache = new WeakMap<BreezSdk, Map<StableDirection, {expires: number; request: Promise<FetchConversionLimitsResponse>}>>();
 const previewContexts = new WeakMap<StableOperation, {sdk: BreezSdk; sourceBudget: bigint | undefined}>();
+const fittingCache = new WeakMap<BreezSdk, Map<string, {expires:number; output:bigint; principal:bigint; debit:bigint}>>();
+const MAX_FIT_QUOTES = 5;
 
 async function checkedSdk(): Promise<BreezSdk> {
   const sdk = await getSparkSdk();
@@ -38,14 +41,19 @@ async function conversionLimits(sdk: BreezSdk, direction: StableDirection): Prom
   entries.set(direction, {expires:Date.now()+20000, request});
   try { return await request; } catch (error) { if (entries.get(direction)?.request === request) entries.delete(direction); throw error; }
 }
-export async function getStableBalance(ensureSynced = true): Promise<bigint> {
+export async function getStableBalanceSnapshot(ensureSynced = true): Promise<{dollars: bigint; bitcoin: bigint}> {
   const info = await (await checkedSdk()).getInfo({ ensureSynced });
   if (info.lastSyncError) throw new Error('Spark could not sync the stable balance.');
+  let dollars = 0n;
   for (const [id, token] of info.tokenBalances) {
-    if (isUsdb(id) && isUsdb(token.tokenMetadata.identifier) && token.tokenMetadata.decimals === USD_DECIMALS) return token.balance;
+    if (isUsdb(id) && isUsdb(token.tokenMetadata.identifier) && token.tokenMetadata.decimals === USD_DECIMALS) dollars = token.balance;
   }
-  return 0n;
+  return {dollars, bitcoin: BigInt(info.balanceSats)};
 }
+export async function getStableBalance(ensureSynced = true): Promise<bigint> {
+  return (await getStableBalanceSnapshot(ensureSynced)).dollars;
+}
+
 function checkedEstimate(prep: PrepareSendPaymentResponse, direction: StableDirection) {
   const estimate = prep.conversionEstimate;
   if (!estimate || estimate.options.conversionType.type !== (direction === 'toUsd' ? 'fromBitcoin' : 'toBitcoin')) throw new Error('Spark did not return a conversion quote.');
@@ -71,9 +79,10 @@ export function previewStableTransfer(direction: StableDirection, outputAmount: 
 
 // Manual conversions keep only the selected amount in USDB; automatic conversion stays off.
 // https://sdk-doc-spark.breez.technology/guide/token_conversion.html
-export async function quoteStableConversion(direction: StableDirection, outputAmount: bigint, mintUrl: string, cashuBalance: number, sourceBudget?: bigint, mode?: {preview?: boolean; signal?: AbortSignal; refresh?: StableOperation}): Promise<StableOperation> {
+export async function quoteStableConversion(direction: StableDirection, outputAmount: bigint, mintUrl: string, cashuBalance: number, sourceBudget?: bigint, mode?: {protected?: boolean; preview?: boolean; signal?: AbortSignal; refresh?: StableOperation}): Promise<StableOperation> {
   const prepare = async (): Promise<StableOperation> => {
     mode?.signal?.throwIfAborted();
+    if (mode?.protected && (sourceBudget === undefined || mode.refresh)) throw new Error('Protected reviews require a fixed spending budget.');
     const active = await getActiveConversion();
     if (mode?.refresh) {
       if (!active || active.id !== mode.refresh.id || active.stage !== 'quoted' || active.quote_json !== mode.refresh.quote_json || active.expires_at !== mode.refresh.expires_at) throw new Error('The review quote changed. Reopen its latest status.');
@@ -89,6 +98,16 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
     if (sourceBudget !== undefined && limits.minFromAmount && sourceBudget < limits.minFromAmount) throw new TransferMinimumError(limits.minFromAmount);
     if (sourceBudget !== undefined && limits.minToAmount && outputAmount < limits.minToAmount) outputAmount = limits.minToAmount;
     const ownAddress = direction === 'toUsd' ? (await sdk.receivePayment({paymentMethod:{type:'sparkAddress'}})).paymentRequest : '';
+    const cacheKey = `${direction}|${mintUrl}`;
+    const cachedFit = fittingCache.get(sdk)?.get(cacheKey);
+    if (sourceBudget !== undefined && cachedFit && cachedFit.expires > Date.now()) {
+      const principal = (outputAmount * cachedFit.principal + cachedFit.output - 1n) / cachedFit.output;
+      const debit = principal + cachedFit.debit - cachedFit.principal;
+      if (debit > sourceBudget) {
+        const seeded = resizeTransferOutput(outputAmount, sourceBudget, debit, principal);
+        outputAmount = seeded > (limits.minToAmount ?? 0n) ? seeded : (limits.minToAmount ?? 1n);
+      }
+    }
     let quotingMinimum = false;
     let best: StableOperation | null = null;
     let previousRejectedDebit: bigint | null = null;
@@ -102,7 +121,7 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
       previousRejectedDebit = debit;
       return next;
     };
-    for (let attempt = 0; attempt < (sourceBudget === undefined ? 1 : 12); attempt++) {
+    for (let attempt = 0; attempt < (sourceBudget === undefined ? 1 : MAX_FIT_QUOTES); attempt++) {
       mode?.signal?.throwIfAborted();
       if (outputAmount <= 0n) throw new Error('Amount is too small after fees. Try a larger amount.');
       if (limits.minToAmount && outputAmount < limits.minToAmount) throw new Error('Amount is below Spark’s conversion minimum. Try a larger amount.');
@@ -111,7 +130,7 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
       if (direction === 'toUsd') {
         paymentRequest = ownAddress;
       } else {
-        const quote = await invoke<{quote_id: string; invoice: string}>(mode?.preview ? 'stable_mint_quote_preview' : 'receive_lightning', {mintUrl, amount: Number(outputAmount)});
+        const quote = await invoke<{quote_id: string; invoice: string}>('stable_mint_quote_preview', {mintUrl, amount: Number(outputAmount)});
         paymentRequest = quote.invoice;
         mintQuoteId = quote.quote_id;
       }
@@ -139,10 +158,11 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
       }
       if (limits.minFromAmount && prep.conversionEstimate!.amountIn === limits.minFromAmount) quotingMinimum = true;
       if (cost > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Conversion is too large.');
-      if (sourceBudget !== undefined && cost > sourceBudget && !quotingMinimum) {
+      const reservedCost = mode?.protected ? protectedCost(cost) : cost;
+      if (sourceBudget !== undefined && reservedCost > sourceBudget && !quotingMinimum) {
         // Avoid generating funding invoices and mint fee quotes for an already oversized conversion.
         const principal = prep.conversionEstimate!.amountIn;
-        const resized = smallerOutput(cost, principal);
+        const resized = smallerOutput(reservedCost, principal);
         if (resized <= 0n && limits.minFromAmount) {
           outputAmount = (outputAmount * limits.minFromAmount + principal - 1n) / principal + 1n;
           quotingMinimum = true;
@@ -151,11 +171,11 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
       }
       let fundingInvoice = '';
       let fundingSats = 0;
-      let maxDebit = cost;
+      let maxDebit = reservedCost;
       if (direction === 'toUsd') {
         if (prep.paymentMethod.type !== 'sparkAddress') throw new Error('Unexpected conversion destination.');
         if (prep.paymentMethod.fee !== 0n) throw new Error('Spark returned an unsupported self-conversion fee.');
-        fundingSats = Number(cost);
+        fundingSats = Number(reservedCost);
         const received = await sdk.receivePayment({paymentMethod: {type: 'bolt11Invoice', description: 'Bitnotes stable balance funding', amountSats: fundingSats, expirySecs: 600}});
         if (received.fee !== 0n) throw new Error('Spark charges a receive fee for this amount. Choose a larger conversion.');
         mode?.signal?.throwIfAborted();
@@ -177,11 +197,14 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
       const op: StableOperation = {
         id: crypto.randomUUID(), direction, stage: 'quoted', mint_url: mintUrl,
         created_at: Math.floor(Date.now() / 1000), expires_at: Math.floor(Date.now() / 1000) + 60,
-        output_amount: outputAmount.toString(), max_debit: maxDebit.toString(), funding_invoice: fundingInvoice,
+        output_amount: outputAmount.toString(), max_debit: (mode?.protected ? sourceBudget! : maxDebit).toString(), protection_bps: mode?.protected ? PROTECTION_BPS : 0, funding_invoice: fundingInvoice,
         funding_sats: fundingSats, mint_quote_id: mintQuoteId, quote_json: encodeQuote(prep), payment_id: null, conversion_request_version: 0,
         prior_payment_ids: [], return_quote_id: '', return_quote_json: '', return_amount: 0,
       };
       best = op;
+      let cache = fittingCache.get(sdk);
+      if (!cache) {cache = new Map(); fittingCache.set(sdk,cache);}
+      cache.set(cacheKey,{expires:Date.now()+60000,output:outputAmount,principal:prep.conversionEstimate!.amountIn,debit:maxDebit});
       // A valid fee-inclusive quote is enough. Maximizing the remaining budget
       // creates more invoices and mint requests for negligible additional output.
       break;
@@ -209,6 +232,7 @@ export async function refreshStableQuote(id: string, cashuBalance: number): Prom
   const reused = await withSparkBalanceLock(async () => {
     const op = (await getStableOperations()).find(o => o.id === id);
     if (!op || op.stage !== 'quoted') throw new Error('Only a transfer still in review can refresh its rate.');
+    if (op.protection_bps) throw new Error('Protected review bounds are fixed. Edit the amount to request a new quote.');
     previous = op;
     const sdk = await checkedSdk();
     const old = decodeQuote<PrepareSendPaymentResponse>(op.quote_json);
@@ -237,17 +261,18 @@ export async function refreshStableQuote(id: string, cashuBalance: number): Prom
   if (!previous) throw new Error('Review quote unavailable.');
   return quoteStableConversion(previous.direction, BigInt(previous.output_amount), previous.mint_url, cashuBalance, BigInt(previous.max_debit), {refresh: previous});
 }
-/** Persist a fresh Bitcoin preview directly; reverse payments still prepare their blinded receive outputs. */
+/** Reuse a fresh checked preview; prepare recovery outputs only for its selected receive quote. */
 export async function reviewStableTransfer(preview: StableOperation, sourceBudget: bigint, cashuBalance: number): Promise<StableOperation> {
   const context = previewContexts.get(preview);
   const sdk = await getSparkSdk();
   if (!context || context.sdk !== sdk || context.sourceBudget !== sourceBudget) throw new Error('Wallet or amount changed. Check the amount again.');
-  if (preview.direction === 'toSats' || Date.now() - preview.created_at * 1000 > 15000) {
+  if (Date.now() - preview.created_at * 1000 > 15000) {
     return quoteStableConversion(preview.direction, BigInt(preview.output_amount), preview.mint_url, cashuBalance, sourceBudget);
   }
   return withSparkBalanceLock(async () => {
     if (await getSparkSdk() !== context.sdk) throw new Error('Wallet changed. Check the amount again.');
-    if (preview.expires_at * 1000 <= Date.now() || sourceBudget > BigInt(cashuBalance) || BigInt(preview.max_debit) > sourceBudget) throw new Error('Amount or balance changed. Check the amount again.');
+    const available = preview.direction === 'toUsd' ? BigInt(cashuBalance) : await getStableBalance(true);
+    if (preview.expires_at * 1000 <= Date.now() || sourceBudget > available || BigInt(preview.max_debit) > sourceBudget) throw new Error('Amount or balance changed. Check the amount again.');
     const prior = await sdk.listPayments({limit:1000});
     return invoke('stable_begin', {operation:{...preview, id:crypto.randomUUID(), prior_payment_ids:prior.payments.map(p=>p.id)}});
   });
@@ -296,17 +321,25 @@ export async function executeStableConversion(id: string): Promise<StableOperati
       if (prep.paymentMethod.type !== 'bolt11Invoice') throw new Error('Invalid saved ecash invoice.');
       prep = await sdk.prepareSendPayment({paymentRequest: {type: 'input', input: prep.paymentMethod.invoiceDetails.invoice.bolt11}, amount: BigInt(op.output_amount), conversionOptions: prep.conversionEstimate!.options, feePolicy: 'feesExcluded'});
       if (conversionCost(checkedEstimate(prep, 'toSats')) > BigInt(op.max_debit)) throw new Error('The USD quote changed. Cancel it and request a fresh quote.');
+      // Persist receive recovery outputs for the reviewed invoice before any send.
+      await invoke('stable_accept_mint_quote',{id:op.id});
     }
     op = await advance(op, 'converting');
     if (op.conversion_request_version !== 1) throw new Error('Restart the app to load the updated wallet backend before converting.');
     // AMM/token legs reject idempotency keys before sending. The durable stage prevents retries.
     // https://github.com/breez/spark-sdk/blob/main/crates/breez-sdk/core/src/sdk/payments/send/mod.rs
     try {
-      const sent = await sdk.sendPayment({prepareResponse: prep});
+      const sent = await withConversionSpendGuard(op, checkedEstimate(prep, op.direction).fee, () => sdk.sendPayment({prepareResponse: prep}));
       op = await advance(op, 'converting', sent.payment.id);
       return await settle(op, sent.payment);
     } catch (error) {
       if (error instanceof TransferFailedError) throw error;
+      if (error instanceof UnsubmittedConversionError) {
+        // Only a live pre-broadcast rejection with zero source approvals can reset.
+        // A crash, timeout or rejection after any approval retains the durable stage.
+        await invoke('stable_recover_unsubmitted_conversion', {id:op.id});
+        throw error;
+      }
       // The durable converting stage already reserves the funds. A transport or sync
       // error after submission cannot establish failure; recover by checking, never resending.
       throw new TransferPendingError(transferErrorDetails(error), op);

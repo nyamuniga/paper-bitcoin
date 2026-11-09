@@ -7,7 +7,7 @@ import { useCurrencyStore } from '../../store/currencyStore';
 import { useTransferAvailability } from '../../hooks/useTransferAvailability';
 import { useReviewQuoteRefresh } from '../../hooks/useReviewQuoteRefresh';
 import { cancelConversion, checkStableConversion, executeStableConversion, executeFundingReturn, getActiveConversion, quoteFundingReturn, quoteStableConversion, recoverPendingConversion } from '../../services/stableBalanceService';
-import { conversionCost, decodeQuote, formatUnits, parseUnits, USD_DECIMALS } from '../../services/stableBalanceModel';
+import { conversionCost, decodeQuote, formatUnits, parseUnits, USD_DECIMALS, conservativeOutput } from '../../services/stableBalanceModel';
 import { dollarAmount, estimateTransferOutput, percentageAmount, TransferMinimumError } from '../../services/transferAmount';
 import type { StableDirection, StableOperation } from '../../services/stableBalanceModel';
 import type { PrepareSendPaymentResponse } from '@breeztech/breez-sdk-spark/web';
@@ -46,7 +46,14 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => { live = false; clearInterval(timer); };
   }, []);
-  useEffect(() => { if (!usdRate) void fetchRates(); }, [usdRate, fetchRates]);
+  useEffect(() => {
+    if (operation || busy) return;
+    const update = () => {if (!document.hidden) void fetchRates();};
+    update();
+    const timer = setInterval(update, 3000);
+    document.addEventListener('visibilitychange', update);
+    return () => {clearInterval(timer);document.removeEventListener('visibilitychange', update);};
+  }, [operation, busy, fetchRates]);
   const applyReviewQuote = useCallback((next: StableOperation) => {setOperation(next);setError('');}, []);
   const reviewRefresh = useReviewQuoteRefresh(operation, !busy, cashuBalance, busyRef, applyReviewQuote);
   const reviewRetrySeconds = Math.max(0, Math.ceil((reviewRefresh.retryAt - now) / 1000));
@@ -126,13 +133,13 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
   const insufficient = sourceBalance !== null && sourceAmount > sourceBalance;
   const availability = useTransferAvailability({enabled:!busy && !operation, direction, mintUrl, sourceAmount});
   const suggestedMinimum = availability.minimum;
-  const displayEstimate = estimate;
+  const displayEstimate = estimate === null ? null : conservativeOutput(estimate);
   const constraintMessage = availability.limitsFailed ? 'Limits will be checked with your quote.' : !availability.limitsReady ? 'Checking transfer limits…' : availability.minimum ? `Minimum ${money(availability.minimum, !toDollars)} + fees. Maximum ${sourceBalance === null ? 'not available' : money(sourceBalance, !toDollars)}.` : `Maximum ${sourceBalance === null ? 'not available' : money(sourceBalance, !toDollars)}. Minimum checked with your quote.`;
   let amountMessage = '';
   if (insufficient) amountMessage = `Enter ${money(sourceBalance!, !toDollars)} or less.`;
   else if (suggestedMinimum !== null && sourceBalance !== null && suggestedMinimum > sourceBalance) amountMessage = `Your balance is below ${money(suggestedMinimum, !toDollars)} plus fees. Add funds or switch balances.`;
   else if (availability.belowMinimum) amountMessage = `Enter at least ${money(availability.minimum!, !toDollars)}, plus fees.`;
-  else amountMessage = 'Estimate only. Your exact rate and fees appear at review.';
+  else amountMessage = 'Includes a 3% movement allowance and the remaining balance will be moved back to your wallet.';
   const canReview = sourceAmount > 0n && estimate !== null && estimate > 0n && sourceBalance !== null && !insufficient && !availability.belowMinimum;
 
   const setInput = (value: string) => {
@@ -146,12 +153,13 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
   };
   const isReturn = operation?.stage === 'returnQuoted' || operation?.stage === 'returning' || (operation?.stage === 'complete' && !!operation.return_quote_id);
   const isReview = operation?.stage === 'quoted' || operation?.stage === 'returnQuoted';
+  const protectedReview = !!operation?.protection_bps && !isReturn;
   const expired = operation?.stage === 'quoted' && operation.expires_at * 1000 <= now;
   const done = operation?.stage === 'complete' || operation?.stage === 'refunded';
   const quote = operation ? decodeQuote<PrepareSendPaymentResponse>(isReturn ? operation.return_quote_json : operation.quote_json) : null;
   const exactOutput = operation ? money(isReturn ? BigInt(operation.return_amount) : BigInt(operation.output_amount), !isReturn && toDollars) : '';
   const output = operation && !isReturn && toDollars ? dollarAmount(BigInt(operation.output_amount)) : exactOutput;
-  const debit = operation ? money(isReview && !toDollars && quote?.conversionEstimate ? conversionCost(quote.conversionEstimate) : BigInt(operation.max_debit), !toDollars) : '';
+  const debit = operation ? money(isReview && !protectedReview && !toDollars && quote?.conversionEstimate ? conversionCost(quote.conversionEstimate) : BigInt(operation.max_debit), !toDollars) : '';
   const conversion = quote?.conversionEstimate;
   const liveRate = conversion && conversion.amountIn > 0n && conversion.amountOut > 0n
     ? dollarAmount(toDollars ? conversion.amountOut * 100000000n / conversion.amountIn : conversion.amountIn * 100000000n / conversion.amountOut) : null;
@@ -160,11 +168,11 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
       ? `The mint is busy. Try again in ${quoteRetrySeconds} seconds. No money was moved.`
       : 'You can try again now. No money was moved.'
     : transferErrorMessage(error, operation && !['quoted', 'cancelled'].includes(operation.stage) ? 'pending' : 'review');
-  const edit = () => operation ? void run(async () => { await cancelConversion(operation); }) : onClose();
+  const edit = () => operation ? void run(async () => { if (operation.stage === 'quoted') setAmount(formatUnits(BigInt(operation.max_debit), sourceDecimals)); await cancelConversion(operation); }) : onClose();
   const review = () => void run(() => {
     if (Date.now() < quoteRetryAt) throw new Error('Wait for the mint’s retry delay before requesting another quote.');
     if (!canReview || estimate === null) throw new Error('Enter an amount within your available balance.');
-    return quoteStableConversion(direction, estimate, mintUrl, cashuBalance, sourceAmount);
+    return quoteStableConversion(direction, conservativeOutput(estimate), mintUrl, cashuBalance, sourceAmount, {protected:true});
   });
 
   return (
@@ -206,22 +214,22 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
           {operation && <>
             <div className="transfer-receipt">
               <div className={`transfer-receipt-symbol ${done ? 'is-done' : ''}`}>{done ? <Check size={26}/> : busy ? <Loader2 className="animate-spin" size={25}/> : <ArrowDown size={25}/>}</div>
-              <p className="transfer-receipt-label">{operation.stage === 'refunded' ? 'Your money has been returned' : done ? isReturn ? 'Returned to Bitcoin' : 'Added to your balance' : isReturn ? 'Return to Bitcoin' : 'You receive'}</p>
+              <p className="transfer-receipt-label">{operation.stage === 'refunded' ? 'Your money has been returned' : done ? isReturn ? 'Returned to Bitcoin' : 'Added to your balance' : isReturn ? 'Return to Bitcoin' : protectedReview && !done ? 'You receive at least' : 'You receive'}</p>
               <p className="transfer-receipt-amount">{operation.stage === 'refunded' ? 'Transfer cancelled' : output}</p>
               <p className="transfer-receipt-currency">{isReturn || !toDollars ? 'Bitcoin balance' : 'Dollar balance'}</p>
             </div>
             {isReview && <>
               <dl className="transfer-summary">
-                {!isReturn && <><div><dt>From</dt><dd>{toDollars ? 'Bitcoin' : 'Dollar'} balance</dd></div><div><dt>{toDollars ? 'You pay up to' : 'Estimated total'}</dt><dd>{debit}</dd></div></>}
-                {!isReturn && !toDollars && <div><dt>Maximum you pay</dt><dd>{money(BigInt(operation.max_debit), true)}</dd></div>}
+                {!isReturn && <><div><dt>From</dt><dd>{toDollars ? 'Bitcoin' : 'Dollar'} balance</dd></div><div><dt>{protectedReview ? 'Maximum you pay' : toDollars ? 'You pay up to' : 'Estimated total'}</dt><dd>{debit}</dd></div></>}
+                {!isReturn && !protectedReview && !toDollars && <div><dt>Maximum you pay</dt><dd>{money(BigInt(operation.max_debit), true)}</dd></div>}
                 <div><dt>Fees</dt><dd>{isReturn && quote?.paymentMethod.type === 'bolt11Invoice' ? `${quote.paymentMethod.lightningFeeSats + (quote.paymentMethod.sparkTransferFeeSats ?? 0)} sats` : 'Included in total'}</dd></div>
                 {!isReturn && liveRate && <div><dt>Rate</dt><dd>1 BTC ≈ {liveRate}</dd></div>}
               </dl>
-              {!isReturn && <p className="transfer-hint" role="status">{reviewRefresh.refreshing ? 'Updating rate and fees…' : reviewRefresh.error ? reviewRetrySeconds > 0 ? `Couldn’t update the rate. Retrying in ${reviewRetrySeconds}s…` : 'Couldn’t update the rate. Check again before confirming.' : `Live quote · updates in ${Math.max(0, Math.ceil((operation.expires_at * 1000 - 40000 - now) / 1000))}s`}</p>}
+              {!isReturn && <p className="transfer-hint" role="status">{protectedReview ? expired ? 'Review expired. Get a new quote before confirming.' : `Fixed review · ${Math.max(0, Math.ceil((operation.expires_at * 1000 - now) / 1000))}s to confirm` : reviewRefresh.refreshing ? 'Updating rate and fees…' : reviewRefresh.error ? reviewRetrySeconds > 0 ? `Couldn’t update the rate. Retrying in ${reviewRetrySeconds}s…` : 'Couldn’t update the rate. Check again before confirming.' : `Live quote · updates in ${Math.max(0, Math.ceil((operation.expires_at * 1000 - 40000 - now) / 1000))}s`}</p>}
               {!isReturn && reviewRefresh.error && <details className="transfer-details"><summary>Connection details</summary><p>{transferErrorDetails(reviewRefresh.error)}</p></details>}
-              <p className="transfer-hint">{isReturn ? 'Return your Bitcoin without completing the transfer. A small amount may remain to cover fees.' : toDollars ? 'Only this amount moves. The rest of your Bitcoin stays in your balance.' : 'The rate may move slightly before the transfer completes.'}</p>
-              {!isReturn && <details className="transfer-details"><summary>About this transfer</summary><p>Exact amount: {exactOutput}. Rate changes are limited to 0.1%. Your Dollar balance is held as a dollar-linked digital asset, rather than a bank deposit. Its value depends on it maintaining its link to the dollar.</p></details>}
-              <div className="transfer-actions"><button className="transfer-primary" disabled={busy || reviewRefresh.refreshing || !!expired || (!isReturn && !!reviewRefresh.error)} onClick={() => void run(() => isReturn ? executeFundingReturn(operation.id) : executeStableConversion(operation.id))}>{busy ? <><Loader2 className="animate-spin" size={19}/>Transferring…</> : reviewRefresh.refreshing ? <><Loader2 className="animate-spin" size={19}/>Updating rate…</> : expired ? 'Updating quote…' : isReturn ? 'Confirm return' : 'Confirm transfer'}</button>{!isReturn && (reviewRefresh.error || expired) && <button className="transfer-secondary" disabled={busy || reviewRefresh.refreshing || reviewRetrySeconds > 0} onClick={reviewRefresh.retry}>{reviewRetrySeconds > 0 ? `Try again in ${reviewRetrySeconds}s` : 'Update quote'}</button>}<button className="transfer-secondary" disabled={busy || reviewRefresh.refreshing} onClick={edit}>{isReturn ? 'Back to transfer' : 'Edit amount'}</button></div>
+              <p className="transfer-hint">{protectedReview ? toDollars ? 'A 3% movement allowance is included in your maximum. Unused sats remain yours and return automatically when at least 100 sats are available.' : 'Your maximum includes a 3% movement allowance. Any unused dollars stay in your Dollar balance.' : isReturn ? 'Return your Bitcoin without completing the transfer. A small amount may remain to cover fees.' : toDollars ? 'Only this amount moves. The rest of your Bitcoin stays in your balance.' : 'The rate may move slightly before the transfer completes.'}</p>
+              {!isReturn && <details className="transfer-details"><summary>About this transfer</summary><p>{protectedReview ? `Minimum received: ${exactOutput}. We recheck the provider price within your approved spending limit. If it no longer fits, we stop safely rather than spend more. Network or provider failures can still delay a transfer.` : `Exact amount: ${exactOutput}. Provider slippage is limited to 0.1%.`} Your Dollar balance is held as a dollar-linked digital asset, rather than a bank deposit. Its value depends on it maintaining its link to the dollar.</p></details>}
+              <div className="transfer-actions"><button className="transfer-primary" disabled={busy || reviewRefresh.refreshing || !!expired || (!isReturn && !!reviewRefresh.error)} onClick={() => void run(() => isReturn ? executeFundingReturn(operation.id) : executeStableConversion(operation.id))}>{busy ? <><Loader2 className="animate-spin" size={19}/>Transferring…</> : reviewRefresh.refreshing ? <><Loader2 className="animate-spin" size={19}/>Updating rate…</> : expired ? 'Review expired' : isReturn ? 'Confirm return' : 'Confirm transfer'}</button>{!isReturn && (reviewRefresh.error || expired) && <button className="transfer-secondary" disabled={busy || reviewRefresh.refreshing || reviewRetrySeconds > 0} onClick={protectedReview ? edit : reviewRefresh.retry}>{reviewRetrySeconds > 0 ? `Try again in ${reviewRetrySeconds}s` : protectedReview ? 'Edit and get new quote' : 'Update quote'}</button>}{!(protectedReview && expired) && <button className="transfer-secondary" disabled={busy || reviewRefresh.refreshing} onClick={edit}>{isReturn ? 'Back to transfer' : 'Edit amount'}</button>}</div>
             </>}
             {!isReview && !done && <>
               <p className="transfer-progress" role="status">{stages[operation.stage] ?? 'Your transfer is saved'}. {!error && ['funding', 'converting', 'settling', 'returning'].includes(operation.stage) ? 'We’ll check progress automatically. ' : ''}You can leave this screen and return later.</p>
