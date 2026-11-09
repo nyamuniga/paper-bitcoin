@@ -1,6 +1,6 @@
 import { Encryption } from '../utils/encryption';
 
-import { fetch } from '@tauri-apps/plugin-http';
+import { requestProxyJson, ProxyRequestError } from './proxyRequest';
 
 import { MOMO_API_BASE_URL } from '../constants';
 
@@ -14,6 +14,7 @@ export const initiateMomoPaymentRequest = async (
 
   const targetUrl = `${MOMO_API_BASE_URL}/payment/request/octoba`;
 
+  let submitted = false;
   try {
     const externalId = `payment_${Date.now()}`;
     const requestBody = {
@@ -45,7 +46,8 @@ export const initiateMomoPaymentRequest = async (
       timestamp: encrypted.timestamp
     };
 
-    const response = await fetch(targetUrl, {
+    submitted = true;
+    const responseData = await requestProxyJson(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -54,18 +56,6 @@ export const initiateMomoPaymentRequest = async (
       },
       body: JSON.stringify(requestData)
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API Error: ${response.status} - ${errorText}`);
-    }
-
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      throw new Error(`Received an invalid response from the server.`);
-    }
-
-    const responseData = await response.json();
 
     if (responseData.status === 'success' && responseData.data?.reference_id) {
       return {
@@ -77,63 +67,11 @@ export const initiateMomoPaymentRequest = async (
       throw new Error(responseData.message || "Failed to initiate MoMo payment due to an unknown API error.");
     }
   } catch (error: any) {
-    console.error('[MomoService] Error initiating MoMo payment:', error);
-    return { success: false, message: error.message || 'Payment request failed due to a network or server issue.' };
+    return { success: false, submission: !submitted ? 'rejected' : error instanceof ProxyRequestError ? error.submission : 'unknown', message: error.message || 'Could not confirm the payment request.' };
   }
 };
 
-export const checkMomoPaymentStatus = async (
-  txId: string | null
-): Promise<any> => {
-  if (!txId) {
-    return { status: 'FAILED', message: 'Missing reference ID.' };
-  }
-
-  const targetUrl = `${MOMO_API_BASE_URL}/payment/request/octoba/status/${txId}`;
-
-  try {
-    const response = await fetch(targetUrl);
-
-    if (!response.ok) {
-      return { status: 'PENDING', message: 'Temporarily unable to check status. Will retry.' };
-    }
-
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      return { status: 'PENDING', message: `Invalid server response type. Will retry.` };
-    }
-
-    const responseData = await response.json();
-
-    if (responseData.status === 'success' && responseData.data?.status) {
-      const mtnStatus = responseData.data.status.toUpperCase();
-
-      if (['SUCCESSFUL', 'SUCCESS', 'COMPLETED', 'APPROVED'].includes(mtnStatus)) {
-        return {
-          status: 'SUCCESSFUL',
-          message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
-        };
-      } else if (['FAILED', 'REJECTED'].includes(mtnStatus)) {
-        return {
-          status: 'FAILED',
-          message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
-        };
-      } else if (mtnStatus === 'PENDING') {
-        return {
-          status: 'PENDING',
-          message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
-        };
-      } else {
-        console.warn(`[MomoService] Unknown payment status received: ${mtnStatus}`);
-        return { status: 'PENDING', message: `Unknown payment status received: ${mtnStatus}.` };
-      }
-    } else {
-      return { status: 'FAILED', message: responseData.message || "Could not retrieve valid payment status." };
-    }
-  } catch (error: any) {
-    return { status: 'PENDING', message: 'Network issue while checking status. Will retry.' };
-  }
-};
+export const checkMomoPaymentStatus = (txId: string | null) => checkStatus('request', txId);
 
 export const initiateMomoPayout = async (
   txId: string,
@@ -143,6 +81,7 @@ export const initiateMomoPayout = async (
 ): Promise<any> => {
   const targetUrl = `${MOMO_API_BASE_URL}/payment/payout/octoba`;
 
+  let submitted = false;
   try {
     const externalId = `payout_${Date.now()}`;
     const requestBody = {
@@ -173,7 +112,8 @@ export const initiateMomoPayout = async (
       timestamp: encrypted.timestamp
     };
 
-    const response = await fetch(targetUrl, {
+    submitted = true;
+    const responseData = await requestProxyJson(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json', 'X-Encrypted': 'true',
@@ -182,12 +122,6 @@ export const initiateMomoPayout = async (
       body: JSON.stringify(requestData)
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API Error: ${response.status} - ${errorText}`);
-    }
-
-    const responseData = await response.json();
     if (responseData.status === 'success' && responseData.data?.reference_id) {
       return {
         success: true,
@@ -198,59 +132,22 @@ export const initiateMomoPayout = async (
       throw new Error(responseData.message || "Failed to initiate MoMo payout.");
     }
   } catch (error: any) {
-    return { success: false, message: error.message || 'Payout failed due to a network or server issue.' };
+    return { success: false, submission: !submitted ? 'rejected' : error instanceof ProxyRequestError ? error.submission : 'unknown', message: error.message || 'Could not confirm the payout request.' };
   }
 };
 
-export const checkMomoPayoutStatus = async (
-  txId: string | null
-): Promise<any> => {
-  if (!txId) {
-    return { status: 'FAILED', message: 'Missing reference ID for payout status check.' };
-  }
+export const checkMomoPayoutStatus = (txId: string | null) => checkStatus('payout', txId);
 
-  const targetUrl = `${MOMO_API_BASE_URL}/payment/payout/octoba/status/${txId}`;
-
+async function checkStatus(kind: 'request' | 'payout', txId: string | null) {
+  if (!txId) return {status:'UNKNOWN', message:'The saved transaction ID is missing. Contact support before retrying.'};
   try {
-    const response = await fetch(targetUrl);
-
-    if (!response.ok) {
-      return { status: 'PENDING', message: 'Temporarily unable to check payout status. Will retry.' };
-    }
-
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      return { status: 'PENDING', message: `Invalid server response for payout status. Will retry.` };
-    }
-
-    const responseData = await response.json();
-
-    if (responseData.status === 'success' && responseData.data?.status) {
-      const mtnStatus = responseData.data.status.toUpperCase();
-
-      if (['SUCCESSFUL', 'SUCCESS', 'COMPLETED', 'APPROVED'].includes(mtnStatus)) {
-        return {
-          status: 'SUCCESSFUL',
-          message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
-        };
-      } else if (['FAILED', 'REJECTED'].includes(mtnStatus)) {
-        return {
-          status: 'FAILED',
-          message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
-        };
-      } else if (mtnStatus === 'PENDING') {
-        return {
-          status: 'PENDING',
-          message: responseData.data.reason?.message || responseData.message || `Status: ${mtnStatus}`
-        };
-      } else {
-        console.warn(`[MomoService] Unknown payout status received: ${mtnStatus}`);
-        return { status: 'PENDING', message: `Unknown payout status received: ${mtnStatus}.` };
-      }
-    } else {
-      return { status: 'PENDING', message: responseData.message || "Could not retrieve valid payout status." };
-    }
-  } catch (error: any) {
-    return { status: 'PENDING', message: 'Network issue while checking payout status. Will retry.' };
+    const data = await requestProxyJson(`${MOMO_API_BASE_URL}/payment/${kind}/octoba/status/${encodeURIComponent(txId)}`);
+    const status = data.status === 'success' && typeof data.data?.status === 'string' ? data.data.status.toUpperCase() : '';
+    if (['SUCCESSFUL', 'SUCCESS', 'COMPLETED', 'APPROVED'].includes(status)) return {status:'SUCCESSFUL'};
+    if (['FAILED', 'REJECTED'].includes(status)) return {status:'FAILED', message:'The Mobile Money provider reported that this transfer failed.'};
+    if (status === 'PENDING') return {status:'PENDING', message:'The provider is still processing this transfer.'};
+    return {status:'UNKNOWN', message:'The service could not confirm this transfer yet. Keep this record and check again. If it remains unavailable, contact support with the transaction ID.'};
+  } catch (error) {
+    return {status:'UNKNOWN', message:error instanceof Error ? error.message : 'Unable to check this transfer.'};
   }
-};
+}

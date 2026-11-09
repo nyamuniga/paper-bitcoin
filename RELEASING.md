@@ -41,6 +41,8 @@ Use a small, user-controlled amount on supported native builds to verify receive
 
 Keep an encrypted wallet backup before upgrading. Preserve conversion journals and saved invoice keys; never clear a pending operation merely to unblock a new transfer. Native changes require rebuilding and reinstalling the app.
 
+For Mobile Money key rotations, follow [the recovery and backend rollout notes](MOMO_RECOVERY.md). The backend rejection response must be deployed, and apps must be rebuilt with the current configuration and recovery code. Do not clear app storage or reuse a retired key to bypass an interrupted transaction.
+
 ## Artifacts and website
 
 Build on the target platform with its normal Tauri prerequisites. From `cashu-app`:
