@@ -34,6 +34,19 @@ pub async fn receive_lightning(
         .await
         .map_err(|e| crate::error::CommandError(format!("Failed to get mint quote: {}", e)))?;
 
+    persist_receive_quote(mint_url, amount, quote_id, invoice, state, None).await
+}
+
+/// Save recovery outputs for an already-created invoice, without another POST.
+pub(crate) async fn persist_receive_quote(
+    mint_url: String,
+    amount: u64,
+    quote_id: String,
+    invoice: String,
+    state: State<'_, AppState>,
+    conversion: Option<(String, String)>,
+) -> CommandResult<ReceiveLightningQuote> {
+    let client = MintClient::new(&mint_url);
     let keyset = client
         .fetch_keyset()
         .await
@@ -43,6 +56,26 @@ pub async fn receive_lightning(
 
     let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
     let w_state = wallet_guard.as_mut().unwrap();
+
+    if let Some((id, expected_quote)) = conversion {
+        let current = w_state.stable_operations.iter().find(|op| op.id == id)
+            .ok_or_else(|| crate::error::CommandError("Conversion wallet changed".into()))?;
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+        if current.stage != "quoted" || current.direction != "toSats" || current.quote_json != expected_quote
+            || current.mint_url != mint_url || current.mint_quote_id != quote_id
+            || current.output_amount != amount.to_string() || current.expires_at <= now {
+            return Err(crate::error::CommandError("The reviewed conversion changed during receive preparation".into()));
+        }
+    }
+
+    if let Some(existing) = w_state.transactions.iter().find(|tx| tx.id == quote_id) {
+        if existing.mint_url != mint_url || existing.amount != amount || existing.status != TransactionStatus::Pending
+            || !matches!(existing.tx_type, TransactionType::ReceiveLightning(_)) {
+            return Err(crate::error::CommandError("Receive quote conflicts with an existing transaction".into()));
+        }
+        return Ok(ReceiveLightningQuote {quote_id, invoice, amount});
+    }
+    let previous_index = w_state.derivation_index;
 
     let max_proof_idx = w_state
         .proofs
@@ -94,7 +127,11 @@ pub async fn receive_lightning(
         mint_url: mint_url.clone(),
     };
     w_state.transactions.insert(0, pending_tx);
-    w_state.save_encrypted(&path, &passphrase)?;
+    if let Err(error) = w_state.save_encrypted(&path, &passphrase) {
+        w_state.transactions.remove(0);
+        w_state.derivation_index = previous_index;
+        return Err(error.into());
+    }
 
     Ok(ReceiveLightningQuote {
         quote_id,
