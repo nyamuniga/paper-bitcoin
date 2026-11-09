@@ -336,7 +336,7 @@ mod tests {
         use k256::sha2::{Sha256, Digest};
 
         let key_bytes = [7u8; 32];
-        let signing_key = SigningKey::from_bytes(&key_bytes).unwrap();
+        let signing_key = SigningKey::from_slice(&key_bytes).unwrap();
         let verifying_key: VerifyingKey = *signing_key.verifying_key();
 
         let secret = "[\"P2PK\",{\"data\":\"02...\",\"nonce\":\"...\",\"tags\":[]}]";

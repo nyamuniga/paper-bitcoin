@@ -1,3 +1,6 @@
+import { APP_VERSION } from '../version';
+import { getVersion } from '@tauri-apps/api/app';
+
 export interface UpdateInfo {
   hasUpdate: boolean;
   currentVersion: string;
@@ -35,11 +38,10 @@ export function isNewerVersion(latest: string, current: string): boolean {
  */
 export async function getCurrentAppVersion(): Promise<string> {
   try {
-    const { getVersion } = await import('@tauri-apps/api/app');
     const version = await getVersion();
     if (version) return version;
   } catch { }
-  return '0.1.15';
+  return APP_VERSION;
 }
 
 /**

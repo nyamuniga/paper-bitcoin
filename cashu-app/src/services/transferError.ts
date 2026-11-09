@@ -2,6 +2,13 @@ import type { StableOperation } from './stableBalanceModel';
 
 export type TransferErrorContext = 'quote' | 'review' | 'pending';
 
+/** Native quote failures preserve the mint's retry delay; unknown throttles wait 30s. */
+export function transferRetrySeconds(message: string): number | null {
+  if (!/rate[\s_-]*limits?|too many requests|\b429\b/i.test(message)) return null;
+  const seconds = Number(/retry after\s+(\d+)\s+seconds?/i.exec(message)?.[1] ?? 30);
+  return Number.isFinite(seconds) ? Math.max(1, seconds) : 30;
+}
+
 /** SDK failures may be plain objects; String(error) would hide them as [object Object]. */
 export function transferErrorDetails(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -16,6 +23,8 @@ export function transferErrorDetails(error: unknown): string {
 
 export function transferErrorMessage(message: string, context: TransferErrorContext): string {
   if (message.startsWith('Enter at least ')) return message;
+  const retry = transferRetrySeconds(message);
+  if (retry !== null && context !== 'pending') return `The mint is busy. Try again in ${retry} seconds. No money was moved.`;
   if (/insufficient|not enough|cannot cover/i.test(message)) return 'There isn’t enough in this balance to cover the amount and fees. Try a smaller amount.';
   if (/within this amount/i.test(message)) return 'We couldn’t get a quote for this amount. Try a smaller amount or check again later.';
   if (/minimum|too small|below/i.test(message)) return 'This amount is too small to transfer. Try a larger amount.';

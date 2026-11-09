@@ -23,3 +23,11 @@ test('Dollar equivalents use the selected currency and never fabricate missing r
   assert.equal(dollarFiatValue(1750000n,'RWF',{USD:75000}),null);
   assert.equal(dollarFiatValue(1750000n,'RWF',{USD:0,RWF:112500000}),null);
 });
+
+test('Dollar holdings can display a BTC equivalent using the USD price alone', async()=>{
+  const {dollarFiatValue}=await import('../src/services/transferAmount.ts');
+  assert.equal(dollarFiatValue(750000n,'BTC',{USD:75000}),0.00001);
+  assert.equal(dollarFiatValue(750000n,'BTC',{USD:75000,BTC:999}),0.00001);
+  assert.equal(dollarFiatValue(0n,'BTC',{USD:75000}),0);
+  assert.equal(dollarFiatValue(750000n,'BTC',{}),null);
+});

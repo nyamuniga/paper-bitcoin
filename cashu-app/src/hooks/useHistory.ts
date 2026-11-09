@@ -118,7 +118,7 @@ export const useHistory = () => {
       toast.loading('Checking status...', { id: txId });
       await syncAndSweepSpark().catch(() => {});
       const status = await invoke<string>('check_transaction_status', { txId });
-      
+
       if (status === 'Success') {
         toast.success('Transaction was successful.', { id: txId });
       } else if (status === 'Failed') {
@@ -156,7 +156,7 @@ export const useHistory = () => {
     try {
       toast.loading('Generating PDF...', { id: txId });
       const filename = serial ? `note-${amount}-sats-${serial}.pdf` : `note-${amount}-sats.pdf`;
-      
+
       const { save } = await import('@tauri-apps/plugin-dialog');
       const { writeFile } = await import('@tauri-apps/plugin-fs');
       const savePath = await save({
@@ -169,12 +169,12 @@ export const useHistory = () => {
         const pdfBytes = await invoke<number[]>('get_note_pdf', { txId });
         await writeFile(savePath, new Uint8Array(pdfBytes));
         toast.success(`Successfully saved note!`, { id: txId, duration: 5000 });
-        
+
         try {
           const { openPath } = await import('@tauri-apps/plugin-opener');
           await openPath(savePath);
         } catch (e) {
-          console.log("Could not open file natively", e);
+
         }
       } else {
         toast.dismiss(txId);

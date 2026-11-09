@@ -26,7 +26,7 @@ import {
   POLLING_INTERVAL_MS,
   POLLING_TIMEOUT_MS,
   MOMO_API_BASE_URL
-} from "../constants.local";
+} from "../constants";
 import { useTransactionStore } from "../store/transactionStore";
 import { useWalletStore } from "../store/wallet";
 import { useAddressBookStore } from "../store/addressBookStore";

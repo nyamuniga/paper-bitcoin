@@ -120,10 +120,11 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
   const currentMeta = getCurrencyMeta(preferredCurrency);
 
   const [isInitialLoadingRate, setIsInitialLoadingRate] = useState<boolean>(true);
-  const conversion = useMemo(() => convert(balance), [balance, preferredCurrency, convert]);
+  const conversion = useMemo(() => convert(balance), [balance, preferredCurrency, rates, convert]);
   const targetFiatValue = conversion.value;
   const dollarEquivalent = stable.balance === null ? null : dollarFiatValue(stable.balance, preferredCurrency, rates);
   const dollarRateLoading = !stable.error && (isInitialLoadingRate || stable.balance === null);
+  const bitcoinRateLoading = isInitialLoadingRate && preferredCurrency !== 'BTC';
 
   const [displayedFiatValue, setDisplayedFiatValue] = useState<number | null>(() => targetFiatValue || null);
   const [isNumberAnimating, setIsNumberAnimating] = useState<boolean>(false);
@@ -241,6 +242,11 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
       ? `${currentMeta.symbol}${formattedNum} ${currentMeta.code}`
       : `${formattedNum} ${currentMeta.code}`;
   };
+  // USD is the same holding, so use the balance's exact cent formatting rather
+  // than rounding its floating-point fiat equivalent up to a different amount.
+  const dollarEquivalentDisplay = preferredCurrency === 'USD' && stable.balance !== null
+    ? `${dollarAmount(stable.balance)} USD`
+    : dollarEquivalent !== null ? formatFiatValue(dollarEquivalent) : null;
 
   React.useEffect(() => {
     if (new URLSearchParams(location.search).has('convert')) {
@@ -448,15 +454,15 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
                   {hideBalance ? <EyeOff size={20} className="sm:w-[22px] sm:h-[22px] stroke-[2.25]" /> : <Eye size={20} className="sm:w-[22px] sm:h-[22px] stroke-[2.25]" />}
                 </button>
               </div>
-              {(displayedFiatValue !== null || targetFiatValue > 0 || isInitialLoadingRate) && (
+              {(displayedFiatValue !== null || targetFiatValue > 0 || bitcoinRateLoading || preferredCurrency === 'BTC') && (
                 <span
-                  className={`text-[13px] sm:text-[14px] font-medium mt-0.5 tracking-tight select-none truncate max-w-full transition-all duration-300 animate-rwf-in ${isInitialLoadingRate
+                  className={`text-[13px] sm:text-[14px] font-medium mt-0.5 tracking-tight select-none truncate max-w-full transition-all duration-300 animate-rwf-in ${bitcoinRateLoading
                     ? 'animate-rwf-shimmer'
                     : isNumberAnimating
                       ? 'animate-rwf-updating font-semibold'
                       : 'text-[#6f887b]'
                     }`}
-                  title={isInitialLoadingRate ? "Refreshing estimated rate..." : undefined}
+                  title={bitcoinRateLoading ? "Refreshing estimated rate..." : undefined}
                 >
                   {hideBalance
                     ? `≈ •••••• ${currentMeta.code}`
@@ -472,7 +478,8 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
         )}
         </div>
         <div role="tabpanel" id={`${balanceTabsId}-usd-panel`} aria-labelledby={`${balanceTabsId}-usd`} hidden={balanceTab !== 'usd'} className={`wallet-balance-panel w-full min-h-[132px] flex-col items-center justify-center ${balanceTab === 'usd' ? 'flex animate-tab-from-right' : 'hidden'}`}>
-          <p className="text-[#a3b5aa] text-xs font-medium min-h-8 mb-3 flex items-center">Dollar balance</p>
+          <p className="text-[#a3b5aa] text-xs font-medium h-[34px] shrink-0 mb-3 flex items-center">Dollar balance</p>
+          <div className="relative z-10 flex flex-col items-center gap-1.5 max-w-full">
           <div className="flex items-center justify-center gap-2 sm:gap-2.5 max-w-full">
             <span data-balance-symbol="usd" className={balanceSymbolClass} aria-hidden="true">$</span>
             <span
@@ -483,13 +490,14 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
               className={`min-w-0 truncate font-display-hero font-extrabold tracking-tight leading-none select-none cursor-pointer ${stable.error && !hideBalance ? 'text-2xl' : 'text-[40px] sm:text-[50px] md:text-[58px]'} ${!hideBalance && !stable.error && stable.balance === null ? 'animate-rwf-shimmer' : 'text-[#f7f4eb]'}`}
               aria-busy={!hideBalance && !stable.error && stable.balance === null}
             >{hideBalance ? '••••••' : stable.error ? 'Unavailable' : stable.balance === null ? <><span aria-hidden="true">••••</span><span className="sr-only">Loading dollar balance</span></> : dollarAmount(stable.balance).replace('$','')}</span>
-            <button onClick={toggleHideBalance} className="text-[#8b9e94] hover:text-[#f7f4eb] p-2 min-w-11 min-h-11 rounded-full hover:bg-[#12261d] transition-colors cursor-pointer shrink-0 inline-flex items-center justify-center" title={hideBalance ? 'Show balance' : 'Hide balance'} aria-label={hideBalance ? 'Show balance' : 'Hide balance'}>{hideBalance ? <EyeOff size={20}/> : <Eye size={20}/>}</button>
+            <button onClick={toggleHideBalance} className="text-[#627d70] hover:text-[#f7f4eb] p-1.5 sm:p-2 rounded-full hover:bg-[#12261d] transition-all active:scale-95 cursor-pointer ml-0.5 sm:ml-1 flex-shrink-0" title={hideBalance ? 'Show balance' : 'Hide balance'} aria-label={hideBalance ? 'Show balance' : 'Hide balance'}>{hideBalance ? <EyeOff size={20} className="sm:w-[22px] sm:h-[22px] stroke-[2.25]"/> : <Eye size={20} className="sm:w-[22px] sm:h-[22px] stroke-[2.25]"/>}</button>
           </div>
           <span
             data-dollar-equivalent
-            className={`text-[13px] sm:text-[14px] font-medium mt-3 tracking-tight select-none truncate max-w-full animate-rwf-in ${dollarRateLoading && !hideBalance ? 'animate-rwf-shimmer' : 'text-[#6f887b]'}`}
+            className={`text-[13px] sm:text-[14px] font-medium mt-0.5 tracking-tight select-none truncate max-w-full animate-rwf-in ${dollarRateLoading && !hideBalance ? 'animate-rwf-shimmer' : 'text-[#6f887b]'}`}
             title={dollarRateLoading ? 'Refreshing estimated rate…' : `Estimated value in ${currentMeta.code}`}
-          >{hideBalance ? `≈ •••••• ${currentMeta.code}` : dollarEquivalent !== null && !stable.error ? `≈ ${formatFiatValue(dollarEquivalent)}` : `≈ ••• ${currentMeta.code}`}</span>
+          >{hideBalance ? `≈ •••••• ${currentMeta.code}` : dollarEquivalentDisplay !== null && !stable.error ? `≈ ${dollarEquivalentDisplay}` : `≈ ••• ${currentMeta.code}`}</span>
+          </div>
         </div>
       </div>
 

@@ -124,6 +124,7 @@ pub fn run() {
             commands::stable::stable_prepare_return,
             commands::stable::stable_funding_quote,
             commands::stable::stable_begin,
+            commands::stable::stable_refresh_quote,
             commands::stable::stable_fund,
             commands::stable::stable_advance,
             commands::spark::spark_get_config,

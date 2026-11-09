@@ -230,3 +230,11 @@ A native cross-platform application built with Tauri and React.
 ### 6. `ecash-cli` (The Terminal Interface)
 The command-line wrapper.
 - **`src/main.rs`**: Uses `clap` and `inquire` to build interactive terminal menus. It parses user input and calls the underlying `ecash-wallet` orchestrator.
+
+## Native wallet release additions (0.1.17)
+
+The application uses the tracked, environment-based `cashu-app/src/constants.ts`; private `.env` files and signing credentials are excluded from version control. See [security policy](SECURITY.md) for frontend credential limitations and logging rules. Both application dependency lockfiles are maintained for reproducible builds.
+
+Dollar conversions and saved QR invoices add backward-compatible encrypted wallet records. Their state transitions, identity/fee checks and recovery constraints are documented in [stable balance](cashu-app/STABLE_BALANCE.md) and [ecash payments](cashu-app/ECASH_PAYMENTS.md). Cashu receipt reconciliation preserves stored terminal statuses and ignores late results once a receipt has settled. NFC transport has been removed.
+
+Release versions and publishable files are checked by `scripts/check-release.mjs`; see [release guide](RELEASING.md) for the full validation and rollout sequence.

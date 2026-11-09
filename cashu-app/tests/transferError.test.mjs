@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { transferErrorDetails, transferErrorMessage } from '../src/services/transferError.ts';
+import { transferErrorDetails, transferErrorMessage, transferRetrySeconds } from '../src/services/transferError.ts';
 
 test('preserves SDK object and native string errors for diagnosis', () => {
   assert.equal(transferErrorDetails({type:'Generic', message:'provider rejected quote'}), 'Generic: provider rejected quote');
@@ -21,4 +21,12 @@ test('known validation errors explain the action required', () => {
   assert.match(transferErrorMessage('Wait for the current Bitcoin operation to finish.', 'quote'), /another.*operation/i);
   assert.match(transferErrorMessage('Wallet or amount changed. Check the amount again.', 'review'), /changed.*again/);
   assert.match(transferErrorMessage('Quote expired', 'review'), /expired/);
+});
+
+test('rate limits explain a cooldown without suggesting that money moved', () => {
+  assert.equal(transferRetrySeconds('Mint rate limit reached. Retry after 120 seconds.'),120);
+  assert.equal(transferRetrySeconds('rate limits reached'),30);
+  assert.equal(transferRetrySeconds('network unavailable'),null);
+  assert.match(transferErrorMessage('Mint rate limit reached. Retry after 120 seconds.','review'),/120 seconds/);
+  assert.doesNotMatch(transferErrorMessage('rate limits reached','review'),/started|saved|complete/);
 });

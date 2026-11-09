@@ -1,14 +1,15 @@
 {
   "name": "bitnotes",
   "private": true,
-  "version": "0.1.16",
+  "version": "0.1.17",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test:payments": "node --experimental-strip-types --test tests/*.test.mjs"
+    "test:payments": "node --experimental-strip-types --test tests/*.test.mjs",
+    "check:release": "node ../scripts/check-release.mjs"
   },
   "dependencies": {
     "@breeztech/breez-sdk-spark": "^0.28.0",
@@ -57,5 +58,8 @@
     "tailwindcss": "^4.3.1",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   }
 }
