@@ -12,6 +12,9 @@ interface SlidingSegmentedControlProps<T extends string> {
   onChange: (value: T) => void;
   className?: string;
   buttonClassName?: string;
+  compact?: boolean;
+  tabListId?: string;
+  ariaLabel?: string;
 }
 
 export function SlidingSegmentedControl<T extends string>({
@@ -20,6 +23,9 @@ export function SlidingSegmentedControl<T extends string>({
   onChange,
   className = '',
   buttonClassName = '',
+  compact = false,
+  tabListId,
+  ariaLabel,
 }: SlidingSegmentedControlProps<T>) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -60,14 +66,17 @@ export function SlidingSegmentedControl<T extends string>({
   return (
     <div
       ref={containerRef}
-      className={`flex items-center rounded-xl bg-[#0c1b14] p-1 border border-[#142d20] relative shadow-sm overflow-hidden select-none ${className}`}
+      role={tabListId ? 'tablist' : 'group'}
+      aria-label={ariaLabel}
+      className={`flex items-center rounded-xl bg-[#0c1b14] border border-[#142d20] relative shadow-sm select-none ${compact ? 'p-0.5 overflow-visible' : 'p-1 overflow-hidden'} ${className}`}
     >
       {/* Animated Sliding Indicator Pill (matching TopNav and AddressBook) */}
       <div
+        data-segment-indicator
         className={`absolute top-0 left-0 rounded-lg pointer-events-none bg-[#183626] border border-[#2b563e] shadow-sm ${
           isInitialMount
             ? ''
-            : 'transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
+            : 'transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none'
         }`}
         style={{
           transform: `translate3d(${pillStyle.left}px, ${pillStyle.top}px, 0)`,
@@ -89,8 +98,22 @@ export function SlidingSegmentedControl<T extends string>({
               buttonRefs.current[opt.id] = el;
             }}
             type="button"
+            role={tabListId ? 'tab' : undefined}
+            id={tabListId ? `${tabListId}-${opt.id}` : undefined}
+            aria-controls={tabListId ? `${tabListId}-${opt.id}-panel` : undefined}
+            aria-selected={tabListId ? isActive : undefined}
+            aria-pressed={!tabListId ? isActive : undefined}
+            tabIndex={tabListId ? isActive ? 0 : -1 : undefined}
+            onKeyDown={event => {
+              if (!tabListId || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+              event.preventDefault();
+              const index = options.findIndex(option => option.id === value);
+              const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + options.length) % options.length;
+              const next = options[nextIndex].id;
+              onChange(next); buttonRefs.current[next]?.focus();
+            }}
             onClick={() => onChange(opt.id)}
-            className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-display-hero text-[13px] sm:text-[14px] font-bold transition-colors duration-200 select-none cursor-pointer ${
+            className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-3 rounded-lg font-display-hero font-bold transition-colors duration-200 select-none cursor-pointer focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 ${compact ? "py-1 min-w-14 text-xs after:content-[''] after:absolute after:inset-x-0 after:-inset-y-2.5" : 'py-2 text-[13px] sm:text-[14px]'} ${
               isActive
                 ? 'text-primary font-bold'
                 : 'text-[#8b9e94] hover:text-[#f7f4eb]'

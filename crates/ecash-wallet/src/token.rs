@@ -169,7 +169,7 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
                         dleq: None,
                         derivation_index: 0,
                     });
-                    total_amount += amount;
+                    total_amount = total_amount.checked_add(amount).ok_or_else(|| anyhow!("Token amount overflow"))?;
                 }
             }
         }
@@ -270,7 +270,7 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
                     dleq: None,
                     derivation_index: 0,
                 });
-                total_amount += amount;
+                total_amount = total_amount.checked_add(amount).ok_or_else(|| anyhow!("Token amount overflow"))?;
             }
         }
     } else {
@@ -336,7 +336,7 @@ mod tests {
         use k256::sha2::{Sha256, Digest};
 
         let key_bytes = [7u8; 32];
-        let signing_key = SigningKey::from_bytes(&key_bytes).unwrap();
+        let signing_key = SigningKey::from_slice(&key_bytes).unwrap();
         let verifying_key: VerifyingKey = *signing_key.verifying_key();
 
         let secret = "[\"P2PK\",{\"data\":\"02...\",\"nonce\":\"...\",\"tags\":[]}]";

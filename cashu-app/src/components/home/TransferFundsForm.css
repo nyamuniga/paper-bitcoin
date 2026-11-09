@@ -1,0 +1,81 @@
+.transfer-screen { --transfer-muted:#a3b5aa; min-height:calc(100dvh - 4rem - env(safe-area-inset-top,0px) - 2rem); color:#f7f4eb; display:flex; flex-direction:column; padding-bottom:max(24px,env(safe-area-inset-bottom)); caret-color:#f2a93b; }
+.transfer-screen ::selection { background:#f2a93b; color:#0b1511; }
+.transfer-content button { cursor:pointer; touch-action:manipulation; transition:background-color 150ms, color 150ms; }
+.transfer-content button:disabled { cursor:default; opacity:.4; }
+.transfer-screen :is(button,summary):focus-visible { outline:2px solid #f2a93b; outline-offset:4px; }
+.transfer-content { flex:1; display:flex; flex-direction:column; min-height:min-content; }
+.transfer-pair { position:relative; border-radius:16px; background:#1e2e27; }
+.transfer-asset { padding:17px 20px; }
+.transfer-source { background:#26372e; border-radius:16px 16px 0 0; padding-bottom:23px; }
+.transfer-destination { padding-top:23px; }
+.transfer-asset-heading { display:flex; justify-content:space-between; align-items:center; color:#c0cdc5; font-size:13px; margin-bottom:8px; }
+.transfer-asset-heading > span:last-child { display:flex; align-items:center; gap:3px; font-size:14px; font-weight:600; }
+.transfer-bitcoin-label { color:#ffc564; }
+.transfer-dollar-label { color:#b6dfc6; }
+.transfer-entry { display:flex; align-items:baseline; gap:6px; font-size:34px; font-weight:600; font-variant-numeric:tabular-nums; line-height:1.25; }
+.transfer-entry input { min-width:0; width:100%; color:inherit; background:transparent; border:0; outline:none; font:inherit; letter-spacing:-.03em; padding:0; }
+.transfer-entry input::placeholder { color:#a3b5aa; opacity:1; }
+.transfer-unit { font-size:15px; font-weight:500; color:#c0cdc5; }
+.transfer-available { color:#b6c7bd; font-size:12px; line-height:1.5; margin:7px 0 0; font-variant-numeric:tabular-nums; }
+.transfer-switch { position:absolute; z-index:1; top:50%; left:50%; transform:translate(-50%,-50%); width:44px; height:44px; border:5px solid #0b1511; box-sizing:content-box; border-radius:50%; display:grid; place-items:center; background:#3a4a40; color:#ffc564; }
+.transfer-switch:hover { background:#4a5c4f; }
+.transfer-preview { font-size:29px; line-height:1.3; font-weight:500; color:#d4e1d8; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; letter-spacing:-.02em; }
+.transfer-hint { color:var(--transfer-muted); font-size:12px; line-height:1.6; margin:14px 2px 20px; }
+.transfer-hint-error { color:#ffb4ab; }
+.transfer-entry-controls { margin-top:auto; padding-top:20px; }
+.transfer-percentages { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px; }
+.transfer-percentages button { min-height:44px; border-radius:24px; background:#222c28; color:#ffc564; font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; }
+.transfer-percentages button:hover, .transfer-percentages button[aria-pressed=true] { background:#ffc564; color:#281900; }
+.transfer-keypad { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:18px; }
+.transfer-keypad button { min-height:52px; display:grid; place-items:center; border-radius:12px; font-size:26px; font-weight:500; background:#141e19; border:1px solid #33453a; }
+.transfer-keypad button:hover:not(:disabled) { background:#26372e; }
+.transfer-keypad button:last-child { color:#ffc564; }
+.transfer-primary, .transfer-secondary { width:100%; min-height:52px; border-radius:26px; display:flex; gap:8px; align-items:center; justify-content:center; padding:14px 18px; font-size:15px; font-weight:600; }
+.transfer-primary { background:#f2a93b; color:#06110c; }
+.transfer-primary:hover:not(:disabled) { background:#ffc564; }
+.transfer-secondary { margin-top:8px; color:#d0e0d5; }
+.transfer-secondary:hover { background:#222c28; }
+.transfer-text-button { min-height:44px; width:100%; color:#ffc564; font-size:13px; margin-bottom:8px; }
+.transfer-receipt { padding:16px 0 28px; text-align:center; }
+.transfer-receipt-symbol { display:grid; place-items:center; height:56px; width:56px; margin:0 auto 20px; border-radius:50%; background:#26372e; color:#ffc564; }
+.transfer-receipt-symbol.is-done { background:#304f40; color:#c7ebd5; }
+.transfer-receipt-label { font-size:14px; color:#a3b5aa; margin-bottom:8px; }
+.transfer-receipt-amount { font-size:clamp(26px,7vw,38px); letter-spacing:-.03em; line-height:1.3; font-weight:600; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.transfer-receipt-currency { margin-top:8px; font-size:13px; color:#b6c7bd; }
+.transfer-summary { padding:8px 0; border-top:1px solid #33453a; border-bottom:1px solid #33453a; }
+.transfer-summary > div { display:flex; justify-content:space-between; gap:16px; padding:10px 0; font-size:14px; }
+.transfer-summary dt { color:#a3b5aa; }
+.transfer-summary dd { text-align:right; font-variant-numeric:tabular-nums; }
+.transfer-details { color:#a3b5aa; font-size:12px; line-height:1.6; margin:0 2px 24px; }
+.transfer-details summary, .transfer-error summary { cursor:pointer; min-height:32px; padding:6px 0; }
+.transfer-details p { padding:6px 0; }
+.transfer-actions { margin-top:auto; padding-top:28px; }
+.transfer-progress { font-size:15px; line-height:1.65; color:#b6c7bd; text-align:center; margin:0 10px 24px; }
+.transfer-error { color:#ffdad6; background:#3e2523; padding:14px 16px; margin-top:18px; border-radius:12px; font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+.transfer-error details { font-size:11px; margin-top:6px; color:#e6bdb5; }
+@media(max-height:900px) {
+  .transfer-asset { padding:8px 16px; }
+  .transfer-source { padding-bottom:16px; }
+  .transfer-destination { padding-top:16px; }
+  .transfer-asset-heading { line-height:1.3; margin-bottom:4px; }
+  .transfer-entry { font-size:27px; line-height:1.2; }
+  .transfer-available { font-size:11px; line-height:1.35; margin-top:4px; }
+  .transfer-preview { font-size:25px; line-height:1.2; }
+  .transfer-entry-controls { padding-top:4px; }
+  .transfer-percentages { margin-bottom:12px; }
+  .transfer-keypad { gap:6px; margin-bottom:12px; }
+  .transfer-keypad button { min-height:44px; font-size:23px; }
+  .transfer-hint { font-size:11px; line-height:1.4; margin:8px 2px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .transfer-screen, .transfer-screen button { transition:none !important; }
+}
+
+.transfer-constraints { color:var(--transfer-muted); font-size:12px; line-height:1.5; margin:12px 2px 16px; }
+.transfer-constraints p + p { margin-top:4px; }
+@media(max-height:900px) {
+  .transfer-constraints { font-size:11px; line-height:1.35; margin:6px 2px; }
+  .transfer-entry-controls { padding-top:0; }
+  .transfer-percentages { margin-bottom:8px; }
+  .transfer-keypad { margin-bottom:8px; }
+}

@@ -1,7 +1,7 @@
 import { fetch } from '@tauri-apps/plugin-http';
 import { HDKey } from '@scure/bip32';
 import { getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
-import { NPUB_CASH_API_URL, NOSTR_DERIVATION_PATH, NPUB_DOMAIN, NPUB_CASH_BACKEND_URL } from '../constants.local';
+import { NPUB_CASH_API_URL, NOSTR_DERIVATION_PATH, NPUB_DOMAIN, NPUB_CASH_BACKEND_URL } from '../constants';
 
 // Utility for hex
 const hexToBytes = (hex: string): Uint8Array => {
@@ -16,7 +16,6 @@ const hexToBytes = (hex: string): Uint8Array => {
 const bytesToHex = (bytes: Uint8Array): string => {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 };
-
 
 export interface NostrKeypair {
   privateKey: string;   // hex
@@ -93,10 +92,9 @@ export const generateNip98AuthHeader = async (
   const eventJson = JSON.stringify(event);
   const encoded = btoa(eventJson);
   const authHeader = `Nostr ${encoded}`.trim();
-  console.log('[DEBUG NIP98] Generated Auth Header:', authHeader);
+
   return authHeader;
 };
-
 
 /**
  * Convert an npub to a Lightning Address on npubx.cash
@@ -124,7 +122,6 @@ export const fetchNpubCashUser = async (
     if (!response.ok) return null;
 
     const text = await response.text();
-    console.log('[fetchNpubCashUser] Raw response text:', text);
 
     try {
       const data = JSON.parse(text);
@@ -134,16 +131,15 @@ export const fetchNpubCashUser = async (
       }
       return null;
     } catch (parseErr) {
-      console.error('[fetchNpubCashUser] Failed to parse JSON:', parseErr);
+      console.warn('Lightning address response could not be decoded.');
       return null;
     }
     return null;
   } catch (e) {
-    console.debug('[fetchNpubCashUser] Failed to fetch user info:', e);
+
     return null;
   }
 };
-
 
 /**
  * Register or update the user's preferred mint on npubx.cash.
@@ -172,8 +168,6 @@ export const registerWithNpubCash = async (
   }
 };
 
-
-
 /**
  * Fetch spendable token from npub.cash (v1 protocol).
  * Sends directly to the backend (Tauri fetch bypasses CORS) so the
@@ -187,8 +181,6 @@ export const fetchV1ClaimToken = async (
   const url = `${NPUB_CASH_BACKEND_URL}/api/v1/claim`;
   const authHeader = await generateNip98AuthHeader(url, 'GET', privateKey);
 
-  console.log('[DEBUG fetchV1ClaimToken] Requesting:', url);
-
   try {
     const response = await fetch(url, {
       method: 'GET',
@@ -197,19 +189,15 @@ export const fetchV1ClaimToken = async (
       },
     });
 
-    console.log('[DEBUG fetchV1ClaimToken] Response status:', response.status);
-
     if (!response.ok) {
-      const text = await response.text();
-      console.error('[DEBUG fetchV1ClaimToken] Error response text:', text);
+      console.warn('Payment claim request failed:', response.status);
       return null;
     }
 
     const data = await response.json();
-    console.log('[DEBUG fetchV1ClaimToken] Data:', data);
-    
+
     if (data.error || !data.data || !data.data.token) {
-      console.log('[DEBUG fetchV1ClaimToken] Error in data:', data.message || data.error);
+
       return null;
     }
 
@@ -219,7 +207,7 @@ export const fetchV1ClaimToken = async (
       totalPending: data.data.totalPending
     };
   } catch (e) {
-    console.debug('[DEBUG fetchV1ClaimToken] Caught error:', e);
+
     return null;
   }
 };

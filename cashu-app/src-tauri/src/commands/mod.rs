@@ -8,3 +8,9 @@ pub mod send;
 pub mod spark;
 pub mod verify;
 pub mod wallet;
+
+pub mod payment_request;
+
+pub mod stable;
+
+pub mod ecash_invoice;

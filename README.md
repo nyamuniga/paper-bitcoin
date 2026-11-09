@@ -1,6 +1,6 @@
-# Physical Ecash
+# BitNotes / Physical Ecash
 
-A Rust implementation of the [Cashu](https://github.com/cashubtc/nuts) blind-signature protocol for physical bearer notes.
+**Prepared release: 0.1.17.** A Rust implementation of the [Cashu](https://github.com/cashubtc/nuts) blind-signature protocol for physical bearer notes.
 
 ## Overview
 
@@ -31,7 +31,18 @@ Physical eCash bridges the gap between the abstract Lightning Network and tangib
 - **Frictionless Remittances:** A user receives a physical eCash note from a relative abroad, scans it, and instantly withdraws the funds to their local Mobile Money account (e.g., Rwandan Francs) using the integrated Blink proxy.
 - **Self-Custodial Savings:** Users can accumulate small amounts of eCash from physical notes or Lightning payments and hold them securely in their local wallet.
 
+## Wallet features
+
+- Cashu tokens, printable bearer notes, Lightning and on-chain Bitcoin.
+- Optional conversion of part of an existing ecash balance into a Dollar balance, with live review quotes, fee limits and recovery history.
+- QR ecash invoices saved in History, compatible request scanning, and delivery retries using the same saved token. NFC is not supported.
+- BTC/USD balance tabs and display currencies including BTC, USD and RWF.
+
+Dollar holdings use a dollar-linked digital asset, not a bank deposit. Ecash depends on its issuing mint. See [security policy](SECURITY.md) for the trust boundaries and [release guide](RELEASING.md) for publishing prerequisites.
+
 ## Quick Start
+
+Use Node.js 24 (`nvm use`), stable Rust and [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/). The tracked public configuration builds without credentials; optional integrations are configured through the ignored `.env` file. Frontend environment values are visible in app bundles, so privileged credentials must stay on the backend.
 
 You can run the system purely from the command line, or use the modern Tauri desktop/mobile app.
 
@@ -39,7 +50,8 @@ You can run the system purely from the command line, or use the modern Tauri des
 
 ```bash
 cd cashu-app
-npm install
+npm ci
+cp env.example .env
 npm run tauri dev
 ```
 
@@ -49,7 +61,7 @@ You can build the app for multiple platforms. Note that for macOS builds on head
 
 **macOS:**
 ```bash
-CI=true npm run tauri build --release
+CI=true npm run tauri build
 ```
 
 **Windows:**
@@ -121,6 +133,8 @@ cargo run -p ecash-cli -- redeem "$(cat note.txt)" --direct
 
 ## Production
 
+Follow [RELEASING.md](RELEASING.md) for dependency audits, file hygiene, version checks, native device testing and release asset ordering. The website is maintained in `website/`; publish its matching GitHub assets before deploying new download URLs.
+
 You can point `ECASH_MINT_URL` at any other real Cashu mint:
 
 ```bash
@@ -151,6 +165,10 @@ cargo run -p ecash-cli -- issue 1000
 - **Hybrid Transaction History Engine**: Raw Lightning operations from the Rust backend are intelligently stitched to local UI state (`zustand`) using quote IDs and strict timestamp heuristics, providing accurate user-facing labels for complex Fiat swaps.
 
 ## References
+
+USD stable balance conversions using existing ecash are described in [Stable balance](cashu-app/STABLE_BALANCE.md).
+
+QR ecash invoices and payments are described in [Ecash payments](cashu-app/ECASH_PAYMENTS.md).
 
 1. [Cashu NUTs](https://github.com/cashubtc/nuts) — protocol specification
 2. [Cashu Dev Kit](https://github.com/cashubtc/cdk) — reference implementation

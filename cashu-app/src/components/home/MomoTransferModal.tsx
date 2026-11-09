@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Phone, PhoneOutgoing, PhoneIncoming, ChevronDown, Check, BookUser } from 'lucide-react';
 import { AppPhase } from '../../types/momo';
 import { calculateQuote, calculateSendQuote, fetchCurrentRate, fetchProxyBlinkBalance } from '../../services/flowServices';
-import { MOMO_WITHDRAWAL_FIXED_FEE, ECASH_LIGHTNING_FEE, SPREAD } from '../../constants.local';
+import { MOMO_WITHDRAWAL_FIXED_FEE, ECASH_LIGHTNING_FEE, SPREAD } from '../../constants';
 import { useWalletStore } from '../../store/wallet';
 import { useTransactionStore } from '../../store/transactionStore';
 import { useAddressBookStore } from '../../store/addressBookStore';

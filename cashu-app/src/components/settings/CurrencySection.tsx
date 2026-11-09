@@ -163,9 +163,9 @@ export const CurrencySection: React.FC<CurrencySectionProps> = ({
                             {c.name}
                           </span>
                         </div>
-                        {formattedRate && (
+                        {(c.code === 'BTC' || formattedRate) && (
                           <div className="text-[10px] text-on-surface-variant/60 font-mono mt-0.5">
-                            1 BTC ≈ {c.symbol !== c.code ? c.symbol : ''}{formattedRate}
+                            {c.code === 'BTC' ? '1 BTC = 100,000,000 sats' : <>1 BTC ≈ {c.symbol !== c.code ? c.symbol : ''}{formattedRate}</>}
                           </div>
                         )}
                       </div>

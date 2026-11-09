@@ -508,6 +508,11 @@ pub async fn apply_transaction_diff(
 ) -> Result<TransactionStatus> {
     let (tx_mint, tx_amount) = {
         let t = state.transactions.iter().find(|t| t.id == tx_id).ok_or_else(|| anyhow!("Transaction not found"))?;
+        // Another checker may have settled this receipt while network I/O was in flight.
+        // Terminal receipts are authoritative; never regress or credit their proofs twice.
+        if t.status != TransactionStatus::Pending {
+            return Ok(t.status.clone());
+        }
         (t.mint_url.clone(), t.amount)
     };
 
@@ -715,4 +720,44 @@ pub async fn check_transaction_status_legacy(state: &mut WalletState, wallet_pat
 }
 
 pub use check_transaction_status_legacy as check_transaction_status;
+
+#[cfg(test)]
+mod receipt_tests {
+    use super::*;
+    use ecash_core::types::{ReceiveLightningTransactionData, Transaction};
+
+    fn wallet(status: TransactionStatus) -> WalletState {
+        let mut state = WalletState::new("00".into(), None);
+        state.transactions.push(Transaction {
+            id: "return-quote".into(),
+            tx_type: TransactionType::ReceiveLightning(ReceiveLightningTransactionData {
+                quote_id: "return-quote".into(), outputs: vec![], blinding_sessions_hex: vec![],
+            }),
+            amount: 980, fee: 0, status, timestamp: 0, mint_url: "https://mint.invalid".into(),
+        });
+        state
+    }
+
+    #[tokio::test]
+    async fn unchanged_receipts_keep_their_actual_status() {
+        for status in [TransactionStatus::Success, TransactionStatus::Failed, TransactionStatus::Pending] {
+            let mut state = wallet(status.clone());
+            // Pending needs a real mint; exercise its no-change result directly.
+            let diff = if status == TransactionStatus::Pending { TransactionDiff::NoChange } else {
+                check_transaction_network(&state.transactions[0], None).await.unwrap()
+            };
+            let actual = apply_transaction_diff(&mut state, &PathBuf::new(), "unused", "return-quote", diff).await.unwrap();
+            assert_eq!(actual, status);
+        }
+    }
+
+    #[tokio::test]
+    async fn late_network_result_cannot_regress_a_completed_receipt() {
+        let mut state = wallet(TransactionStatus::Success);
+        let result = apply_transaction_diff(&mut state, &PathBuf::new(), "unused", "return-quote",
+            TransactionDiff::StatusOnly(TransactionStatus::Failed)).await.unwrap();
+        assert_eq!(result, TransactionStatus::Success);
+        assert_eq!(state.transactions[0].status, TransactionStatus::Success);
+    }
+}
 

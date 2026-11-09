@@ -6,7 +6,8 @@ import initBreezSDK, {
   type SdkEvent,
   type PrepareSendPaymentResponse,
 } from '@breeztech/breez-sdk-spark/web';
-import { BREEZ_API_KEY } from '../constants.local';
+import { BREEZ_API_KEY } from '../constants';
+import { withSparkBalanceLock } from './sparkBalanceLock';
 
 export interface OnchainSendEstimate {
   amount: number;
@@ -229,7 +230,8 @@ export const sparkIsSending = async (): Promise<boolean> => {
   try {
     return await invoke<boolean>('spark_is_sending');
   } catch {
-    return false;
+    // A locked wallet or unavailable journal must never release reserved funds.
+    return true;
   }
 };
 
@@ -615,6 +617,10 @@ async function findRecentDepositInfo(
 }
 
 export async function sweepSparkToCashu(preferredMintUrl?: string): Promise<boolean> {
+  return withSparkBalanceLock(() => sweepSparkToCashuLocked(preferredMintUrl));
+}
+
+async function sweepSparkToCashuLocked(preferredMintUrl?: string): Promise<boolean> {
   if (isSweeping) return false;
   if (await sparkIsSending()) return false;
 
@@ -685,7 +691,7 @@ export async function syncAndSweepSpark(defaultMintUrl?: string): Promise<boolea
   try {
     return await sweepSparkToCashu(defaultMintUrl);
   } catch (e) {
-    console.debug('Background Spark sync/sweep skipped or deferred:', e);
+
     return false;
   }
 }
