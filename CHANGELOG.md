@@ -13,6 +13,8 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 - Compact BTC/USD wallet tabs with swipe transitions, shared balance visibility, consistent Dollar formatting, and BTC as a selectable display currency.
 
 ### Fixed
+- Mobile Money requests have bounded network waits, explicit update-required rejection handling, and restart recovery for saved initiation steps. Closing a transfer preserves uncertain/funded records; status recovery does not re-fund or re-submit cashouts.
+- Pending Mobile Money transfers no longer take over new top-up/cashout forms. Saved transfers reconcile independently by ID, remain available for status checks, and cannot overwrite a new transfer when they finish.
 - Completed Cashu receipts no longer report Pending during later checks; late network results cannot regress settled receipts.
 - Typing conversion amounts no longer creates mint quotes. Review stops at the first valid fee-inclusive quote and respects mint retry delays.
 - Conversion status reconciliation no longer waits for unrelated Spark sync/balance work when a Cashu receipt is authoritative.
