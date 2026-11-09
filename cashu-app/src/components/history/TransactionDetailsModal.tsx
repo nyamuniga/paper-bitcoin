@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ArrowDownLeft, ArrowUpRight, Banknote, CheckCircle, AlertCircle, XCircle, Copy, Check, Clock, Download, ExternalLink } from 'lucide-react';
 import { Transaction } from './TransactionCard';
@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 import { SafeQRCode } from '../shared/SafeQRCode';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
+import { EcashReceiveInvoice } from '../home/EcashReceiveInvoice';
 import { MintName } from '../shared/MintName';
 import { MintIcon } from '../shared/MintIcon';
 import { openMempoolTx, openMempoolAddress } from '../../utils/mempool';
@@ -33,6 +34,28 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   onDownloadNote
 }) => {
   const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
+  const panel = useRef<HTMLDivElement>(null);
+  const close = useRef(closeWithAnimation);
+  close.current = closeWithAnimation;
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    panel.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); close.current(); return; }
+      if (event.key !== 'Tab') return;
+      const controls = panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),summary,a[href],[tabindex="0"]');
+      if (!controls?.length) return;
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', keyboard);
+    return () => { document.removeEventListener('keydown', keyboard); if (previous?.isConnected) previous.focus(); };
+  }, []);
+  const isRequest = 'EcashRequest' in tx.tx_type;
+  const [invoiceActionsContainer, setInvoiceActionsContainer] = useState<HTMLDivElement | null>(null);
+  const [requestStatus, setRequestStatus] = useState<'pending' | 'received' | 'paid'>(tx.tx_type.EcashRequest?.status ?? 'pending');
+  const status = isRequest ? requestStatus === 'paid' ? 'Success' : 'Pending' : tx.status;
   const isMint = 'Mint' in tx.tx_type;
   const isIssue = 'Issue' in tx.tx_type;
   const isMelt = 'Melt' in tx.tx_type;
@@ -42,7 +65,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
   const isSendOnchain = 'SendOnchain' in tx.tx_type;
   const isReceiveOnchain = 'ReceiveOnchain' in tx.tx_type;
-  const isReceive = isReceiveEcash || isReceiveLightning || isReceiveOnchain;
+  const isReceive = isRequest || isReceiveEcash || isReceiveLightning || isReceiveOnchain;
   const isInflow = isMint || isRedeem || isReceive || tx.momo_direction === 'RWF_TO_SATS';
 
   const onchainTxid = isSendOnchain
@@ -76,6 +99,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   const getTxLabel = () => {
     if (tx.momo_direction === 'RWF_TO_SATS') return 'MoMo Top Up';
     if (tx.momo_direction === 'SATS_TO_RWF') return 'MoMo Cash Out';
+    if (isRequest) return 'Ecash request';
     if (isMint) return 'Lightning Deposit';
     if (isReceiveEcash) return 'Received eCash';
     if (isReceiveLightning) return 'Lightning Deposit';
@@ -123,10 +147,11 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   };
 
   const hasActions = Boolean(
-    (tx.status === 'Pending' && (onRecover || (isMint && onRetryMint) || (isIssue && onCheckIssue))) ||
-    (isIssue && tx.status === 'Success' && onDownloadNote) ||
-    (tx.status !== 'Pending' && (isSend || isIssue || isRedeem) && onCheckClaimed) ||
-    (tx.status === 'Failed' && isReceiveEcash && onRetryReceiveEcash)
+    isRequest ||
+    (!isRequest && status === 'Pending' && (onRecover || (isMint && onRetryMint) || (isIssue && onCheckIssue))) ||
+    (isIssue && status === 'Success' && onDownloadNote) ||
+    (status !== 'Pending' && (isSend || isIssue || isRedeem) && onCheckClaimed) ||
+    (status === 'Failed' && isReceiveEcash && onRetryReceiveEcash)
   );
 
   return createPortal(
@@ -136,6 +161,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
       onClick={closeWithAnimation}
     >
       <div 
+        ref={panel} role="dialog" aria-modal="true" aria-label="Transaction details"
         onClick={(e) => e.stopPropagation()}
         style={sheetStyle}
         className="bg-surface-container-high/98 backdrop-blur-2xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] overflow-hidden flex flex-col relative max-h-[92vh]"
@@ -170,9 +196,9 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
           <div className="flex flex-col items-center text-center">
             {/* Visual Icon Badge */}
             <div className={`w-14 h-14 rounded-full flex items-center justify-center border mb-3 shadow-md ${
-              tx.status === 'Pending'
+              status === 'Pending'
                 ? 'bg-[#f2a93b]/10 border-[#f2a93b]/25 text-[#f2a93b]'
-                : tx.status === 'Failed' || tx.status === 'FailedMintError'
+                : status === 'Failed' || status === 'FailedMintError'
                 ? 'bg-[#f87171]/10 border-[#f87171]/25 text-[#f87171]'
                 : isInflow 
                 ? 'bg-[#0e291d] border-[#1c442f] text-[#34d399]' 
@@ -180,9 +206,9 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 ? 'bg-[#10241b] border-[#1b3829] text-primary' 
                 : 'bg-[#10241b] border-[#1b3829] text-on-surface-variant'
             }`}>
-              {tx.status === 'Pending' ? (
+              {status === 'Pending' ? (
                 <Clock className="w-7 h-7 stroke-[2.25]" />
-              ) : tx.status === 'Failed' || tx.status === 'FailedMintError' ? (
+              ) : status === 'Failed' || status === 'FailedMintError' ? (
                 <X className="w-7 h-7 stroke-[2.5]" />
               ) : isInflow ? (
                 <ArrowDownLeft className="w-7 h-7 stroke-[2.25]" />
@@ -196,29 +222,29 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             {/* Hero Amount */}
             <div className="flex items-baseline justify-center">
               <span className="font-display-hero text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
-                {isInflow ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
+                {isRequest && status === 'Pending' ? '' : isInflow ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
               </span>
             </div>
 
             {/* Status Label Pill (right below amount) */}
             <div className="mt-2.5">
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wide border shadow-sm ${
-                tx.status === 'Success'
+                status === 'Success'
                   ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-400'
-                  : tx.status === 'Pending'
+                  : status === 'Pending'
                   ? 'bg-amber-950/60 border-amber-500/30 text-amber-400'
                   : 'bg-rose-950/60 border-rose-500/30 text-rose-400'
               }`}>
-                {tx.status === 'Success' && <CheckCircle size={13} className="stroke-[2.5]" />}
-                {tx.status === 'Pending' && <AlertCircle size={13} className="stroke-[2.5]" />}
-                {tx.status === 'Failed' && <XCircle size={13} className="stroke-[2.5]" />}
-                {tx.status === 'FailedMintError' && <AlertCircle size={13} className="stroke-[2.5]" />}
-                <span>{tx.status === 'FailedMintError' ? 'Mint Error' : tx.status}</span>
+                {status === 'Success' && <CheckCircle size={13} className="stroke-[2.5]" />}
+                {status === 'Pending' && <AlertCircle size={13} className="stroke-[2.5]" />}
+                {status === 'Failed' && <XCircle size={13} className="stroke-[2.5]" />}
+                {status === 'FailedMintError' && <AlertCircle size={13} className="stroke-[2.5]" />}
+                <span>{isRequest ? requestStatus === 'paid' ? 'Paid' : requestStatus === 'received' ? 'Claim needed' : 'Awaiting payment' : status === 'FailedMintError' ? 'Mint Error' : status}</span>
               </span>
             </div>
 
             {/* Mint Settlement Error Explanation Box */}
-            {tx.status === 'FailedMintError' && (
+            {status === 'FailedMintError' && (
               <div className="mt-3.5 bg-rose-500/10 border border-rose-500/25 p-4 rounded-2xl flex flex-col gap-1.5 text-left w-full shadow-sm">
                 <div className="flex items-center gap-2 text-rose-300 font-semibold text-xs uppercase tracking-wider">
                   <AlertCircle size={15} className="text-rose-400 flex-shrink-0" />
@@ -264,8 +290,11 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             )}
           </div>
 
+          {isRequest && <EcashReceiveInvoice mintUrl={tx.mint_url} invoiceId={tx.tx_type.EcashRequest.id} actionsContainer={invoiceActionsContainer} embedded onStatusChange={setRequestStatus} onPaid={() => setRequestStatus('paid')}/>}
+
           {/* Details Card: Payment Type, Date, Mint Name, Fee */}
           <div className="bg-surface-container/60 rounded-2xl border border-outline-variant/20 p-4 flex flex-col gap-3.5 shadow-sm">
+            {isRequest && tx.tx_type.EcashRequest.description && <><div className="flex justify-between items-center gap-4"><span className="text-label-caps font-label-caps text-on-surface-variant">DESCRIPTION</span><span className="text-body-md text-on-surface text-right break-words min-w-0">{tx.tx_type.EcashRequest.description}</span></div><div className="border-b border-outline-variant/15"/></>}
             {/* Payment Type */}
             <div className="flex justify-between items-center gap-4">
               <span className="text-label-caps font-label-caps text-on-surface-variant flex-shrink-0">TYPE</span>
@@ -340,13 +369,13 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             {/* Transaction ID */}
             <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/60 border border-outline-variant/20 shadow-sm">
               <div className="flex flex-col min-w-0 pr-2">
-                <span className="text-[10px] font-semibold tracking-wider text-on-surface-variant uppercase">Transaction ID</span>
-                <span className="font-mono text-xs text-on-surface truncate">{tx.id}</span>
+                <span className="text-[10px] font-semibold tracking-wider text-on-surface-variant uppercase">{isRequest ? 'Request ID' : 'Transaction ID'}</span>
+                <span className="font-mono text-xs text-on-surface truncate">{isRequest ? tx.tx_type.EcashRequest.id : tx.id}</span>
               </div>
               <button
-                onClick={() => copyToClipboard(tx.id, 'Transaction ID copied')}
+                onClick={() => copyToClipboard(isRequest ? tx.tx_type.EcashRequest.id : tx.id, isRequest ? 'Request ID copied' : 'Transaction ID copied')}
                 className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
-                title="Copy Transaction ID"
+                title={isRequest ? 'Copy Request ID' : 'Copy Transaction ID'}
               >
                 <Copy size={14} />
               </button>
@@ -445,8 +474,8 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
 
         {/* Action Buttons Sticky Footer (Always visible at the bottom) */}
         {hasActions && (
-          <div className="px-6 pt-3 pb-6 sm:pb-5 bg-surface-container-high/95 backdrop-blur-xl border-t border-outline-variant/15 relative z-20 flex flex-col gap-2 shadow-[0_-8px_24px_rgba(0,0,0,0.3)]">
-            {isIssue && tx.status === 'Success' && onDownloadNote && (
+          <div ref={isRequest ? setInvoiceActionsContainer : undefined} className="px-6 pt-3 pb-6 sm:pb-5 bg-surface-container-high/95 backdrop-blur-xl border-t border-outline-variant/15 relative z-20 flex flex-col gap-2 shadow-[0_-8px_24px_rgba(0,0,0,0.3)]">
+            {isIssue && status === 'Success' && onDownloadNote && (
               <button
                 onClick={() => onDownloadNote(tx.id, tx.amount, tx.tx_type?.Issue?.note?.serial)}
                 className="w-full py-3 bg-surface-container-highest hover:bg-surface-bright text-primary rounded-xl font-bold text-body-md transition-colors border border-outline-variant/30 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
@@ -456,7 +485,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               </button>
             )}
 
-            {isMint && tx.status === 'Pending' && onRetryMint && (
+            {isMint && status === 'Pending' && onRetryMint && (
               <button
                 onClick={() => onRetryMint(tx.id)}
                 className="w-full py-3 bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 rounded-xl font-bold text-body-md transition-colors border border-teal-500/30 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
@@ -466,7 +495,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               </button>
             )}
 
-            {isIssue && tx.status === 'Pending' && onCheckIssue && (
+            {isIssue && status === 'Pending' && onCheckIssue && (
               <button
                 onClick={() => onCheckIssue(tx.id)}
                 className="w-full py-3 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-bold text-body-md transition-colors border border-primary/30 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
@@ -476,7 +505,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               </button>
             )}
 
-            {tx.status === 'Pending' && onRecover && !isMint && !isIssue && (
+            {!isRequest && status === 'Pending' && onRecover && !isMint && !isIssue && (
               <button
                 onClick={onRecover}
                 className="w-full py-3 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-bold text-body-md transition-colors border border-primary/30 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
@@ -498,7 +527,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               </button>
             )}
 
-            {tx.status !== 'Pending' && (isSend || isIssue || isRedeem) && onCheckClaimed && (
+            {status !== 'Pending' && (isSend || isIssue || isRedeem) && onCheckClaimed && (
               <button
                 onClick={onCheckClaimed}
                 className="w-full py-3 bg-surface-container-highest hover:bg-surface-bright text-on-surface rounded-xl font-bold text-body-md transition-colors border border-outline-variant/20 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
@@ -508,7 +537,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               </button>
             )}
 
-            {tx.status === 'Failed' && isReceiveEcash && onRetryReceiveEcash && (
+            {status === 'Failed' && isReceiveEcash && onRetryReceiveEcash && (
               <button
                 onClick={onRetryReceiveEcash}
                 className="w-full py-3 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-bold text-body-md transition-colors border border-primary/30 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"

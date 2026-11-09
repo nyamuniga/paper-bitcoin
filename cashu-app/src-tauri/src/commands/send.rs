@@ -39,6 +39,8 @@ pub async fn send_ecash(
     mint_url: String,
     amount: u64,
     pubkey: Option<String>,
+    payment_request: Option<String>,
+    payment_max_total: Option<u64>,
     state: State<'_, AppState>,
 ) -> CommandResult<SendEcashResult> {
     let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
@@ -56,8 +58,29 @@ pub async fn send_ecash(
         ));
     }
 
+    if payment_request.is_some() != payment_max_total.is_some() {
+        return Err(crate::error::CommandError("Ecash payments require a request and approved total".into()));
+    }
+    if let Some(ref request) = payment_request {
+        if request.len() > 28671 {
+            return Err(crate::error::CommandError("Ecash request too large".into()));
+        }
+        if w_state.transactions.iter().any(|tx| matches!(&tx.tx_type, TransactionType::Send(data) if data.payment_request.as_ref() == Some(request))) {
+            return Err(crate::error::CommandError("A payment already exists for this request. Resume it instead of creating another.".into()));
+        }
+    }
+    let force_swap = payment_request.is_some();
+    let amount = if let Some(cap) = payment_max_total {
+        let quote = super::payment_request::quote(&mint_url, amount, &proofs).await?;
+        if quote.total > cap {
+            return Err(crate::error::CommandError("Mint fees changed. Review the payment again.".into()));
+        }
+        quote.token_amount
+    } else {
+        amount
+    };
     let client = ecash_wallet::client::MintClient::new(&mint_url);
-    let mut exact_match = if pubkey.is_none() {
+    let mut exact_match = if pubkey.is_none() && !force_swap {
         select_exact_proofs(&proofs, amount)
     } else {
         None
@@ -112,11 +135,14 @@ pub async fn send_ecash(
                 final_send_proofs.iter().map(|p| p.secret.clone()).collect();
             mint_proofs.retain(|p| !selected_secrets.contains(&p.secret));
         }
-        // Save wallet state
-        w_state.save_encrypted(&path, &passphrase)?;
+        // Persist proof removal together with the outgoing token below.
     } else {
         // 2. We need to split proofs via swap
-        let all_keysets = client.fetch_keysets().await.unwrap_or_default();
+        let all_keysets = if force_swap {
+            client.fetch_keysets().await?
+        } else {
+            client.fetch_keysets().await.unwrap_or_default()
+        };
 
         // Select proofs summing to >= amount + swap_fee (prefer smallest to clean up dust)
         let mut sorted_proofs = proofs.clone();
@@ -142,6 +168,11 @@ pub async fn send_ecash(
             )));
         }
 
+        if let Some(cap) = payment_max_total {
+            if amount.saturating_add(swap_fee) > cap {
+                return Err(crate::error::CommandError("Mint fees changed. Review the payment again.".into()));
+            }
+        }
         // Record pending transaction before swap
         let tx_id = format!(
             "tx_send_{}",
@@ -155,6 +186,7 @@ pub async fn send_ecash(
         let pending_tx = Transaction {
             id: tx_id.clone(),
             tx_type: TransactionType::Send(SendTransactionData {
+                payment_request: payment_request.clone(),
                 token_string: "".to_string(), // Will populate after successful swap
                 proofs: selected_for_swap.clone(),
             }),
@@ -237,6 +269,7 @@ pub async fn send_ecash(
         let tx = Transaction {
             id: tx_id.clone(),
             tx_type: TransactionType::Send(SendTransactionData {
+                payment_request: payment_request.clone(),
                 token_string: encoded.clone(),
                 proofs: final_send_proofs,
             }),
@@ -268,8 +301,25 @@ pub async fn send_ecash(
 pub async fn receive_ecash(
     token_string: String,
     nostr_key: Option<String>,
+    expected_mint: Option<String>,
+    expected_amount: Option<u64>,
+    expected_invoice_id: Option<String>,
     state: State<'_, AppState>,
 ) -> CommandResult<u64> {
+    if expected_mint.is_some() != expected_amount.is_some()
+        || expected_mint.is_some() != expected_invoice_id.is_some()
+        || expected_invoice_id.as_ref().is_some_and(|id| id.is_empty() || id.len() > 64)
+    {
+        return Err(crate::error::CommandError("Incomplete invoice payment constraints".into()));
+    }
+    if expected_amount.is_some() && token_string.len() > 100000 {
+        return Err(crate::error::CommandError("Invoice payment is too large".into()));
+    }
+    let invoice = expected_mint.as_deref().zip(expected_amount);
+    if let Some((mint, amount)) = invoice {
+        let (received_mint, _, total) = ecash_wallet::decode_token_string(&token_string)?;
+        ecash_wallet::payment_request::validate_invoice_payment(&received_mint, total, 0, mint, amount)?;
+    }
     let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
     let w_state = wallet_guard.as_mut().unwrap();
 
@@ -283,7 +333,16 @@ pub async fn receive_ecash(
     for tx in &w_state.transactions {
         if tx.status == TransactionStatus::Success {
             if let TransactionType::ReceiveEcash(ref data) = tx.tx_type {
+                if expected_invoice_id.is_some() && data.invoice_id == expected_invoice_id && data.token_string != token_string {
+                    return Err(crate::error::CommandError("This invoice has already been paid by another token".into()));
+                }
                 if data.token_string == token_string {
+                    if let Some(id) = expected_invoice_id.as_deref() {
+                        ecash_wallet::payment_request::validate_invoice_receipt(data.invoice_id.as_deref(), id)?;
+                    }
+                    if let Some((mint, amount)) = invoice {
+                        ecash_wallet::payment_request::validate_invoice_payment(&tx.mint_url, tx.amount, 0, mint, amount)?;
+                    }
                     return Ok(tx.amount);
                 }
             }
@@ -295,7 +354,13 @@ pub async fn receive_ecash(
 
     // Query mint keysets to resolve any short keyset IDs and calculate input fees
     let client = ecash_wallet::client::MintClient::new(&mint_url);
-    let all_keysets = client.fetch_keysets().await.unwrap_or_default();
+    let all_keysets = if invoice.is_some() {
+        let keysets = client.fetch_keysets().await?;
+        ecash_wallet::payment_request::resolve_keysets(&mut input_proofs, &keysets)?;
+        keysets
+    } else {
+        client.fetch_keysets().await.unwrap_or_default()
+    };
 
     // Resolve short keyset IDs in input_proofs
     for p in &mut input_proofs {
@@ -318,10 +383,12 @@ pub async fn receive_ecash(
             .find(|ks| ks.id == p.id)
             .map(|ks| ks.input_fee_ppk)
             .unwrap_or(0);
-        total_fee_ppk += fee_ppk;
+        total_fee_ppk = total_fee_ppk.checked_add(fee_ppk)
+            .ok_or_else(|| crate::error::CommandError("Mint fee overflow".into()))?;
     }
     let fee = if total_fee_ppk > 0 {
-        (total_fee_ppk + 999) / 1000
+        total_fee_ppk.checked_add(999)
+            .ok_or_else(|| crate::error::CommandError("Mint fee overflow".into()))? / 1000
     } else {
         0
     };
@@ -334,6 +401,9 @@ pub async fn receive_ecash(
     }
 
     let net_amount = total_amount - fee;
+    if let Some((mint, amount)) = invoice {
+        ecash_wallet::payment_request::validate_invoice_payment(&mint_url, total_amount, fee, mint, amount)?;
+    }
 
     // Record pending transaction before swap
     let tx_id = format!(
@@ -348,6 +418,7 @@ pub async fn receive_ecash(
         id: tx_id.clone(),
         tx_type: TransactionType::ReceiveEcash(ReceiveEcashTransactionData {
             token_string: token_string.clone(),
+            invoice_id: expected_invoice_id,
         }),
         amount: net_amount,
         fee,
@@ -384,7 +455,7 @@ pub async fn receive_ecash(
                 || err_str.contains("already signed")
                 || err_str.contains("already issued");
 
-            if is_spent {
+            if is_spent && invoice.is_none() {
                 // The input proofs were already swapped (likely by a previous attempt whose
                 // response was lost). Try to recover the output proofs via restore.
                 println!("[receive_ecash] Input proofs already spent — attempting scoped restore for {}", mint_url);

@@ -4,6 +4,7 @@ import { useWalletStore } from '../store/wallet';
 import { useNavigate } from 'react-router-dom';
 import { parseBitcoinInput } from '../utils/bitcoinValidation';
 import { validateLnurlPay } from './useLnurlValidation';
+import { isCashuRequest } from '../services/cashuRequests';
 
 export const useScan = () => {
   const [binB64, setBinB64] = useState<string>('');
@@ -27,6 +28,11 @@ export const useScan = () => {
     if (!base64Payload) return;
     const trimmed = base64Payload.trim();
     const lower = trimmed.toLowerCase();
+
+    if (isCashuRequest(trimmed)) {
+      navigate('/', { state: { ecashRequest: trimmed } });
+      return;
+    }
 
     if (lower.startsWith('cashua') || lower.startsWith('cashub')) {
       navigate('/', { state: { ecashToken: trimmed } });

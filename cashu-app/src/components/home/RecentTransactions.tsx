@@ -39,6 +39,7 @@ export const RecentTransactions: React.FC = () => {
 
     if (tx.momo_direction === 'RWF_TO_SATS') return 'MoMo Top Up';
     if (tx.momo_direction === 'SATS_TO_RWF') return 'MoMo Cash Out';
+    if ('EcashRequest' in tx.tx_type) return 'Requested eCash';
     if (isMint) return 'Received Lightning';
     if (isReceiveEcash) return 'Received eCash';
     if (isReceiveLightning) return 'Received Lightning';
@@ -58,7 +59,7 @@ export const RecentTransactions: React.FC = () => {
     if (tx.status === 'Failed' || tx.status === 'FailedMintError') {
       return <X className="w-4 h-4 text-[#f87171] stroke-[2.5]" />;
     }
-    const isReceive = 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || 'ReceiveOnchain' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
+    const isReceive = 'EcashRequest' in tx.tx_type || 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || 'ReceiveOnchain' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
     if (isReceive) {
       return <ArrowDownLeft className="w-4 h-4 text-[#34d399] stroke-[2.5]" />;
     }
@@ -75,7 +76,7 @@ export const RecentTransactions: React.FC = () => {
     if (tx.status === 'Failed' || tx.status === 'FailedMintError') {
       return 'bg-[#f87171]/10 border-[#f87171]/20';
     }
-    const isInflow = 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || 'ReceiveOnchain' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
+    const isInflow = 'EcashRequest' in tx.tx_type || 'Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || 'ReceiveOnchain' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS';
     if (isInflow) return 'bg-[#0e291d] border-[#1c442f]';
     return 'bg-[#10241b] border-[#1b3829]';
   };
@@ -85,6 +86,7 @@ export const RecentTransactions: React.FC = () => {
   };
 
   const getTxSign = (tx: Transaction) => {
+    if ('EcashRequest' in tx.tx_type) return tx.status === 'Pending' ? '' : '+';
     if ('Mint' in tx.tx_type || 'Redeem' in tx.tx_type || 'ReceiveEcash' in tx.tx_type || 'ReceiveLightning' in tx.tx_type || 'ReceiveOnchain' in tx.tx_type || tx.momo_direction === 'RWF_TO_SATS') return '+';
     if ('Issue' in tx.tx_type) return '';
     return '-';
@@ -143,6 +145,9 @@ export const RecentTransactions: React.FC = () => {
               <div
                 key={tx.id}
                 onClick={() => handleRowClick(tx)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={event => {if(event.key === 'Enter' || event.key === ' '){event.preventDefault();handleRowClick(tx);}}}
                 className="flex items-center gap-3.5 py-3.5 hover:bg-[#12261d]/50 transition-colors cursor-pointer active:scale-[0.99]"
               >
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center border flex-shrink-0 shadow-sm ${getTxIconBg(tx)}`}>
@@ -150,8 +155,8 @@ export const RecentTransactions: React.FC = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-display-hero text-[14px] md:text-[15px] font-semibold text-[#f7f4eb] truncate">{getTxLabel(tx)}</p>
-                  <p className="text-[12px] text-[#627d70] font-sans mt-0.5 md:hidden">{formatTime(tx.timestamp)}</p>
-                  <p className="text-[12px] text-[#627d70] font-sans mt-0.5 hidden md:block">{formatFullDate(tx.timestamp)}</p>
+                  <p className="text-[12px] text-[#627d70] font-sans mt-0.5 md:hidden">{'EcashRequest' in tx.tx_type && tx.status === 'Pending' ? `${tx.tx_type.EcashRequest.status === 'received' ? 'Claim needed' : 'Awaiting payment'} · ` : ''}{formatTime(tx.timestamp)}</p>
+                  <p className="text-[12px] text-[#627d70] font-sans mt-0.5 hidden md:block">{'EcashRequest' in tx.tx_type && tx.status === 'Pending' ? `${tx.tx_type.EcashRequest.status === 'received' ? 'Claim needed' : 'Awaiting payment'} · ` : ''}{formatFullDate(tx.timestamp)}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
                   <span className={`font-mono text-[14px] md:text-[15px] ${getTxAmountColor(tx)}`}>

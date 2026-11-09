@@ -169,7 +169,7 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
                         dleq: None,
                         derivation_index: 0,
                     });
-                    total_amount += amount;
+                    total_amount = total_amount.checked_add(amount).ok_or_else(|| anyhow!("Token amount overflow"))?;
                 }
             }
         }
@@ -270,7 +270,7 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
                     dleq: None,
                     derivation_index: 0,
                 });
-                total_amount += amount;
+                total_amount = total_amount.checked_add(amount).ok_or_else(|| anyhow!("Token amount overflow"))?;
             }
         }
     } else {

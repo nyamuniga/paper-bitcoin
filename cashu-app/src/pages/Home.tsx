@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import { isHorizontalSwipe } from '../utils/balanceCardGesture';
 import { WalletBalanceCard } from '../components/home/WalletBalanceCard';
 import { LightningAddressCard } from '../components/home/LightningAddressCard';
 import { RecentTransactions } from '../components/home/RecentTransactions';
@@ -20,6 +21,7 @@ export const Home = () => {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const startYRef = useRef(0);
+  const startXRef = useRef(0);
   const [pulling, setPulling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
@@ -106,6 +108,7 @@ export const Home = () => {
 
       if (getScrollTop() <= 5) {
         startYRef.current = e.touches[0].clientY;
+        startXRef.current = e.touches[0].clientX;
       } else {
         startYRef.current = 0;
       }
@@ -118,6 +121,13 @@ export const Home = () => {
           setPullDistance(0);
           setPulling(false);
         }
+        return;
+      }
+
+      if (isHorizontalSwipe(e.touches[0].clientX - startXRef.current, e.touches[0].clientY - startYRef.current, 12)) {
+        startYRef.current = 0;
+        setPullDistance(0);
+        setPulling(false);
         return;
       }
 
@@ -171,6 +181,7 @@ export const Home = () => {
 
       if (getScrollTop() <= 5) {
         startYRef.current = e.clientY;
+        startXRef.current = e.clientX;
         pointerActive = true;
       }
     };
@@ -184,6 +195,14 @@ export const Home = () => {
           setPullDistance(0);
           setPulling(false);
         }
+        return;
+      }
+
+      if (isHorizontalSwipe(e.clientX - startXRef.current, e.clientY - startYRef.current, 12)) {
+        pointerActive = false;
+        startYRef.current = 0;
+        setPullDistance(0);
+        setPulling(false);
         return;
       }
 

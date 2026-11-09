@@ -21,7 +21,7 @@ export const useEcash = (mintUrl?: string) => {
       if (currentTxId && !isClaimed) {
         try {
           const status = await invoke<string>('check_token_spend_status', { txId: currentTxId });
-          if (status === 'Spent' || status === 'Partially Spent') {
+          if (status === 'Spent') {
             setIsClaimed(true);
             await refreshWallet();
           }
@@ -132,5 +132,9 @@ export const useEcash = (mintUrl?: string) => {
     setIsClaimed,
     sendEcash,
     receiveEcash,
+    trackOutgoing: (txId: string) => {
+      setCurrentTxId(txId);
+      setIsClaimed(false);
+    },
   };
 };

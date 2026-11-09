@@ -3,6 +3,7 @@ import { useLocation, useNavigationType } from 'react-router-dom';
 
 const ROUTE_RANKS: Record<string, number> = {
   '/': 0,
+  '/convert': 0.5,
   '/issue': 1,
   '/scan': 2,
   '/mints': 3,

@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:payments": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
     "@breeztech/breez-sdk-spark": "^0.28.0",
@@ -43,7 +44,8 @@
     "react-qr-code": "^2.2.0",
     "react-router-dom": "^7.17.0",
     "svg2pdf.js": "^2.7.0",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.14",
+    "cbor-sync": "^1.0.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.1",

@@ -12,6 +12,7 @@ import Mints from './pages/Mints';
 import DiscoverMints from './pages/DiscoverMints';
 import { Pay } from './pages/Pay';
 import { AddressBook } from './pages/AddressBook';
+import { TransferFundsPage } from './pages/TransferFunds';
 import { TopNav } from './components/navigation/TopNav';
 import { PageTransition } from './components/navigation/PageTransition';
 import { TransactionProcessor } from './hooks/useTransactionProcessor';
@@ -48,6 +49,7 @@ export default function App() {
         <PageTransition>
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/convert" element={<TransferFundsPage />} />
             <Route path="/scan" element={<Scan />} />
             <Route path="/issue" element={<Issue />} />
             <Route path="/history" element={<History />} />

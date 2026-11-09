@@ -152,6 +152,10 @@ cargo run -p ecash-cli -- issue 1000
 
 ## References
 
+USD stable balance conversions using existing ecash are described in [Stable balance](cashu-app/STABLE_BALANCE.md).
+
+QR ecash invoices and payments are described in [Ecash payments](cashu-app/ECASH_PAYMENTS.md).
+
 1. [Cashu NUTs](https://github.com/cashubtc/nuts) — protocol specification
 2. [Cashu Dev Kit](https://github.com/cashubtc/cdk) — reference implementation
 3. [k256](https://docs.rs/k256) — secp256k1 elliptic curve operations

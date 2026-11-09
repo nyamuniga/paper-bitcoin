@@ -1,16 +1,24 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useId } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { QrCode, ArrowDownLeft, ArrowUpRight, Coins, Bitcoin, Banknote, ChevronDown, Phone, Check, Eye, EyeOff } from 'lucide-react';
 import { ActionMenuModal } from './ActionMenuModal';
 import { EcashModal } from './EcashModal';
+import { useWalletStore } from '../../store/wallet';
+import { useStableBalance } from '../../hooks/useStableBalance';
+import { dollarAmount, dollarFiatValue } from '../../services/transferAmount';
+import { balanceTabAfterSwipe, isHorizontalSwipe } from '../../utils/balanceCardGesture';
+import type { BalanceTab } from '../../utils/balanceCardGesture';
 import { BitcoinModal } from './BitcoinModal';
 import { MomoTransferModal } from './MomoTransferModal';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
 import { Skeleton } from '../shared/Skeleton';
+import { SlidingSegmentedControl } from '../shared/SlidingSegmentedControl';
 import { registerBottomSheetOpen, registerBottomSheetClose } from '../../hooks/useBottomSheet';
 import { useCurrencyStore } from '../../store/currencyStore';
+
+const balanceSymbolClass = 'text-[#f2a93b] text-[34px] sm:text-[42px] md:text-[48px] font-extrabold leading-none select-none flex-shrink-0';
 
 interface WalletBalanceCardProps {
   balance: number;
@@ -19,12 +27,66 @@ interface WalletBalanceCardProps {
 }
 
 export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, mintBalances, isLoading = false }) => {
+  const stable = useStableBalance();
+  const balanceTab = useWalletStore(s => s.balanceView);
+  const setBalanceTab = useWalletStore(s => s.setBalanceView);
+  const balanceTabsId = useId();
+  const balanceCardRef = useRef<HTMLDivElement>(null);
+  const wheelSwipe = useRef({delta:0, last:0, switched:false});
+  const swipeStart = useRef<{x:number; y:number} | null>(null);
+  const suppressSwipeClick = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
   const [showReceive, setShowReceive] = useState(false);
   const [showSend, setShowSend] = useState(false);
   const [showMintDropdown, setShowMintDropdown] = useState(false);
   const [isClosingDropdown, setIsClosingDropdown] = useState(false);
+
+  const selectBalanceTab = (tab: BalanceTab) => {
+    setBalanceTab(tab);
+    setShowMintDropdown(false);
+    setIsClosingDropdown(false);
+  };
+  const startBalanceSwipe = (x: number, y: number, target: EventTarget | null) => {
+    suppressSwipeClick.current = 0;
+    swipeStart.current = !showMintDropdown && target instanceof Element && !target.closest('button, a, input, [data-modal]') ? {x,y} : null;
+  };
+  const endBalanceSwipe = (x: number, y: number) => {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start) return;
+    const next = balanceTabAfterSwipe(balanceTab, x - start.x, y - start.y);
+    if (next !== balanceTab) {
+      suppressSwipeClick.current = performance.now() + 350;
+      selectBalanceTab(next);
+    }
+  };
+
+
+  useEffect(() => {
+    const card = balanceCardRef.current;
+    if (!card) return;
+    const onWheel = (event: WheelEvent) => {
+      if (showMintDropdown || event.ctrlKey || !isHorizontalSwipe(event.deltaX, event.deltaY, 1)) return;
+      if (event.cancelable) event.preventDefault();
+      const gesture = wheelSwipe.current;
+      const now = performance.now();
+      const multiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? card.clientWidth : 1;
+      const delta = event.deltaX * multiplier;
+      if (now - gesture.last > 180 || Math.sign(delta) !== Math.sign(gesture.delta)) {
+        gesture.delta = 0; gesture.switched = false;
+      }
+      gesture.last = now;
+      gesture.delta += delta;
+      if (!gesture.switched && Math.abs(gesture.delta) >= 48) {
+        const next = balanceTabAfterSwipe(balanceTab, -gesture.delta, 0);
+        if (next !== balanceTab) selectBalanceTab(next);
+        gesture.switched = true;
+      }
+    };
+    card.addEventListener('wheel', onWheel, {passive:false});
+    return () => card.removeEventListener('wheel', onWheel);
+  }, [balanceTab, showMintDropdown]);
 
   const closeMintDropdown = () => {
     setIsClosingDropdown(true);
@@ -42,7 +104,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
     }
   };
 
-  const [ecashModalConfig, setEcashModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive', initialToken?: string } | null>(null);
+  const [ecashModalConfig, setEcashModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive', initialToken?: string, initialRequest?: string } | null>(null);
   const [bitcoinModalConfig, setBitcoinModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive', initialInvoice?: string, initialAmountSats?: number } | null>(null);
   const [momoModalConfig, setMomoModalConfig] = useState<{ isOpen: boolean, tab: 'send' | 'receive' } | null>(null);
 
@@ -51,6 +113,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
 
   // Multi-currency support from currencyStore
   const preferredCurrency = useCurrencyStore((s) => s.preferredCurrency);
+  const rates = useCurrencyStore(s => s.rates);
   const fetchRates = useCurrencyStore((s) => s.fetchRates);
   const convert = useCurrencyStore((s) => s.convert);
   const getCurrencyMeta = useCurrencyStore((s) => s.getCurrencyMeta);
@@ -59,6 +122,8 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
   const [isInitialLoadingRate, setIsInitialLoadingRate] = useState<boolean>(true);
   const conversion = useMemo(() => convert(balance), [balance, preferredCurrency, convert]);
   const targetFiatValue = conversion.value;
+  const dollarEquivalent = stable.balance === null ? null : dollarFiatValue(stable.balance, preferredCurrency, rates);
+  const dollarRateLoading = !stable.error && (isInitialLoadingRate || stable.balance === null);
 
   const [displayedFiatValue, setDisplayedFiatValue] = useState<number | null>(() => targetFiatValue || null);
   const [isNumberAnimating, setIsNumberAnimating] = useState<boolean>(false);
@@ -178,9 +243,18 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
   };
 
   React.useEffect(() => {
+    if (new URLSearchParams(location.search).has('convert')) {
+      navigate('/convert', {replace:true});
+    }
+  }, [location.search, location.pathname, navigate]);
+
+  React.useEffect(() => {
     if (location.state) {
       const state = location.state as any;
-      if (state.ecashToken) {
+      if (state.ecashRequest) {
+        setEcashModalConfig({ isOpen: true, tab: 'send', initialRequest: state.ecashRequest });
+        navigate(location.pathname, { replace: true, state: {} });
+      } else if (state.ecashToken) {
         setEcashModalConfig({ isOpen: true, tab: 'receive', initialToken: state.ecashToken });
         navigate(location.pathname, { replace: true, state: {} });
       } else if (state.lnbcInvoice) {
@@ -218,7 +292,39 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
   return (
     <section className={`flex flex-col gap-4 md:gap-5 relative ${showMintDropdown ? 'z-30' : 'z-10'}`}>
       {/* Balance display */}
-      <div className="relative p-5 sm:p-6 md:p-8 flex flex-col items-center justify-center min-h-[150px] sm:min-h-[160px] md:min-h-[190px] z-10 bg-[#0c1b14] rounded-[24px] sm:rounded-[28px] border border-[#142d20] shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+      <div
+        data-wallet-balance-card
+        ref={balanceCardRef}
+        className="relative p-5 sm:p-6 md:p-8 flex flex-col items-center justify-center gap-4 min-h-[220px] sm:min-h-[235px] md:min-h-[260px] z-10 bg-[#0c1b14] rounded-[24px] sm:rounded-[28px] border border-[#142d20] shadow-[0_8px_32px_rgba(0,0,0,0.5)]"
+        style={{touchAction:'pan-y pinch-zoom'}}
+        onTouchStart={event => {
+          const touch = event.touches[0];
+          if (event.touches.length === 1 && touch) startBalanceSwipe(touch.clientX, touch.clientY, event.target);
+          else swipeStart.current = null;
+        }}
+        onTouchMove={event => {if (event.touches.length !== 1) swipeStart.current = null;}}
+        onTouchEnd={event => {const touch = event.changedTouches[0]; if(touch) endBalanceSwipe(touch.clientX,touch.clientY);}}
+        onTouchCancel={() => {swipeStart.current = null;}}
+        onPointerDown={event => {if(event.pointerType !== 'touch' && event.button === 0) startBalanceSwipe(event.clientX,event.clientY,event.target);}}
+        onPointerMove={event => {
+          if (event.pointerType !== 'touch' && event.buttons === 0) {swipeStart.current = null; return;}
+          const start = swipeStart.current;
+          if (event.pointerType !== 'touch' && start && isHorizontalSwipe(event.clientX-start.x,event.clientY-start.y,12) && !event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerUp={event => {
+          if(event.pointerType !== 'touch') endBalanceSwipe(event.clientX,event.clientY);
+          if(event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onPointerCancel={() => {swipeStart.current = null;}}
+        onPointerLeave={event => {if(event.pointerType !== 'touch' && !event.currentTarget.hasPointerCapture(event.pointerId)) swipeStart.current = null;}}
+        onClickCapture={event => {if(performance.now() < suppressSwipeClick.current) {event.preventDefault(); event.stopPropagation(); suppressSwipeClick.current = 0;}}}
+      >
+        <SlidingSegmentedControl<BalanceTab>
+          compact tabListId={balanceTabsId} ariaLabel="Wallet balance currency"
+          options={[{id:'btc',label:'BTC'},{id:'usd',label:'USD'}]}
+          value={balanceTab} onChange={selectBalanceTab}
+        />
+        <div role="tabpanel" id={`${balanceTabsId}-btc-panel`} aria-labelledby={`${balanceTabsId}-btc`} hidden={balanceTab !== 'btc'} className={`wallet-balance-panel w-full min-h-[132px] flex-col items-center justify-center ${balanceTab === 'btc' ? 'flex animate-tab-from-left' : 'hidden'}`}>
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-2 w-full select-none">
             {/* Mint pill badge skeleton */}
@@ -323,9 +429,11 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
             <div className={`relative z-10 flex flex-col items-center gap-1.5 max-w-full transition-all duration-200 ${showMintDropdown && !isClosingDropdown ? 'opacity-25 filter blur-[1px]' : 'opacity-100'
               }`}>
               <div className="flex items-center justify-center gap-2 sm:gap-2.5 max-w-full">
-                <span className="text-[#f2a93b] text-[34px] sm:text-[42px] md:text-[48px] font-extrabold leading-none select-none flex-shrink-0">₿</span>
+                <span data-balance-symbol="btc" className={balanceSymbolClass} aria-hidden="true">₿</span>
                 <span
+                  data-balance-amount="btc" role="button" tabIndex={0}
                   onClick={toggleHideBalance}
+                  onKeyDown={event => {if(event.key === 'Enter' || event.key === ' ') {event.preventDefault(); toggleHideBalance();}}}
                   className="text-[#f7f4eb] text-[40px] sm:text-[50px] md:text-[58px] leading-none font-display-hero font-extrabold tracking-tight cursor-pointer select-none truncate"
                   title={hideBalance ? "Click to show balance" : "Click to hide balance"}
                 >
@@ -362,7 +470,30 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
             </div>
           </>
         )}
+        </div>
+        <div role="tabpanel" id={`${balanceTabsId}-usd-panel`} aria-labelledby={`${balanceTabsId}-usd`} hidden={balanceTab !== 'usd'} className={`wallet-balance-panel w-full min-h-[132px] flex-col items-center justify-center ${balanceTab === 'usd' ? 'flex animate-tab-from-right' : 'hidden'}`}>
+          <p className="text-[#a3b5aa] text-xs font-medium min-h-8 mb-3 flex items-center">Dollar balance</p>
+          <div className="flex items-center justify-center gap-2 sm:gap-2.5 max-w-full">
+            <span data-balance-symbol="usd" className={balanceSymbolClass} aria-hidden="true">$</span>
+            <span
+              data-balance-amount="usd" role="button" tabIndex={0}
+              onClick={toggleHideBalance}
+              onKeyDown={event => {if(event.key === 'Enter' || event.key === ' ') {event.preventDefault(); toggleHideBalance();}}}
+              title={hideBalance ? 'Click to show balance' : 'Click to hide balance'}
+              className={`min-w-0 truncate font-display-hero font-extrabold tracking-tight leading-none select-none cursor-pointer ${stable.error && !hideBalance ? 'text-2xl' : 'text-[40px] sm:text-[50px] md:text-[58px]'} ${!hideBalance && !stable.error && stable.balance === null ? 'animate-rwf-shimmer' : 'text-[#f7f4eb]'}`}
+              aria-busy={!hideBalance && !stable.error && stable.balance === null}
+            >{hideBalance ? '••••••' : stable.error ? 'Unavailable' : stable.balance === null ? <><span aria-hidden="true">••••</span><span className="sr-only">Loading dollar balance</span></> : dollarAmount(stable.balance).replace('$','')}</span>
+            <button onClick={toggleHideBalance} className="text-[#8b9e94] hover:text-[#f7f4eb] p-2 min-w-11 min-h-11 rounded-full hover:bg-[#12261d] transition-colors cursor-pointer shrink-0 inline-flex items-center justify-center" title={hideBalance ? 'Show balance' : 'Hide balance'} aria-label={hideBalance ? 'Show balance' : 'Hide balance'}>{hideBalance ? <EyeOff size={20}/> : <Eye size={20}/>}</button>
+          </div>
+          <span
+            data-dollar-equivalent
+            className={`text-[13px] sm:text-[14px] font-medium mt-3 tracking-tight select-none truncate max-w-full animate-rwf-in ${dollarRateLoading && !hideBalance ? 'animate-rwf-shimmer' : 'text-[#6f887b]'}`}
+            title={dollarRateLoading ? 'Refreshing estimated rate…' : `Estimated value in ${currentMeta.code}`}
+          >{hideBalance ? `≈ •••••• ${currentMeta.code}` : dollarEquivalent !== null && !stable.error ? `≈ ${formatFiatValue(dollarEquivalent)}` : `≈ ••• ${currentMeta.code}`}</span>
+        </div>
       </div>
+
+
 
       {/* Action buttons */}
       <div className="flex items-center gap-2 sm:gap-3">
@@ -470,6 +601,7 @@ export const WalletBalanceCard: React.FC<WalletBalanceCardProps> = ({ balance, m
           mintUrl={activeMint || mintUrls[0]}
           initialTab={ecashModalConfig.tab}
           initialToken={ecashModalConfig.initialToken}
+          initialRequest={ecashModalConfig.initialRequest}
           onClose={() => setEcashModalConfig(null)}
         />
       )}

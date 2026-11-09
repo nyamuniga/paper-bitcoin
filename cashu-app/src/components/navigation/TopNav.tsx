@@ -1,21 +1,23 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Clock, Settings as SettingsIcon, Landmark } from 'lucide-react';
+import { Clock, Settings as SettingsIcon, Landmark, ArrowRightLeft } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet';
 
 interface NavTabItem {
   path: string;
   label: string;
   badge?: boolean;
+  icon?: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   match: (pathname: string) => boolean;
 }
 
 const DESKTOP_TABS: NavTabItem[] = [
   { path: '/', label: 'Wallet', match: (p) => p === '/' },
+  { path: '/convert', label: 'Convert', match: (p) => p === '/convert' },
   { path: '/issue', label: 'Issue', match: (p) => p === '/issue' },
   { path: '/scan', label: 'Scan', match: (p) => p === '/scan' },
-  { path: '/mints', label: 'Mints', match: (p) => p === '/mints' || p === '/discover' },
   { path: '/history', label: 'History', badge: true, match: (p) => p === '/history' },
+  { path: '/mints', label: 'Mints', match: (p) => p === '/mints' || p === '/discover' },
   { path: '/settings', label: 'Settings', match: (p) => p === '/settings' },
 ];
 
@@ -28,8 +30,9 @@ interface MobileTabItem {
 }
 
 const MOBILE_TABS: MobileTabItem[] = [
-  { path: '/mints', icon: Landmark, title: 'Trusted Mints', match: (p) => p === '/mints' || p === '/discover' },
+  { path: '/convert', icon: ArrowRightLeft, title: 'Convert', match: (p) => p === '/convert' },
   { path: '/history', icon: Clock, title: 'History', badge: true, match: (p) => p === '/history' },
+  { path: '/mints', icon: Landmark, title: 'Trusted Mints', match: (p) => p === '/mints' || p === '/discover' },
   { path: '/settings', icon: SettingsIcon, title: 'Settings', match: (p) => p === '/settings' },
 ];
 
@@ -119,8 +122,8 @@ export const TopNav = () => {
   }, [location.pathname]);
 
   return (
-    <header 
-      style={{ paddingTop: 'env(safe-area-inset-top)' }} 
+    <header
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
       className="bg-[#06110c]/95 backdrop-blur-md top-0 left-0 w-full z-50 sticky"
     >
       <div className="flex justify-between items-center w-full px-4 sm:px-6 md:px-8 max-w-[1200px] mx-auto h-16 relative">
@@ -143,7 +146,7 @@ export const TopNav = () => {
         </Link>
 
         {/* Desktop Navigation with Animated Sliding Indicator Pill */}
-        <nav 
+        <nav
           ref={navRef}
           className="hidden md:flex items-center gap-1.5 bg-[#0c1b14] border border-[#142d20] rounded-full p-1 shadow-sm relative overflow-hidden"
         >
@@ -174,12 +177,13 @@ export const TopNav = () => {
                 ref={(el) => {
                   desktopTabRefs.current[tab.path] = el;
                 }}
-                className={`relative z-10 px-3.5 py-1.5 rounded-full text-xs font-semibold font-display-hero transition-colors duration-200 select-none ${
+                className={`relative z-10 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold font-display-hero transition-colors duration-200 select-none ${
                   isActive
                     ? 'text-primary'
                     : 'text-[#8b9e94] hover:text-[#f7f4eb] hover:bg-[#12261d]/50'
                 }`}
               >
+                {tab.icon && <tab.icon className="w-4 h-4" strokeWidth={1.75} />}
                 {tab.label}
                 {tab.badge && hasUnreadTxs && (
                   <span className="inline-block w-1.5 h-1.5 bg-primary rounded-full ml-1.5 align-middle animate-pulse" />
@@ -190,7 +194,7 @@ export const TopNav = () => {
         </nav>
 
         {/* Mobile Navigation with Animated Sliding Indicator Pill */}
-        <nav 
+        <nav
           ref={mobileNavRef}
           className="flex md:hidden items-center gap-1 bg-[#0c1b14] border border-[#142d20] rounded-full p-1 shadow-sm relative overflow-hidden"
         >
@@ -221,12 +225,13 @@ export const TopNav = () => {
                 ref={(el) => {
                   mobileTabRefs.current[tab.path] = el;
                 }}
-                className={`relative z-10 p-2 transition-colors duration-200 active:scale-95 rounded-full ${
+                className={`relative z-10 p-2 min-w-11 min-h-11 inline-flex items-center justify-center transition-colors duration-200 active:scale-95 rounded-full ${
                   isActive
                     ? 'text-primary'
                     : 'text-[#8b9e94] hover:text-primary hover:bg-[#12261d]/50'
                 }`}
                 title={tab.title}
+                aria-label={tab.title}
               >
                 <Icon className="w-[20px] h-[20px]" strokeWidth={1.75} />
                 {tab.badge && hasUnreadTxs && (
@@ -240,4 +245,3 @@ export const TopNav = () => {
     </header>
   );
 };
-
