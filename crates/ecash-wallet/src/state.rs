@@ -8,6 +8,10 @@ use ecash_core::types::{Proof, Transaction};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WalletState {
+    #[serde(default)]
+    pub ecash_invoices: Vec<crate::ecash_invoice::SavedEcashInvoice>,
+    #[serde(default)]
+    pub stable_operations: Vec<crate::stable::StableOperation>,
     pub seed_hex: String,
     /// BIP39 mnemonic phrase (24 words). Stored so `info` can display it.
     pub mnemonic: Option<String>,
@@ -33,7 +37,7 @@ impl WalletState {
     }
 
     pub fn new(seed_hex: String, mnemonic: Option<String>) -> Self {
-        Self { seed_hex, mnemonic, derivation_index: 0, proofs: HashMap::new(), mints: Vec::new(), trusted_keys: HashMap::new(), transactions: Vec::new(), custom_nostr_key: None, default_nostr_key: None }
+        Self { ecash_invoices: Vec::new(), stable_operations: Vec::new(), seed_hex, mnemonic, derivation_index: 0, proofs: HashMap::new(), mints: Vec::new(), trusted_keys: HashMap::new(), transactions: Vec::new(), custom_nostr_key: None, default_nostr_key: None }
     }
 
     pub fn default_path() -> PathBuf {
@@ -74,6 +78,14 @@ impl WalletState {
                 }
                 p.secret.clear();
             }
+        }
+        for invoice in &mut self.ecash_invoices {
+            unsafe { invoice.secret_hex.as_bytes_mut().fill(0); }
+            invoice.secret_hex.clear();
+            if let Some(token) = &mut invoice.pending_token {
+                unsafe { token.as_bytes_mut().fill(0); }
+            }
+            invoice.pending_token = None;
         }
         self.proofs.clear();
     }

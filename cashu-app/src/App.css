@@ -885,3 +885,8 @@ section,
 
 
 
+
+/* Wallet currency transitions follow the app's tab motion and system preference. */
+@media (prefers-reduced-motion: reduce) {
+  .wallet-balance-panel { animation: none; will-change: auto; }
+}

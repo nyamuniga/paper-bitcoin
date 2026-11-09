@@ -17,6 +17,7 @@ interface TransactionCardProps {
 }
 
 export const TransactionCard = ({ tx, onClick }: TransactionCardProps) => {
+  const isRequest = 'EcashRequest' in tx.tx_type;
   const isMint = 'Mint' in tx.tx_type;
   const isIssue = 'Issue' in tx.tx_type;
   const isMelt = 'Melt' in tx.tx_type;
@@ -26,7 +27,7 @@ export const TransactionCard = ({ tx, onClick }: TransactionCardProps) => {
   const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
   const isSendOnchain = 'SendOnchain' in tx.tx_type;
   const isReceiveOnchain = 'ReceiveOnchain' in tx.tx_type;
-  const isReceive = isReceiveEcash || isReceiveLightning || isReceiveOnchain;
+  const isReceive = isRequest || isReceiveEcash || isReceiveLightning || isReceiveOnchain;
 
   const isInflow = isMint || isRedeem || isReceive || tx.momo_direction === 'RWF_TO_SATS';
 
@@ -49,6 +50,7 @@ export const TransactionCard = ({ tx, onClick }: TransactionCardProps) => {
   const getTxTitle = () => {
     if (tx.momo_direction === 'RWF_TO_SATS') return 'MoMo Top Up';
     if (tx.momo_direction === 'SATS_TO_RWF') return 'MoMo Cash Out';
+    if (isRequest) return 'Requested eCash';
     if (isMint) return 'Received Lightning';
     if (isReceiveEcash) return 'Received eCash';
     if (isReceiveLightning) return 'Received Lightning';
@@ -110,6 +112,9 @@ export const TransactionCard = ({ tx, onClick }: TransactionCardProps) => {
   return (
     <div 
       onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={event => {if (onClick && (event.key === 'Enter' || event.key === ' ')) {event.preventDefault();onClick();}}}
       className={`obsidian-card rounded-2xl p-4 sm:p-5 border group ${isInflow && tx.status === 'Success' ? 'border-primary/20' : 'border-outline-variant'} hover:border-outline-variant/60 hover:bg-surface-container-high/40 active:scale-[0.99] transition-all cursor-pointer relative overflow-hidden`}
     >
       {isInflow && tx.status === 'Success' && (
@@ -130,7 +135,7 @@ export const TransactionCard = ({ tx, onClick }: TransactionCardProps) => {
             </h3>
             <div className="flex items-center gap-1.5 mt-0.5 text-[12px] font-sans text-on-surface-variant">
               {tx.status === 'Pending' && (
-                <span className="text-amber-400 font-medium">Pending ·</span>
+                <span className="text-amber-400 font-medium">{isRequest ? tx.tx_type.EcashRequest.status === 'received' ? 'Claim needed' : 'Awaiting payment' : 'Pending'} ·</span>
               )}
               {tx.status === 'Failed' && (
                 <span className="text-rose-400 font-medium">Failed ·</span>
@@ -144,7 +149,7 @@ export const TransactionCard = ({ tx, onClick }: TransactionCardProps) => {
         </div>
         <div className="text-right flex-shrink-0">
           <span className={`font-mono text-body-md block font-bold ${getAmountColor()}`}>
-            {isInflow ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
+            {isRequest && tx.status === 'Pending' ? '' : isInflow ? '+' : isIssue ? '' : '-'}₿{tx.amount.toLocaleString()}
           </span>
           {tx.fee > 0 && (
             <span className="text-[10px] font-mono text-on-surface-variant/60 block mt-0.5">

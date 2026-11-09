@@ -18,17 +18,21 @@ import { extractMintFromToken } from '../../utils/format';
 import { readClipboardText, writeClipboardText } from '../../utils/clipboard';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { SlidingSegmentedControl } from '../shared/SlidingSegmentedControl';
+import { EcashRequestPayment } from './EcashRequestPayment';
+import { EcashReceiveInvoice } from './EcashReceiveInvoice';
+import { isCashuRequest } from '../../services/cashuRequests';
 
 interface EcashModalProps {
   mintUrl: string;
   initialTab?: 'send' | 'receive';
   initialToken?: string;
+  initialRequest?: string;
   onClose: () => void;
 }
 
 type Tab = 'send' | 'receive';
 
-export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialToken, onClose }) => {
+export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialToken, initialRequest, onClose }) => {
   const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [mintUrl, setMintUrl] = useState(initialMintUrl);
@@ -64,6 +68,9 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   const [receiveToken, setReceiveToken] = useState(initialToken || '');
   const [showScanner, setShowScanner] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState<number | null>(null);
+  const [requestBusy, setRequestBusy] = useState(false);
+  const [receiveMode, setReceiveMode] = useState<'token' | 'invoice'>('token');
+  const [scannedRequest, setScannedRequest] = useState(initialRequest);
 
   // Overlay state
   const [paymentStatus, setPaymentStatus] = useState<StampPaymentStatus | null>(null);
@@ -75,7 +82,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   const [lastAction, setLastAction] = useState<(() => void) | undefined>(undefined);
   const [hasCelebratedClaim, setHasCelebratedClaim] = useState(false);
 
-  const { sending, receiving, isClaimed, setIsClaimed, sendEcash, receiveEcash } = useEcash(mintUrl);
+  const { sending, receiving, isClaimed, setIsClaimed, sendEcash, receiveEcash, trackOutgoing } = useEcash(mintUrl);
 
   const urDecoder = useUrDecoder();
 
@@ -122,7 +129,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   }, [isClaimed, hasCelebratedClaim, token, paymentAmount, parsedAmount]);
 
   const handleSend = async () => {
-    if (!isValid) return;
+    if (!isValid || requestBusy) return;
 
     // Check if pubkey is valid hex or npub
     let targetPubkey = pubkey.trim();
@@ -373,12 +380,37 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
               activeTab === 'receive' ? 'animate-tab-from-right' : 'animate-tab-from-left'
             }`}
           >
+            {activeTab === 'receive' && receivedAmount === null && <SlidingSegmentedControl
+              options={[{ id: 'token', label: 'Receive' }, { id: 'invoice', label: 'Request' }]}
+              value={receiveMode}
+              onChange={value => { setShowScanner(false); setReceiveMode(value as 'token' | 'invoice'); }}
+              buttonClassName="py-2.5 text-sm"
+            />}
+            {activeTab === 'send' && <EcashRequestPayment
+              key={activeTab}
+              mintUrl={mintUrl}
+              paused={sending || receiving || showScanner || paymentStatus !== null}
+              onBusy={setRequestBusy}
+              onStartRequest={resetSend}
+              initialRequest={activeTab === 'send' ? scannedRequest : undefined}
+              onPrepared={(payment, netAmount) => {
+                setMintUrl(payment.mint_url);
+                setAmount(String(netAmount));
+                setPaymentAmount(netAmount);
+                setToken(payment.token);
+                setTokenV4(payment.token);
+                setTokenV3(payment.token_v3 || null);
+                setFormatVersion('v4');
+                setHasCelebratedClaim(false);
+                trackOutgoing(payment.tx_id);
+              }}
+            />}
             {activeTab === 'send' ? (
             /* ─── SEND TAB ────────────────────────────────────────────── */
             <div className="flex flex-col gap-3 sm:gap-4">
               {/* Amount input */}
               <div className="flex flex-col gap-2.5 sm:gap-3">
-                {!token && (
+                {!token && !requestBusy && (
                   <>
                     <AmountDisplay amount={amount} compact />
                     <NumberPad value={amount} onChange={(val) => { setAmount(val); setToken(null); }} compact />
@@ -416,11 +448,11 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                   <p className="text-error text-[12px] font-label-caps text-center">Insufficient balance</p>
                 )}
 
-                {!token && (
+                {!token && !requestBusy && (
                   <button
                     onClick={handleSend}
-                    disabled={sending || !isValid}
-                    className={`btn-gradient w-full py-3.5 sm:py-4 rounded-2xl text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center mt-1 cursor-pointer ${sending || !isValid ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                    disabled={sending || requestBusy || !isValid}
+                    className={`btn-gradient w-full py-3.5 sm:py-4 rounded-2xl text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center mt-1 cursor-pointer ${sending || requestBusy || !isValid ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                       }`}
                   >
                     {sending ? <Loader2 className="animate-spin w-6 h-6" /> : 'Create Token'}
@@ -520,6 +552,15 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                   Done
                 </button>
               </div>
+            ) : receiveMode === 'invoice' ? (
+              <EcashReceiveInvoice mintUrl={mintUrl} onPaid={amount => {
+                setReceivedAmount(amount);
+                setPaymentAmount(amount);
+                setPaymentTitle('eCash Received');
+                setPaymentSubtitle('Invoice paid and ecash redeemed to your wallet.');
+                setPaymentBadgeLabel('Received');
+                setPaymentStatus('success');
+              }} />
             ) : (
               <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-4">
@@ -536,7 +577,9 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                                 setShowScanner(false);
                               }
                             } else {
-                              handleTokenInput(text);
+                              if (isCashuRequest(text)) {
+                                resetSend(); setScannedRequest(text); setActiveTab('send');
+                              } else handleTokenInput(text);
                               setShowScanner(false);
                             }
                           }

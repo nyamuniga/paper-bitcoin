@@ -5,6 +5,8 @@ interface WalletState {
   isInitialized: boolean;
   isLoading: boolean;
   balanceSats: number;
+  balanceView: 'btc' | 'usd';
+  setBalanceView: (view: 'btc' | 'usd') => void;
   mintBalances: Record<string, number>;
   pendingTxs: number;
   hasUnreadTxs: boolean;
@@ -49,6 +51,8 @@ export const useWalletStore = create<WalletState>()((set, get) => ({
   isInitialized: false,
   isLoading: false,
   balanceSats: 0,
+  balanceView: 'btc',
+  setBalanceView: (balanceView) => set({balanceView}),
   mintBalances: {},
   pendingTxs: 0,
   hasUnreadTxs: false,
@@ -63,6 +67,7 @@ export const useWalletStore = create<WalletState>()((set, get) => ({
       isInitialized: false,
       isLoading: false,
       balanceSats: 0,
+      balanceView: 'btc',
       mintBalances: {},
       pendingTxs: 0,
       hasUnreadTxs: false,

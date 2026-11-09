@@ -1010,6 +1010,11 @@ pub async fn redeem_note(
 // ─── Pay Invoice ────────────────────────────────────────────────────────────────
 
 pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, invoice: &str, target_mint: Option<String>) -> Result<(u64, String)> {
+    pay_invoice_capped(state, wallet_path, passphrase, invoice, target_mint, None, None).await
+}
+
+/// Check the reviewed debit before any proof swap, and persist a caller-supplied recovery ID.
+pub async fn pay_invoice_capped(state: &mut WalletState, wallet_path: &PathBuf, passphrase: &str, invoice: &str, target_mint: Option<String>, max_total: Option<u64>, recovery_id: Option<String>) -> Result<(u64, String)> {
     let mut selected_mint = None;
     let mut required_amt = 0;
     let mut fee_reserve = 0;
@@ -1058,7 +1063,7 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     let hub_mint = selected_mint.ok_or_else(|| anyhow!("Payment failed.\n{}", mint_errors.join("\n")))?;
     let hub_client = MintClient::new(&hub_mint);
     let hub_keyset = hub_client.fetch_keyset().await?;
-    let all_hub_keysets = hub_client.fetch_keysets().await.unwrap_or_default();
+    let all_hub_keysets = if max_total.is_some() { hub_client.fetch_keysets().await? } else { hub_client.fetch_keysets().await.unwrap_or_default() };
 
     // Determine active keyset input fee rate (ppk)
     let hub_fee_ppk = all_hub_keysets.iter()
@@ -1114,6 +1119,8 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
                 hub_mint, total_melt_needed + swap_fee, swap_fee + melt_input_fee, selected_total
             ));
         }
+
+        enforce_melt_cap(total_melt_needed, swap_fee, max_total)?;
 
         // 2. If selected proofs exceed total_melt_needed + swap_fee, or if swap_fee > 0, swap to exact amounts and change.
         // This keeps the user's change safely in state.proofs, completely avoiding reliance
@@ -1203,7 +1210,7 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     state.derivation_index = deriv.index;
     state.save_encrypted(wallet_path, passphrase)?;
 
-    let tx_id = format!("tx_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+    let tx_id = recovery_id.unwrap_or_else(|| format!("tx_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()));
     let pending_tx = Transaction {
         id: tx_id.clone(),
         tx_type: TransactionType::Melt(MeltTransactionData {
@@ -1217,7 +1224,7 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
         mint_url: hub_mint.clone(),
     };
     state.transactions.push(pending_tx);
-    state.save_encrypted(wallet_path, passphrase).ok();
+    state.save_encrypted(wallet_path, passphrase)?;
 
     let melt_result = hub_client.melt_tokens(
         &melt_proofs,
@@ -1375,4 +1382,20 @@ pub async fn pay_invoice(state: &mut WalletState, wallet_path: &PathBuf, passphr
     }
 
     Ok((required_amt, preimage.unwrap_or_default()))
+}
+fn enforce_melt_cap(amount: u64, swap_fee: u64, cap: Option<u64>) -> Result<()> {
+    let total = amount.checked_add(swap_fee).ok_or_else(|| anyhow!("Melt total overflow"))?;
+    if cap.is_some_and(|max| total > max) {
+        return Err(anyhow!("Mint fees changed: {} sats exceeds the approved maximum. Request a new quote.", total));
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod capped_payment_tests {
+    #[test]
+    fn fees_cannot_exceed_reviewed_total() {
+        assert!(super::enforce_melt_cap(100, 2, Some(102)).is_ok());
+        assert!(super::enforce_melt_cap(100, 3, Some(102)).is_err());
+        assert!(super::enforce_melt_cap(u64::MAX, 1, Some(u64::MAX)).is_err());
+    }
 }
