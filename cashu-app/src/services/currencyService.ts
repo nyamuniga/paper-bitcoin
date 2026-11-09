@@ -83,9 +83,25 @@ export function getCachedRates(): Record<string, number> {
   return {};
 }
 
+let tickerRequest: Promise<Record<string, number>> | undefined;
+let tickerResult: Record<string, number> | undefined;
+let tickerUpdatedAt = 0;
+
+/** Share one bounded ticker request; amount-screen polling never contacts mints. */
 export async function fetchAllTickerRates(): Promise<Record<string, number>> {
+  if (tickerRequest) return tickerRequest;
+  if (tickerResult && Date.now() - tickerUpdatedAt < 3000) return tickerResult;
+  tickerRequest = loadTickerRates().then(rates => {
+    tickerResult = rates;
+    tickerUpdatedAt = Date.now();
+    return rates;
+  }).finally(() => {tickerRequest = undefined;});
+  return tickerRequest;
+}
+
+async function loadTickerRates(): Promise<Record<string, number>> {
   const fetchFn = typeof tauriFetch === 'function' ? tauriFetch : fetch;
-  const res = await fetchFn(EXCHANGE_RATE_API_URL);
+  const res = await fetchFn(EXCHANGE_RATE_API_URL, {signal: AbortSignal.timeout(10000)});
   if (!res.ok) {
     throw new Error(`Failed to fetch exchange rates: ${res.statusText}`);
   }

@@ -36,3 +36,19 @@ test('fiat display conversions retain their existing decimal precision',()=>{
   assert.equal(service.convertSatsToFiat(1000,'USD',{USD:75000}).formatted,'$0.75 USD');
   assert.equal(service.convertSatsToFiat(1000,'USD',{}).formatted,'••• USD');
 });
+
+
+test('ticker polling shares concurrent work and reuses a result for three seconds',async()=>{
+  const originalNow=Date.now;
+  let now=originalNow()+10000; Date.now=()=>now;
+  let calls=0;let finish;
+  globalThis.__currencyFetch=async()=>{calls++;await new Promise(resolve=>{finish=resolve});return {ok:true,json:async()=>({USD:{last:76000}})}};
+  try {
+    const a=service.fetchAllTickerRates();const b=service.fetchAllTickerRates();
+    assert.equal(calls,1);finish();
+    assert.deepEqual(await a,await b);
+    await service.fetchAllTickerRates();assert.equal(calls,1);
+    now+=3001;
+    const next=service.fetchAllTickerRates();assert.equal(calls,2);finish();await next;
+  } finally {Date.now=originalNow;}
+});

@@ -2,6 +2,12 @@
 
 All notable changes to the Bitnotes / Physical Ecash project will be documented in this file.
 
+## Unreleased
+
+- Conversion estimates refresh from a shared ticker while entering an amount. New reviews fix a minimum received and maximum spent for 60 seconds, with an explicit 3% movement allowance.
+- Fund Bitcoin conversion headroom within the approved budget and enforce the source ceiling at the SDK pre-send boundary. Return unused Bitcoin automatically when the return threshold is met; preserve existing journals and never retry ambiguous sends.
+
+
 ---
 
 ## [0.1.17] - 2026-11-09
@@ -13,6 +19,7 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 - Compact BTC/USD wallet tabs with swipe transitions, shared balance visibility, consistent Dollar formatting, and BTC as a selectable display currency.
 
 ### Fixed
+- Both conversion directions use a five-attempt fee-fitting cap and short-lived observed fee hints. Receive invoices stay temporary through Review/rate refresh; only confirmation prepares the selected quote's recoverable receive transaction, without generating a replacement invoice.
 - Mobile Money requests have bounded network waits, explicit update-required rejection handling, and restart recovery for saved initiation steps. Closing a transfer preserves uncertain/funded records; status recovery does not re-fund or re-submit cashouts.
 - Pending Mobile Money transfers no longer take over new top-up/cashout forms. Saved transfers reconcile independently by ID, remain available for status checks, and cannot overwrite a new transfer when they finish.
 - Completed Cashu receipts no longer report Pending during later checks; late network results cannot regress settled receipts.

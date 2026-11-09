@@ -45,6 +45,7 @@ function fixture() {
     if(cmd === 'spark_is_sending') return false;
     if(cmd === 'stable_funding_quote') return 1005;
     if(cmd === 'receive_lightning' || cmd === 'stable_mint_quote_preview') return {quote_id: 'mint-quote', invoice: 'mint-invoice'};
+    if(cmd === 'stable_accept_mint_quote') return {quote_id:args.quoteId,invoice:args.invoice,amount:args.amount};
     if(cmd === 'stable_begin') {f.operations.push(structuredClone(args.operation)); return structuredClone(args.operation);}
     if(cmd === 'stable_refresh_quote') {
       const current=f.operations.find(o=>o.id===args.operation.id);
@@ -54,6 +55,7 @@ function fixture() {
     }
     const op = f.operations.find(o => o.id === args?.id);
     if(cmd === 'stable_fund') {assert.equal(op.stage, 'quoted'); f.funding++; op.stage = 'funded'; return structuredClone(op);}
+    if(cmd === 'stable_recover_unsubmitted_conversion') {assert.equal(op.stage,'converting');op.stage=op.direction==='toUsd'?'funded':'quoted';return structuredClone(op);}
     if(cmd === 'stable_recover_legacy_conversion') {
       assert.equal(op.stage, 'converting'); assert.equal(op.conversion_request_version ?? 0, 0); assert.equal(op.payment_id, null);
       op.stage = op.direction === 'toUsd' ? 'funded' : 'quoted'; op.conversion_request_version = 1; return structuredClone(op);
@@ -221,6 +223,48 @@ test('Dollar source quotes fit fees before saving one reviewed operation', async
   assert.ok(BigInt(op.output_amount) < 1000n);
   assert.equal(f.operations.length,1); assert.equal(f.sends,0);
 });
+test('Dollar fitting keeps candidate invoices temporary and registers only the selected quote', async () => {
+  const f=fixture();
+  f.sdk.prepareSendPayment=async req=>({amount:req.amount,feePolicy:'feesExcluded',paymentMethod:{type:'bolt11Invoice',lightningFeeSats:1,invoiceDetails:{invoice:{bolt11:'mint-invoice'}}},conversionEstimate:{options:req.conversionOptions,amountIn:req.amount*1000n,amountOut:req.amount,fee:10000n}});
+  const op=await service.quoteStableConversion('toSats',1000n,'mint',0,1000000n);
+  assert.ok(BigInt(op.max_debit)<=1000000n);
+  assert.equal(f.calls.filter(c=>c.cmd==='receive_lightning').length,0);
+  assert.equal(f.calls.filter(c=>c.cmd==='stable_accept_mint_quote').length,0);
+  assert.ok(f.calls.filter(c=>c.cmd==='stable_mint_quote_preview').length<=5);
+  assert.equal(f.sends,0);assert.equal(f.funding,0);
+  await service.executeStableConversion(op.id);
+  const accepted=f.calls.filter(c=>c.cmd==='stable_accept_mint_quote');
+  assert.equal(accepted.length,1);assert.equal(accepted[0].args.id,op.id);
+  assert.ok(f.calls.findIndex(c=>c.cmd==='stable_accept_mint_quote')<f.calls.findIndex(c=>c.cmd==='stable_advance'));
+});
+test('fee fitting stops after five provider quotes in either direction without saving rejected candidates',async()=>{
+  for(const direction of ['toUsd','toSats']) {
+    const f=fixture();let prepares=0;
+    f.sdk.prepareSendPayment=async req=>{prepares++;return {amount:req.amount,feePolicy:'feesExcluded',paymentMethod:direction==='toUsd'?{type:'sparkAddress',address:'own-spark-address',fee:0n}:{type:'bolt11Invoice',lightningFeeSats:1,invoiceDetails:{invoice:{bolt11:'mint-invoice'}}},conversionEstimate:{options:req.conversionOptions,amountIn:1001n,amountOut:req.amount,fee:1n}}};
+    await assert.rejects(service.quoteStableConversion(direction,1000000n,'mint',1000,1000n),/within this amount/);
+    assert.equal(prepares,5);
+    assert.equal(f.calls.filter(c=>c.cmd==='receive_lightning'||c.cmd==='stable_accept_mint_quote').length,0);
+    assert.equal(f.operations.length,0);assert.equal(f.sends,0);assert.equal(f.funding,0);
+  }
+});
+test('a recent successful fee envelope seeds the next fit but still obtains a live quote',async()=>{
+  const f=fixture();let prepares=0;
+  f.sdk.prepareSendPayment=async req=>{prepares++;return {amount:req.amount,feePolicy:'feesExcluded',paymentMethod:{type:'sparkAddress',address:'own-spark-address',fee:0n},conversionEstimate:{options:req.conversionOptions,amountIn:(req.amount+999n)/1000n,amountOut:req.amount,fee:2n}}};
+  f.sdk.receivePayment=async req=>({paymentRequest:req.paymentMethod.type==='sparkAddress'?'own-spark-address':'fund-'+req.paymentMethod.amountSats,fee:0n});
+  const invoke=f.invoke;f.invoke=async(cmd,args)=>cmd==='stable_funding_quote'?Number(args.invoice.slice(5))+5:invoke(cmd,args);
+  await service.previewStableTransfer('toUsd',1000000n,'mint',2000,1000n);
+  const first=prepares;
+  const next=await service.previewStableTransfer('toUsd',1000000n,'mint',2000,1000n);
+  assert.ok(first>1);assert.equal(prepares-first,1);
+  assert.ok(BigInt(next.max_debit)<=1000n);assert.equal(f.sends,0);
+});
+test('a rejected receive preparation keeps the review without advancing or sending',async()=>{
+  const f=fixture();const invoke=f.invoke;
+  f.invoke=async(cmd,args)=>{if(cmd==='stable_accept_mint_quote')throw Error('Selected receive quote expired');return invoke(cmd,args)};
+  const op=await service.quoteStableConversion('toSats',500n,'mint',0);
+  await assert.rejects(service.executeStableConversion(op.id),/expired/);
+  assert.equal(f.operations[0].stage,'quoted');assert.equal(f.sends,0);assert.equal(f.funding,0);
+});
 test('quoting never saves a transfer if the provider cannot fit its source budget', async () => {
   const f = fixture();
   await assert.rejects(service.quoteStableConversion('toUsd',1000000n,'mint',1000,1000n), /within this amount/);
@@ -355,15 +399,18 @@ test('a temporary asset validation failure does not poison later checks',async()
  f.sdk.getTokensMetadata=valid;
  assert.equal((await service.getStableTransferLimits('toUsd')).minReceive,1n);
 });
-test('Dollar preview avoids a full sync but review still prepares recoverable ecash outputs',async()=>{
+test('Dollar review reuses its preview and prepares recovery outputs only on confirmation',async()=>{
  const f=fixture();const syncing=[];const getInfo=f.sdk.getInfo;
  f.sdk.getInfo=async request=>{syncing.push(request.ensureSynced);return getInfo(request)};
  const preview=await service.previewStableTransfer('toSats',500n,'mint',0,1000100n);
  assert.deepEqual(syncing,[false]);
- await service.reviewStableTransfer(preview,1000100n,0);
+ const quoted=await service.reviewStableTransfer(preview,1000100n,0);
  assert.ok(syncing.includes(true));
- assert.ok(f.calls.some(c=>c.cmd==='receive_lightning'));
+ assert.equal(f.calls.filter(c=>c.cmd==='stable_accept_mint_quote').length,0);
+ assert.equal(f.calls.filter(c=>c.cmd==='stable_mint_quote_preview').length,1);
  assert.equal(f.operations.length,1);assert.equal(f.sends,0);
+ await service.executeStableConversion(quoted.id);
+ assert.equal(f.calls.filter(c=>c.cmd==='stable_accept_mint_quote').length,1);
 });
 
 test('fee rounding plateaus still find a valid quote within the selected budget', async () => {
@@ -376,7 +423,7 @@ test('fee rounding plateaus still find a valid quote within the selected budget'
   const op=await service.previewStableTransfer('toUsd',1000000n,'mint',1000,1000n);
   assert.ok(BigInt(op.max_debit)<=1000n);
   assert.ok(BigInt(op.output_amount)>0n);
-  assert.ok(prepares<=12);
+  assert.ok(prepares<=5);
   assert.equal(f.operations.length,0);assert.equal(f.sends,0);assert.equal(f.funding,0);
 });
 
@@ -389,7 +436,7 @@ test('a valid quote is retained when further budget fitting encounters a fee ste
  const op=await service.previewStableTransfer('toUsd',900000n,'mint',1000,1000n);
  assert.ok(BigInt(op.max_debit)<=1000n);
  assert.ok(BigInt(op.output_amount)>=900000n);
- assert.ok(prepares<=12);
+ assert.ok(prepares<=5);
  assert.equal(f.operations.length,0);assert.equal(f.sends,0);
 });
 
@@ -403,7 +450,7 @@ test('Dollar-to-Bitcoin fitting handles stepped conversion fees without exceedin
   const op=await service.previewStableTransfer('toSats',1000n,'mint',0,1000000n);
   assert.ok(BigInt(op.max_debit)<=1000000n);
   assert.ok(BigInt(op.output_amount)>=890n);
-  assert.ok(prepares<=12);
+  assert.ok(prepares<=5);
   assert.equal(f.operations.length,0);assert.equal(f.sends,0);assert.equal(f.funding,0);
 });
 
@@ -578,4 +625,68 @@ test('a price increase resizes the review within its original cap and replaces o
  assert.ok(BigInt(updated.output_amount)<BigInt(original.output_amount));
  assert.ok(BigInt(updated.funding_sats+5)<=BigInt(original.max_debit));
  assert.equal(f.operations.length,1);assert.equal(f.sends,0);assert.equal(f.funding,0);
+});
+
+
+test('protected Bitcoin review reserves usable funding and survives a price increase within its cap', async () => {
+  const f = fixture(); f.infoSats = 2000;
+  const invoke = f.invoke;
+  f.invoke = async (cmd,args) => cmd === 'stable_funding_quote' ? 1035 : invoke(cmd,args);
+  const original = f.sdk.prepareSendPayment;
+  let increased = false;
+  f.sdk.prepareSendPayment = async req => {
+    const prep = await original(req);
+    if (increased) prep.conversionEstimate.amountIn = 1018n;
+    return prep;
+  };
+  const op = await service.quoteStableConversion('toUsd',1000000n,'mint',2000,1100n,{protected:true});
+  assert.equal(op.protection_bps,300);
+  assert.equal(op.funding_sats,1030);
+  assert.equal(op.max_debit,'1100');
+  increased = true;
+  assert.equal((await service.executeStableConversion(op.id)).stage,'complete');
+  assert.equal(f.funding,1); assert.equal(f.sends,1);
+  assert.equal(f.sendRequests[0].prepareResponse.amount,BigInt(op.output_amount));
+});
+
+test('protected Dollar review keeps a source ceiling and tolerates repricing without changing its receive floor', async () => {
+  const f = fixture();
+  const op = await service.quoteStableConversion('toSats',500n,'mint',0,1100000n,{protected:true});
+  assert.equal(op.max_debit,'1100000');
+  const original = f.sdk.prepareSendPayment;
+  f.sdk.prepareSendPayment = async req => {const p = await original(req);p.conversionEstimate.amountIn=1020000n;return p;};
+  assert.equal((await service.executeStableConversion(op.id)).stage,'complete');
+  assert.equal(f.sendRequests[0].prepareResponse.amount,BigInt(op.output_amount));
+});
+
+test('protected bounds cannot be refreshed silently and excessive price changes never send or fund twice', async () => {
+  const f = fixture(); f.infoSats = 2000;
+  const op = await service.quoteStableConversion('toUsd',1000000n,'mint',2000,1100n,{protected:true});
+  await assert.rejects(service.refreshStableQuote(op.id,2000),/fixed|protected/i);
+  f.raised=true;
+  await assert.rejects(service.executeStableConversion(op.id),/price increased/);
+  await assert.rejects(service.executeStableConversion(op.id),/price increased/);
+  assert.equal(f.funding,1);assert.equal(f.sends,0);
+});
+
+test('protected Dollar transfer refuses a cost above consent before accepting the mint invoice', async () => {
+  const f = fixture();
+  const op = await service.quoteStableConversion('toSats',500n,'mint',0,1100000n,{protected:true});
+  const original=f.sdk.prepareSendPayment;
+  f.sdk.prepareSendPayment=async req=>{const p=await original(req);p.conversionEstimate.amountIn=1200000n;return p;};
+  await assert.rejects(service.executeStableConversion(op.id),/quote changed/);
+  assert.equal(f.sends,0);assert.ok(!f.calls.some(c=>c.cmd==='stable_accept_mint_quote'));
+});
+
+
+test('a first-payment observer rejection restores recovery without repeating ecash funding', async () => {
+ const f=fixture();f.infoSats=2000;
+ const op=await service.quoteStableConversion('toUsd',1000000n,'mint',2000,1100n,{protected:true});
+ const {guardConversionPayments}=await import('../src/services/conversionSpendGuard.ts');
+ let attempts=0;
+ f.sdk.sendPayment=async()=>{attempts++;await guardConversionPayments([{paymentId:'internal-source',amount:1500n,details:{type:'spark',payRequest:'provider'}}]);throw Error('must not broadcast');};
+ await assert.rejects(service.executeStableConversion(op.id),/approved maximum/);
+ assert.equal(f.operations[0].stage,'funded');
+ await assert.rejects(service.executeStableConversion(op.id),/approved maximum/);
+ assert.equal(attempts,2);assert.equal(f.funding,1);
 });

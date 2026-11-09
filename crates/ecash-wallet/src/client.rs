@@ -24,6 +24,7 @@ pub struct MintClient {
     pub url: String,
 }
 
+#[cfg(not(test))]
 static SHARED_HTTP_CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
 
 type QuoteKeysets = std::sync::Arc<tokio::sync::Mutex<Option<(std::time::Instant, Vec<KeysetSummary>)>>>;
@@ -105,6 +106,14 @@ impl MintClient {
         Ok(keysets)
     }
     pub fn new(mint_url: &str) -> Self {
+        // Unit tests create separate Tokio runtimes. A client pooled on a runtime
+        // that has already shut down cannot service another test's local mint.
+        #[cfg(test)]
+        let http = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .unwrap();
+        #[cfg(not(test))]
         let http = SHARED_HTTP_CLIENT
             .get_or_init(|| {
                 reqwest::Client::builder()
@@ -265,6 +274,39 @@ impl MintClient {
         let request = v.get("request").and_then(|r| r.as_str()).unwrap_or("");
         
         Ok((quote.to_string(), request.to_string()))
+    }
+
+    /// Bind a temporary receive quote to the exact invoice/amount before
+    /// allocating wallet recovery outputs. Verification never creates a quote.
+    pub async fn verify_unpaid_mint_quote(&self, quote_id: &str, amount: u64, invoice: &str) -> Result<()> {
+        self.ensure_quote_ready()?;
+        if quote_id.is_empty() || quote_id.len() > 512 || amount == 0 {
+            return Err(anyhow!("Invalid receive quote"));
+        }
+        let mut url = reqwest::Url::parse(&format!("{}/v1/mint/quote/bolt11", self.url))?;
+        url.path_segments_mut().map_err(|_| anyhow!("Invalid mint URL"))?.push(quote_id);
+        let response = self.http.get(url).send().await?;
+        let quote = self.quote_json(response).await?;
+        let unpaid = match quote.get("state").and_then(|v| v.as_str()) {
+            Some("UNPAID") => true,
+            None => quote.get("amount_paid").and_then(|v| v.as_u64()) == Some(0)
+                || quote.get("paid").and_then(|v| v.as_bool()) == Some(false),
+            _ => false,
+        };
+        if quote.get("quote").and_then(|v| v.as_str()) != Some(quote_id)
+            || quote.get("request").and_then(|v| v.as_str()) != Some(invoice)
+            // Older NUT-04 responses omit amount/unit; the native caller also
+            // verifies the signed BOLT11 amount/network before this lookup.
+            || quote.get("amount").is_some_and(|v| v.as_u64() != Some(amount))
+            || quote.get("unit").is_some_and(|v| v.as_str() != Some("sat"))
+            || !unpaid
+            || quote.get("paid").and_then(|v| v.as_bool()) == Some(true)
+            || quote.get("amount_paid").and_then(|v| v.as_u64()).unwrap_or(0) != 0
+            || quote.get("amount_issued").and_then(|v| v.as_u64()).unwrap_or(0) != 0
+        {
+            return Err(anyhow!("Receive quote changed, was paid, or does not match the selected invoice/amount"));
+        }
+        Ok(())
     }
 
     pub async fn wait_for_quote_paid(&self, quote_id: &str) -> Result<()> {
@@ -760,7 +802,25 @@ mod tests {
             while std::time::Instant::now() < until {
                 if let Ok((mut stream, _)) = server.accept() {
                     stream.set_read_timeout(Some(std::time::Duration::from_secs(1))).unwrap();
-                    let mut buf = [0; 4096]; let _ = stream.read(&mut buf);
+                    // Drain the complete request before closing the socket. A response
+                    // followed by close with an unread POST body can become a TCP reset.
+                    let mut request = Vec::new();
+                    let mut buf = [0; 4096];
+                    loop {
+                        let Ok(size) = stream.read(&mut buf) else { break; };
+                        if size == 0 { break; }
+                        request.extend_from_slice(&buf[..size]);
+                        if let Some(end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                            let headers = String::from_utf8_lossy(&request[..end]);
+                            let length = headers.lines().find_map(|line| {
+                                let (key, value) = line.split_once(':')?;
+                                key.eq_ignore_ascii_case("content-length")
+                                    .then(|| value.trim().parse::<usize>().ok()).flatten()
+                            }).unwrap_or(0);
+                            if request.len() >= end + 4 + length { break; }
+                        }
+                        assert!(request.len() <= 65536, "mock mint request too large");
+                    }
                     counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     let _ = stream.write_all(response.as_bytes());
                 } else { std::thread::sleep(std::time::Duration::from_millis(5)); }
@@ -785,6 +845,34 @@ mod tests {
         let (url, requests) = mint_server(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body));
         assert_eq!(MintClient::new(&url).request_mint_quote(1000).await.unwrap(), ("quote-one".into(), "invoice-one".into()));
         assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn selected_receive_quote_is_verified_without_creating_another_invoice() {
+        let body = r#"{"quote":"quote-one","request":"invoice-one","amount":900,"unit":"sat","state":"UNPAID"}"#;
+        let (url, requests) = mint_server(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body));
+        MintClient::new(&url).verify_unpaid_mint_quote("quote-one", 900, "invoice-one").await.unwrap();
+        assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn changed_or_paid_receive_quotes_cannot_be_promoted() {
+        let valid = serde_json::json!({"quote":"quote-one","request":"invoice-one","amount":900,"unit":"sat","state":"UNPAID"});
+        for (field, value) in [
+            ("quote", serde_json::json!("different")),
+            ("request", serde_json::json!("different")),
+            ("amount", serde_json::json!(901)),
+            ("unit", serde_json::json!("usd")),
+            ("state", serde_json::json!("PAID")),
+            ("state", serde_json::json!("ISSUED")),
+            ("amount_paid", serde_json::json!(900)),
+            ("paid", serde_json::json!(true)),
+        ] {
+            let mut response = valid.clone(); response[field] = value;
+            let body = response.to_string();
+            let (url, _) = mint_server(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body));
+            assert!(MintClient::new(&url).verify_unpaid_mint_quote("quote-one", 900, "invoice-one").await.is_err(), "accepted changed {field}");
+        }
     }
 
     #[tokio::test]
