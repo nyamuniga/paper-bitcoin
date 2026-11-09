@@ -11,6 +11,9 @@ pub struct StableOperation {
     pub expires_at: u64,
     pub output_amount: String,
     pub max_debit: String,
+    /// 0: legacy live review; 300: immutable minimum receive / maximum spend.
+    #[serde(default)]
+    pub protection_bps: u16,
     pub funding_invoice: String,
     pub funding_sats: u64,
     pub mint_quote_id: String,
@@ -36,7 +39,9 @@ impl StableOperation {
         expected_quote: &str,
         expected_expiry: u64,
     ) -> bool {
-        if self.stage != "quoted"
+        if self.protection_bps != 0
+            || candidate.protection_bps != 0
+            || self.stage != "quoted"
             || candidate.stage != "quoted"
             || self.quote_json != expected_quote
             || self.expires_at != expected_expiry
@@ -63,6 +68,17 @@ impl StableOperation {
         self.funding_sats = candidate.funding_sats;
         self.mint_quote_id = candidate.mint_quote_id.clone();
         self.quote_json = candidate.quote_json.clone();
+        true
+    }
+    /// Caller must hold live proof that the SDK observer rejected before any
+    /// source payment approval. Never use this for a timeout or after a restart.
+    pub fn recover_unsubmitted_protected(&mut self) -> bool {
+        if self.protection_bps != 300 || self.stage != "converting"
+            || self.conversion_request_version != 1 || self.payment_id.is_some()
+            || !matches!(self.direction.as_str(), "toUsd" | "toSats") {
+            return false;
+        }
+        self.stage = if self.direction == "toUsd" {"funded"} else {"quoted"}.into();
         true
     }
     pub fn active(&self) -> bool {
@@ -133,6 +149,7 @@ mod tests {
             expires_at: 0,
             output_amount: "1000000".into(),
             max_debit: "1000".into(),
+            protection_bps: 0,
             funding_invoice: String::new(),
             funding_sats: 0,
             mint_quote_id: String::new(),
@@ -177,6 +194,29 @@ mod tests {
             original.expires_at
         ));
         assert!(!saved.refresh_review(&updated, &original.quote_json, original.expires_at));
+    }
+    #[test]
+    fn only_unrecorded_protected_conversions_can_restore_after_live_guard_rejection() {
+        let mut saved = op("converting");
+        assert!(!saved.recover_unsubmitted_protected());
+        saved.protection_bps = 300;
+        assert!(!saved.recover_unsubmitted_protected());
+        saved.conversion_request_version = 1;
+        assert!(saved.recover_unsubmitted_protected());
+        assert_eq!(saved.stage, "funded");
+        assert!(!saved.recover_unsubmitted_protected());
+        saved.stage = "converting".into();saved.payment_id = Some("recorded".into());
+        assert!(!saved.recover_unsubmitted_protected());
+    }
+    #[test]
+    fn protected_review_cannot_change_floor_cap_or_expiry() {
+        let mut saved = op("quoted");
+        saved.protection_bps = 300;
+        let mut next = saved.clone();
+        next.expires_at = 60;
+        assert!(!saved.refresh_review(&next, "", 0));
+        next.protection_bps = 0;
+        assert!(!saved.refresh_review(&next, "", 0));
     }
     #[test]
     fn irreversible_stages_cannot_be_cancelled_or_retried() {
@@ -226,8 +266,10 @@ mod tests {
             .as_object_mut()
             .unwrap()
             .remove("conversion_request_version");
+        saved.as_object_mut().unwrap().remove("protection_bps");
         let operation: StableOperation = serde_json::from_value(saved).unwrap();
         assert_eq!(operation.conversion_request_version, 0);
+        assert_eq!(operation.protection_bps, 0);
     }
     #[test]
     fn old_wallet_without_journal_still_loads() {

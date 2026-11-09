@@ -3,6 +3,10 @@ export const USDB_TOKEN_ID = 'btkn1xgrvjwey5ngcagvap2dzzvsy4uk8ua9x69k82dwvt5e7e
 export const USDB_TOKEN_HEX = '3206c93b24a4d18ea19d0a9a213204af2c7e74a6d16c7535cc5d33eca4ad1eca';
 export const USD_DECIMALS = 6;
 export const SLIPPAGE_BPS = 10;
+export const PROTECTION_BPS = 300;
+/** Source currency reserve, separate from provider slippage already in its estimate. */
+export const protectedCost = (cost: bigint) => (cost * BigInt(10000 + PROTECTION_BPS) + 9999n) / 10000n;
+export const conservativeOutput = (amount: bigint) => amount * 10000n / BigInt(10000 + PROTECTION_BPS);
 export type StableDirection = 'toUsd' | 'toSats';
 export type StableStage = 'quoted' | 'funding' | 'funded' | 'converting' | 'settling' | 'returnQuoted' | 'returning' | 'complete' | 'cancelled' | 'refunded';
 export interface StableOperation {
@@ -14,6 +18,8 @@ export interface StableOperation {
   expires_at: number;
   output_amount: string;
   max_debit: string;
+  /** Absent/zero for legacy live reviews; 300 freezes the receive floor and spend ceiling. */
+  protection_bps?: number;
   funding_invoice: string;
   funding_sats: number;
   mint_quote_id: string;

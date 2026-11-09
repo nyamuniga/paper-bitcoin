@@ -15,7 +15,7 @@ export function useReviewQuoteRefresh(operation: StableOperation | null, enabled
   const lastAttempt = useRef(0);
   const cooldown = useRef(0);
   useEffect(() => {
-    if (operation?.stage !== 'quoted') {
+    if (operation?.stage !== 'quoted' || operation.protection_bps) {
       setError('');setRetryAt(0);cooldown.current = 0;lastAttempt.current = 0;
       return;
     }

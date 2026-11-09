@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getActiveConversion, getStableBalance } from '../services/stableBalanceService';
+import { getActiveConversion, getStableBalanceSnapshot } from '../services/stableBalanceService';
 import { subscribeToSparkEvents } from '../services/sparkService';
 import type { StableOperation } from '../services/stableBalanceModel';
 
 export function useStableBalance() {
+  const [bitcoinBalance, setBitcoinBalance] = useState<bigint | null>(null);
   const [balance, setBalance] = useState<bigint | null>(null);
   const [operation, setOperation] = useState<StableOperation | null>(null);
   const [error, setError] = useState('');
@@ -18,8 +19,8 @@ export function useStableBalance() {
       try {
         const op = await getActiveConversion();
         if (live) setOperation(op);
-        const amount = await getStableBalance();
-        if (live) { setBalance(amount); setError(''); }
+        const snapshot = await getStableBalanceSnapshot();
+        if (live) { setBalance(snapshot.dollars); setBitcoinBalance(snapshot.bitcoin); setError(''); }
       } catch {
         if (live) setError('Dollar balance unavailable');
       } finally { running = false; }
@@ -29,5 +30,5 @@ export function useStableBalance() {
     const stop = subscribeToSparkEvents(event => { if (['paymentSucceeded', 'paymentMetadataUpdated'].includes(event.type)) void load(); });
     return () => { live = false; clearInterval(interval); stop(); };
   }, [revision]);
-  return { balance, operation, error, refresh };
+  return { balance, bitcoinBalance, operation, error, refresh };
 }

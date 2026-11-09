@@ -11,8 +11,13 @@ export function percentageAmount(balance: bigint, percent: number): bigint {
   return balance * BigInt(percent) / 100n;
 }
 export function resizeTransferOutput(output: bigint, budget: bigint, quotedDebit: bigint, principal = quotedDebit): bigint {
-  const available = budget - (quotedDebit - principal);
-  return available <= 0n ? 0n : output * available / principal - 1n;
+  if (output <= 0n || budget <= 0n || principal <= 0n) return 0n;
+  const overshoot = quotedDebit - budget;
+  if (overshoot <= 0n) return output;
+  // Convert the source-currency overshoot into output units using the live
+  // provider quote. Round up, with one output unit of safety for fee rounding.
+  const correction = (output * overshoot + principal - 1n) / principal + 1n;
+  return correction >= output ? 0n : output - correction;
 }
 export function dollarAmount(units: bigint): string {
   if (units > 0n && units < 10000n) return '<$0.01';

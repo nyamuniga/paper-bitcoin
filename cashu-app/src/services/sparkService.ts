@@ -1,12 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import initBreezSDK, {
-  connect,
+  SdkBuilder,
   defaultConfig,
   type BreezSdk,
   type SdkEvent,
   type PrepareSendPaymentResponse,
 } from '@breeztech/breez-sdk-spark/web';
 import { BREEZ_API_KEY } from '../constants';
+import { guardConversionPayments } from './conversionSpendGuard';
 import { withSparkBalanceLock } from './sparkBalanceLock';
 
 export interface OnchainSendEstimate {
@@ -142,14 +143,12 @@ export async function getSparkSdk(): Promise<BreezSdk> {
         proportionalPpm: 15000,
       };
 
-      const sdk = await connect({
-        config: sdkConfig,
-        seed: {
-          type: 'mnemonic',
-          mnemonic: cfg.mnemonic,
-        },
-        storageDir: `bitnotes_spark_${cfg.wallet_id}`,
-      });
+      const builder = await SdkBuilder.new(sdkConfig, {type:'mnemonic', mnemonic:cfg.mnemonic})
+        .withDefaultStorage(`bitnotes_spark_${cfg.wallet_id}`);
+      const sdk = await builder.withPaymentObserver({
+        beforeSend: guardConversionPayments,
+        afterSend: async () => {},
+      }).build();
 
       sdkListenerId = await sdk.addEventListener({
         onEvent: async (event: SdkEvent) => {
