@@ -12,7 +12,7 @@ export async function readClipboardText(): Promise<string> {
       return text;
     }
   } catch (err) {
-    console.debug('Tauri native clipboard readText unavailable or failed, falling back to web API:', err);
+
   }
 
   // 2. Fallback to Web standard navigator.clipboard
@@ -38,7 +38,7 @@ export async function writeClipboardText(text: string, label?: string): Promise<
     await tauriWriteText(text, label ? { label } : undefined);
     return true;
   } catch (err) {
-    console.debug('Tauri native clipboard writeText unavailable or failed, falling back to web API:', err);
+
   }
 
   // 2. Fallback to Web standard navigator.clipboard

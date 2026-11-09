@@ -1,6 +1,5 @@
 # Rust build artifacts
 /target/
-Cargo.lock
 
 # ──────────────────────────────────────────────────────────────────
 # Physical note outputs — NEVER commit these.
@@ -36,3 +35,26 @@ wallet.json
 # Local scratch and test files
 scratch*
 test_*
+
+# Signing material, local credentials, wallet backups, and release binaries
+credentials/
+keystores/
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.mobileprovision
+key.properties
+keystore.properties
+wallet*.json
+wallet*.bak
+*.wallet
+*.apk
+*.aab
+*.dmg
+*.ipa
+*.app/
+*.dSYM/
+*.bak
+*.orig
+*.rej

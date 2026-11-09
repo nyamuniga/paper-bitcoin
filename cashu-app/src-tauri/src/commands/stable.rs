@@ -30,8 +30,10 @@ pub async fn stable_funding_quote(
 ) -> CommandResult<u64> {
     let mint_url = ecash_wallet::state::normalize_mint_url(&mint_url);
     let client = MintClient::new(&mint_url);
-    let ((_, _, total), keysets) =
-        tokio::try_join!(client.request_melt_quote(&invoice), client.fetch_keysets())?;
+    let ((_, _, total), keysets) = tokio::try_join!(
+        client.request_melt_quote(&invoice),
+        client.fetch_quote_keysets()
+    )?;
     if keysets.is_empty() {
         return Err(CommandError("Mint returned no fee information".into()));
     }
@@ -56,6 +58,93 @@ pub async fn stable_funding_quote(
         .ok_or_else(|| CommandError("Funding quote overflow".into()))
 }
 
+fn validate_review_quote(
+    operation: &StableOperation,
+    wallet: &ecash_wallet::WalletState,
+) -> CommandResult<()> {
+    let valid = operation.stage == "quoted"
+        && matches!(operation.direction.as_str(), "toUsd" | "toSats")
+        && operation.id.len() == 36
+        && operation.quote_json.len() <= 131072
+        && operation.expires_at > now()
+        && operation.expires_at <= now() + 120
+        && operation.output_amount.parse::<u64>().is_ok_and(|v| v > 0)
+        && operation.max_debit.parse::<u64>().is_ok_and(|v| v > 0)
+        && (operation.direction != "toUsd"
+            || (operation.funding_sats > 0
+                && !operation.funding_invoice.is_empty()
+                && operation
+                    .max_debit
+                    .parse::<u64>()
+                    .is_ok_and(|cap| operation.funding_sats <= cap)))
+        && (operation.direction != "toSats"
+            || wallet.transactions.iter().any(|t| {
+                t.id == operation.mint_quote_id
+                    && t.mint_url == operation.mint_url
+                    && t.amount.to_string() == operation.output_amount
+                    && t.status == TransactionStatus::Pending
+                    && matches!(
+                        t.tx_type,
+                        ecash_core::types::TransactionType::ReceiveLightning(_)
+                    )
+            }));
+    if !valid {
+        return Err(CommandError("Invalid or expired conversion quote.".into()));
+    }
+    if operation.direction == "toUsd" {
+        let invoice: lightning_invoice::Bolt11Invoice = operation
+            .funding_invoice
+            .parse()
+            .map_err(|_| CommandError("Invalid funding invoice".into()))?;
+        if invoice
+            .expires_at()
+            .is_none_or(|expiry| expiry.as_secs() <= now())
+        {
+            return Err(CommandError(
+                "Funding invoice expired. Request a new quote.".into(),
+            ));
+        }
+        if invoice.currency() != lightning_invoice::Currency::Bitcoin
+            || invoice.amount_milli_satoshis() != operation.funding_sats.checked_mul(1000)
+        {
+            return Err(CommandError(
+                "Funding invoice does not match the reviewed amount/network.".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn stable_refresh_quote(
+    operation: StableOperation,
+    expected_quote_json: String,
+    expected_expires_at: u64,
+    state: State<'_, AppState>,
+) -> CommandResult<StableOperation> {
+    let (mut guard, path, passphrase) = state.lock_and_get_wallet().await?;
+    let wallet = guard.as_mut().unwrap();
+    let pos = wallet
+        .stable_operations
+        .iter()
+        .position(|o| o.id == operation.id)
+        .ok_or_else(|| CommandError("Conversion not found".into()))?;
+    let previous = wallet.stable_operations[pos].clone();
+    let mut refreshed = previous.clone();
+    if !refreshed.refresh_review(&operation, &expected_quote_json, expected_expires_at) {
+        return Err(CommandError(
+            "The review quote changed or confirmation already started.".into(),
+        ));
+    }
+    validate_review_quote(&refreshed, wallet)?;
+    wallet.stable_operations[pos] = refreshed.clone();
+    if let Err(error) = wallet.save_encrypted(&path, &passphrase) {
+        wallet.stable_operations[pos] = previous;
+        return Err(error.into());
+    }
+    Ok(refreshed)
+}
+
 #[tauri::command]
 pub async fn stable_begin(
     operation: StableOperation,
@@ -72,40 +161,7 @@ pub async fn stable_begin(
     if wallet.stable_operations.iter().any(|o| o.active()) {
         return Err(CommandError("Finish the saved conversion first.".into()));
     }
-    let valid = operation.stage == "quoted"
-        && matches!(operation.direction.as_str(), "toUsd" | "toSats")
-        && operation.id.len() == 36
-        && operation.quote_json.len() <= 131072
-        && operation.expires_at > now()
-        && operation.expires_at <= now() + 120
-        && operation.output_amount.parse::<u64>().is_ok_and(|v| v > 0)
-        && operation.max_debit.parse::<u64>().is_ok_and(|v| v > 0)
-        && (operation.direction != "toUsd"
-            || (operation.funding_sats > 0 && !operation.funding_invoice.is_empty()))
-        && (operation.direction != "toSats"
-            || wallet
-                .transactions
-                .iter()
-                .any(|t| t.id == operation.mint_quote_id));
-    if !valid {
-        return Err(CommandError("Invalid or expired conversion quote.".into()));
-    }
-    if operation.direction == "toUsd" {
-        let invoice: lightning_invoice::Bolt11Invoice = operation
-            .funding_invoice
-            .parse()
-            .map_err(|_| CommandError("Invalid funding invoice".into()))?;
-        if invoice.currency() != lightning_invoice::Currency::Bitcoin
-            || invoice
-                .expires_at()
-                .is_none_or(|expiry| expiry.as_secs() <= now())
-            || invoice.amount_milli_satoshis() != operation.funding_sats.checked_mul(1000)
-        {
-            return Err(CommandError(
-                "Funding invoice does not match the reviewed amount/network.".into(),
-            ));
-        }
-    }
+    validate_review_quote(&operation, wallet)?;
     wallet.stable_operations.push(operation.clone());
     wallet.save_encrypted(&path, &passphrase)?;
     Ok(operation)

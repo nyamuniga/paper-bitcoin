@@ -46,6 +46,12 @@ function fixture() {
     if(cmd === 'stable_funding_quote') return 1005;
     if(cmd === 'receive_lightning' || cmd === 'stable_mint_quote_preview') return {quote_id: 'mint-quote', invoice: 'mint-invoice'};
     if(cmd === 'stable_begin') {f.operations.push(structuredClone(args.operation)); return structuredClone(args.operation);}
+    if(cmd === 'stable_refresh_quote') {
+      const current=f.operations.find(o=>o.id===args.operation.id);
+      assert.equal(current.stage,'quoted');assert.equal(current.quote_json,args.expectedQuoteJson);
+      assert.ok(BigInt(args.operation.max_debit)<=BigInt(current.max_debit));
+      Object.assign(current,args.operation,{max_debit:current.max_debit});return structuredClone(current);
+    }
     const op = f.operations.find(o => o.id === args?.id);
     if(cmd === 'stable_fund') {assert.equal(op.stage, 'quoted'); f.funding++; op.stage = 'funded'; return structuredClone(op);}
     if(cmd === 'stable_recover_legacy_conversion') {
@@ -499,4 +505,77 @@ test('a completed transport payment still waits if its conversion is pending',as
  assert.equal((await service.executeStableConversion(op.id)).stage,'converting');
  f.sdk.getPayment=async()=>({payment:{...complete,conversionDetails:{status:'completed'}}});
  assert.equal((await service.checkStableConversion(op.id)).stage,'complete');assert.equal(f.sends,1);
+});
+
+test('a valid budget quote stops immediately instead of maximizing output through more mint calls', async()=>{
+ const f=fixture();let prepares=0;
+ const prepare=f.sdk.prepareSendPayment;
+ f.sdk.prepareSendPayment=async req=>{prepares++;return prepare(req)};
+ const op=await service.quoteStableConversion('toUsd',1000000n,'mint',2000,1500n);
+ assert.equal(op.stage,'quoted');assert.equal(prepares,1);
+ assert.equal(f.calls.filter(c=>c.cmd==='stable_funding_quote').length,1);
+ assert.equal(f.sends,0);
+});
+
+test('a confirmed return reconciles without provider sync or waiting for unrelated balance work',async()=>{
+ const f=fixture();const op=await service.quoteStableConversion('toUsd',1000000n,'mint',2000);
+ f.operations[0].stage='funded';await service.quoteFundingReturn(op.id);
+ f.operations[0].stage='returning';
+ f.sdk.syncWallet=async()=>{throw Error('provider unavailable')};
+ const {withSparkBalanceLock}=await import('../src/services/sparkBalanceLock.ts');
+ let release;const background=withSparkBalanceLock(()=>new Promise(resolve=>{release=resolve}));
+ await new Promise(resolve=>setImmediate(resolve));
+ const checked=service.checkStableConversion(op.id);
+ try {
+  const result=await Promise.race([checked,new Promise(resolve=>setImmediate(()=>resolve(null)))]);
+  assert.equal(result?.stage,'complete');
+ } finally {release();await background;await checked.catch(()=>{});}
+ assert.equal(f.sends,0);
+});
+
+test('review refresh reuses its invoice and funding quote without moving money',async()=>{
+ const f=fixture();const original=await service.quoteStableConversion('toUsd',1000000n,'mint',2000);
+ f.operations[0].expires_at=1;
+ const fees=f.calls.filter(c=>c.cmd==='stable_funding_quote').length;
+ const refreshed=await service.refreshStableQuote(original.id,2000);
+ assert.equal(refreshed.id,original.id);assert.equal(refreshed.funding_invoice,original.funding_invoice);
+ assert.ok(refreshed.expires_at*1000>Date.now());assert.equal(refreshed.max_debit,original.max_debit);
+ assert.equal(f.calls.filter(c=>c.cmd==='stable_funding_quote').length,fees);
+ assert.equal(f.operations.length,1);assert.equal(f.sends,0);assert.equal(f.funding,0);
+});
+
+test('reverse review refresh updates its live cost without creating another mint invoice',async()=>{
+ const f=fixture();const op=await service.quoteStableConversion('toSats',500n,'mint',0);
+ const before=f.calls.filter(c=>c.cmd==='receive_lightning').length;
+ const prepare=f.sdk.prepareSendPayment;
+ f.sdk.prepareSendPayment=async req=>{const p=await prepare(req);p.conversionEstimate.amountIn=900000n;return p};
+ const updated=await service.refreshStableQuote(op.id,0);
+ assert.equal(updated.mint_quote_id,op.mint_quote_id);assert.equal(updated.max_debit,op.max_debit);
+ assert.equal(f.calls.filter(c=>c.cmd==='receive_lightning').length,before);
+ assert.match(updated.quote_json,/900000/);assert.equal(f.sends,0);
+});
+
+test('refresh after funding is refused and a failed refresh keeps the last saved quote',async()=>{
+ const f=fixture();const op=await service.quoteStableConversion('toUsd',1000000n,'mint',2000);
+ f.sdk.prepareSendPayment=async()=>{throw Error('provider offline')};
+ await assert.rejects(service.refreshStableQuote(op.id,2000),/offline/);
+ assert.equal(f.operations[0].quote_json,op.quote_json);
+ f.operations[0].stage='funded';
+ await assert.rejects(service.refreshStableQuote(op.id,2000),/review/);
+ assert.equal(f.sends,0);assert.equal(f.funding,0);
+});
+
+test('a price increase resizes the review within its original cap and replaces only the unpaid quote',async()=>{
+ const f=fixture();let extra=0n;
+ f.sdk.prepareSendPayment=async req=>({amount:req.amount,feePolicy:'feesExcluded',paymentMethod:{type:'sparkAddress',address:'own-spark-address',fee:0n},conversionEstimate:{options:req.conversionOptions,amountIn:(req.amount+999n)/1000n+extra,amountOut:req.amount,fee:2n}});
+ f.sdk.receivePayment=async req=>({paymentRequest:req.paymentMethod.type==='sparkAddress'?'own-spark-address':'fund-'+req.paymentMethod.amountSats,fee:0n});
+ const invoke=f.invoke;
+ f.invoke=async(cmd,args)=>cmd==='stable_funding_quote'?Number(args.invoice.slice(5))+5:invoke(cmd,args);
+ const original=await service.quoteStableConversion('toUsd',1000000n,'mint',2000);
+ extra=5n;
+ const updated=await service.refreshStableQuote(original.id,2000);
+ assert.equal(updated.id,original.id);assert.equal(updated.max_debit,original.max_debit);
+ assert.ok(BigInt(updated.output_amount)<BigInt(original.output_amount));
+ assert.ok(BigInt(updated.funding_sats+5)<=BigInt(original.max_debit));
+ assert.equal(f.operations.length,1);assert.equal(f.sends,0);assert.equal(f.funding,0);
 });

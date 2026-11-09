@@ -2,11 +2,11 @@
 
 Use **Receive → Request** to create a single-use Cashu payment request at the selected mint. Requests and their receiving keys are saved in the encrypted wallet before a payable QR is displayed. Open **History → Requested eCash** to resume a request, check its relay inbox, or retry claiming a saved payment after closing or restarting the app. A compatible payer sends an encrypted NIP-17 payment payload to the temporary inbox advertised by the QR.
 
-Use the main **Scan** page to review and pay a request. The Send tab receives the scanned request for confirmation. Confirmation shows the recipient amount, fee allowance, mint swap fee and total debit. A failed delivery retries the same saved token from History. Relay acknowledgement is not proof of redemption.
+Use the main **Scan** page to review and pay a request. The Send tab receives the scanned request for confirmation. The payment review shows the amount, source mint, combined fees and total, with fee allowances and mint addresses under Payment details. A failed delivery retries the same saved token from History. Relay acknowledgement is not proof of redemption.
 
 The receiver advertises confirmed relay subscriptions only. Request ID, mint, sat unit, proof bounds, input fees, cryptographic envelopes and invoice replay checks are validated before showing success. Closing or backgrounding stops the live connection, while the original receiving key and request remain saved. Reopening reconnects to the same relay inbox and retrieves available stored payments. There is no local ten-minute expiry. Payment tokens are saved before redemption; the paid status comes from a successful invoice-bound receive transaction. History lists public request metadata only. Relay retention determines whether a payment sent while the app was closed remains available. Check an unconfirmed sender token in History before paying again.
 
-Run npm run test:payments and npm run build from this directory. The parser tests require Node with TypeScript stripping support.
+Run npm run test:payments and npm run build from this directory. Use Node.js 24 for the test runner. NFC is not supported.
 
 Invoices use NUT-18 `creqA` with URL-safe Base64, including after confirmed relay addresses update the QR. Ordinary Base64 output from cashu-ts is normalized to avoid rejection by Cashu.me native/CDK decoders.
 

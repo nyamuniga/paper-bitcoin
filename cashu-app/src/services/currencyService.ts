@@ -4,7 +4,7 @@ import {
   SATS_PER_BTC,
   SPREAD,
   RWF_USD_PEG,
-} from '../constants.local';
+} from '../constants';
 
 export interface CurrencyMeta {
   code: string;
@@ -14,6 +14,7 @@ export interface CurrencyMeta {
 }
 
 export const CURRENCIES: Record<string, CurrencyMeta> = {
+  BTC: { code: 'BTC', name: 'Bitcoin', symbol: '₿', decimals: 8 },
   RWF: { code: 'RWF', name: 'Rwandan Franc', symbol: 'RWF', decimals: 0 },
   USD: { code: 'USD', name: 'US Dollar', symbol: '$', decimals: 2 },
   EUR: { code: 'EUR', name: 'Euro', symbol: '€', decimals: 2 },
@@ -52,7 +53,7 @@ export const CURRENCIES: Record<string, CurrencyMeta> = {
 };
 
 // Top prioritized currencies for quick access
-export const POPULAR_CURRENCIES = ['RWF', 'USD', 'EUR', 'GBP', 'NGN', 'GHS', 'CAD', 'AUD'];
+export const POPULAR_CURRENCIES = ['BTC', 'RWF', 'USD', 'EUR', 'GBP', 'NGN', 'GHS', 'CAD', 'AUD'];
 
 const STORAGE_KEY_PREFERRED_CURRENCY = 'bitnotes_preferred_currency';
 const STORAGE_KEY_RATES = 'bitnotes_cached_all_rates';
@@ -100,6 +101,8 @@ export async function fetchAllTickerRates(): Promise<Record<string, number>> {
     }
   }
 
+  // BTC's identity rate is fixed, independent of ticker availability.
+  rates.BTC = 1;
   // Derive RWF from USD rate via peg
   if (rates['USD']) {
     rates['RWF'] = rates['USD'] * RWF_USD_PEG;
@@ -125,7 +128,7 @@ export function convertSatsToFiat(
     decimals: 2,
   };
 
-  const btcPrice = rates[currencyCode];
+  const btcPrice = currencyCode === 'BTC' ? 1 : rates[currencyCode];
   if (!btcPrice || btcPrice <= 0) {
     return {
       value: 0,

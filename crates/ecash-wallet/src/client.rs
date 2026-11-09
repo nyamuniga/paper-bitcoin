@@ -26,7 +26,84 @@ pub struct MintClient {
 
 static SHARED_HTTP_CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
 
+type QuoteKeysets = std::sync::Arc<tokio::sync::Mutex<Option<(std::time::Instant, Vec<KeysetSummary>)>>>;
+static QUOTE_KEYSETS: std::sync::OnceLock<std::sync::Mutex<HashMap<String, QuoteKeysets>>> = std::sync::OnceLock::new();
+static QUOTE_COOLDOWNS: std::sync::OnceLock<std::sync::Mutex<HashMap<String, std::time::Instant>>> = std::sync::OnceLock::new();
+
+fn quote_cooldowns() -> &'static std::sync::Mutex<HashMap<String, std::time::Instant>> {
+    QUOTE_COOLDOWNS.get_or_init(Default::default)
+}
+
+fn retry_delay(value: Option<&str>) -> std::time::Duration {
+    use std::time::{Duration, SystemTime};
+    value.and_then(|v| v.parse::<u64>().ok().map(Duration::from_secs)
+        .or_else(|| httpdate::parse_http_date(v).ok().map(|date| date.duration_since(SystemTime::now()).unwrap_or_default())))
+        .unwrap_or(Duration::from_secs(30)).max(Duration::from_secs(1))
+}
+
 impl MintClient {
+    fn ensure_quote_ready(&self) -> Result<()> {
+        let mut entries = quote_cooldowns().lock().unwrap();
+        let now = std::time::Instant::now();
+        entries.retain(|_, until| *until > now);
+        if let Some(until) = entries.get(&self.url) {
+            let left = until.duration_since(now);
+            return Err(anyhow!("Mint rate limit reached. Retry after {} seconds.", left.as_secs() + u64::from(left.subsec_nanos() > 0)));
+        }
+        Ok(())
+    }
+
+    fn record_quote_cooldown(&self, delay: std::time::Duration) -> anyhow::Error {
+        let now = std::time::Instant::now();
+        // Invalid/unrepresentable server durations must not panic the wallet.
+        let until = now.checked_add(delay).unwrap_or(now + std::time::Duration::from_secs(86400));
+        let mut entries = quote_cooldowns().lock().unwrap();
+        entries.retain(|_, until| *until > now);
+        let entry = entries.entry(self.url.clone()).or_insert(until);
+        *entry = (*entry).max(until);
+        let remaining = entry.duration_since(now);
+        anyhow!("Mint rate limit reached. Retry after {} seconds.", remaining.as_secs() + u64::from(remaining.subsec_nanos() > 0))
+    }
+
+    async fn quote_json(&self, response: reqwest::Response) -> Result<serde_json::Value> {
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let delay = retry_delay(response.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()));
+            return Err(self.record_quote_cooldown(delay));
+        }
+        response.error_for_status_ref()?;
+        let value: serde_json::Value = response.json().await?;
+        // Some mints report throttling in an API error rather than an HTTP 429.
+        if let Err(error) = check_api_error(&value, "Mint") {
+            let message = error.to_string().to_lowercase();
+            if message.contains("rate limit") || message.contains("too many requests") {
+                return Err(self.record_quote_cooldown(std::time::Duration::from_secs(30)));
+            }
+            return Err(error);
+        }
+        Ok(value)
+    }
+
+    /// Short-lived fee metadata for conversion preparation only. Spending still
+    /// fetches fresh fees. Concurrent readers share one request per mint.
+    pub async fn fetch_quote_keysets(&self) -> Result<Vec<KeysetSummary>> {
+        self.ensure_quote_ready()?;
+        let entry = {
+            let mut entries = QUOTE_KEYSETS.get_or_init(Default::default).lock().unwrap();
+            if entries.len() >= 32 && !entries.contains_key(&self.url) {
+                if let Some(key) = entries.keys().next().cloned() { entries.remove(&key); }
+            }
+            entries.entry(self.url.clone()).or_default().clone()
+        };
+        let mut cached = entry.lock().await;
+        if let Some((until, keysets)) = &*cached {
+            if *until > std::time::Instant::now() { return Ok(keysets.clone()); }
+        }
+        self.ensure_quote_ready()?;
+        let keysets = self.fetch_keysets().await?;
+        if keysets.is_empty() { return Err(anyhow!("Mint returned no fee information")); }
+        *cached = Some((std::time::Instant::now() + std::time::Duration::from_secs(60), keysets.clone()));
+        Ok(keysets)
+    }
     pub fn new(mint_url: &str) -> Self {
         let http = SHARED_HTTP_CLIENT
             .get_or_init(|| {
@@ -76,6 +153,10 @@ impl MintClient {
 
     pub async fn fetch_keysets(&self) -> Result<Vec<KeysetSummary>> {
         let resp = self.http.get(format!("{}/v1/keysets", self.url)).send().await?;
+        if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let delay = retry_delay(resp.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()));
+            return Err(self.record_quote_cooldown(delay));
+        }
         if !resp.status().is_success() {
             return Ok(Vec::new());
         }
@@ -174,32 +255,12 @@ impl MintClient {
     }
 
     pub async fn request_mint_quote(&self, amount_sats: u64) -> Result<(String, String)> {
-        let mut attempts = 0;
-        let v: serde_json::Value = loop {
-            attempts += 1;
-            match self.http.post(format!("{}/v1/mint/quote/bolt11", self.url))
-                .json(&serde_json::json!({ "amount": amount_sats, "unit": "sat" })).send().await {
-                Ok(resp) => {
-                    match resp.json().await {
-                        Ok(json) => break json,
-                        Err(e) if attempts >= 3 => return Err(anyhow!("Failed to parse quote response: {}", e)),
-                        Err(_) => {
-                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                            continue;
-                        }
-                    }
-                }
-                Err(e) => {
-                    if attempts >= 3 {
-                        return Err(anyhow::Error::new(e).context("Failed to request mint quote after 3 attempts"));
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                }
-            }
-        };
+        self.ensure_quote_ready()?;
+        // Quote creation is explicit: do not retry POSTs on HTTP/JSON/network errors.
+        let response = self.http.post(format!("{}/v1/mint/quote/bolt11", self.url))
+            .json(&serde_json::json!({ "amount": amount_sats, "unit": "sat" })).send().await?;
+        let v = self.quote_json(response).await?;
 
-        check_api_error(&v, "Mint")?;
-        
         let quote = v.get("quote").and_then(|q| q.as_str()).ok_or_else(|| anyhow!("Missing quote in response: {:?}", v))?;
         let request = v.get("request").and_then(|r| r.as_str()).unwrap_or("");
         
@@ -318,7 +379,6 @@ impl MintClient {
             }
         };
 
-        println!("[MintClient] /v1/melt/bolt11 response from {}: {:?}", self.url, mv);
 
         check_api_error(&mv, "Melt")?;
 
@@ -558,13 +618,11 @@ impl MintClient {
     /// Request a melt quote. Returns (quote_id, fee_reserve, total_amount_sats).
     /// For NUT-15, this quote can be used by multiple mints.
     pub async fn request_melt_quote(&self, invoice: &str) -> Result<(String, u64, u64)> {
-        let qv: serde_json::Value = self.http.post(format!("{}/v1/melt/quote/bolt11", self.url))
-            .json(&serde_json::json!({ 
-                "request": invoice, 
-                "unit": "sat"
-            })).send().await?.json().await?;
-        check_api_error(&qv, "Melt quote")?;
-        
+        self.ensure_quote_ready()?;
+        let response = self.http.post(format!("{}/v1/melt/quote/bolt11", self.url))
+            .json(&serde_json::json!({ "request": invoice, "unit": "sat" })).send().await?;
+        let qv = self.quote_json(response).await?;
+
         let quote = qv["quote"].as_str().ok_or_else(|| anyhow!("No quote returned"))?.to_string();
         let fee_reserve = qv["fee_reserve"].as_u64().unwrap_or(0);
         let amount = qv["amount"].as_u64().unwrap_or(0);
@@ -688,6 +746,69 @@ pub fn calculate_input_fee(proofs: &[ecash_core::types::Proof], keysets: &[Keyse
 mod tests {
     use super::*;
     use ecash_core::types::Proof;
+
+    /// Local HTTP boundary: retries must not turn an HTML 429 into three POSTs.
+    fn mint_server(response: String) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use std::io::{Read, Write};
+        let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        server.set_nonblocking(true).unwrap();
+        let url = format!("http://{}", server.local_addr().unwrap());
+        let requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = requests.clone();
+        std::thread::spawn(move || {
+            let until = std::time::Instant::now() + std::time::Duration::from_secs(3);
+            while std::time::Instant::now() < until {
+                if let Ok((mut stream, _)) = server.accept() {
+                    stream.set_read_timeout(Some(std::time::Duration::from_secs(1))).unwrap();
+                    let mut buf = [0; 4096]; let _ = stream.read(&mut buf);
+                    counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let _ = stream.write_all(response.as_bytes());
+                } else { std::thread::sleep(std::time::Duration::from_millis(5)); }
+            }
+        });
+        (url, requests)
+    }
+
+    #[tokio::test]
+    async fn quote_rate_limit_stops_retries_and_blocks_both_directions() {
+        let (url, requests) = mint_server("HTTP/1.1 429 Too Many Requests\r\nContent-Length: 4\r\nRetry-After: 120\r\nConnection: close\r\n\r\nbusy".into());
+        let client = MintClient::new(&url);
+        let error = client.request_mint_quote(1000).await.unwrap_err().to_string();
+        assert!(error.contains("Retry after 120 seconds"), "{error}");
+        assert!(client.request_melt_quote("invoice").await.unwrap_err().to_string().contains("rate limit"));
+        assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn successful_quote_is_not_retried() {
+        let body = r#"{"quote":"quote-one","request":"invoice-one"}"#;
+        let (url, requests) = mint_server(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body));
+        assert_eq!(MintClient::new(&url).request_mint_quote(1000).await.unwrap(), ("quote-one".into(), "invoice-one".into()));
+        assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn quote_fee_metadata_is_shared_and_reused_but_spending_fetches_fresh() {
+        let body = r#"{"keysets":[{"id":"keyset-one","unit":"sat","active":true,"input_fee_ppk":100}]}"#;
+        let (url, requests) = mint_server(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body));
+        let client = MintClient::new(&url);
+        let (first, second) = tokio::join!(client.fetch_quote_keysets(), client.fetch_quote_keysets());
+        assert_eq!(first.unwrap()[0].input_fee_ppk, 100);
+        assert_eq!(second.unwrap()[0].input_fee_ppk, 100);
+        assert_eq!(client.fetch_quote_keysets().await.unwrap()[0].id, "keyset-one");
+        assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 1);
+        client.fetch_keysets().await.unwrap();
+        assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn quote_retry_delay_accepts_seconds_and_http_dates() {
+        assert_eq!(retry_delay(Some("120")).as_secs(), 120);
+        let future = httpdate::fmt_http_date(std::time::SystemTime::now() + std::time::Duration::from_secs(120));
+        assert!((118..=120).contains(&retry_delay(Some(&future)).as_secs()));
+        assert_eq!(retry_delay(Some("invalid")).as_secs(), 30);
+        assert_eq!(retry_delay(Some("0")).as_secs(), 1);
+    }
 
     #[test]
     fn test_calculate_input_fee() {

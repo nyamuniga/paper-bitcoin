@@ -71,10 +71,13 @@ export function previewStableTransfer(direction: StableDirection, outputAmount: 
 
 // Manual conversions keep only the selected amount in USDB; automatic conversion stays off.
 // https://sdk-doc-spark.breez.technology/guide/token_conversion.html
-export async function quoteStableConversion(direction: StableDirection, outputAmount: bigint, mintUrl: string, cashuBalance: number, sourceBudget?: bigint, mode?: {preview: boolean; signal?: AbortSignal}): Promise<StableOperation> {
+export async function quoteStableConversion(direction: StableDirection, outputAmount: bigint, mintUrl: string, cashuBalance: number, sourceBudget?: bigint, mode?: {preview?: boolean; signal?: AbortSignal; refresh?: StableOperation}): Promise<StableOperation> {
   const prepare = async (): Promise<StableOperation> => {
     mode?.signal?.throwIfAborted();
-    if (await getActiveConversion()) throw new Error('Finish the saved conversion first.');
+    const active = await getActiveConversion();
+    if (mode?.refresh) {
+      if (!active || active.id !== mode.refresh.id || active.stage !== 'quoted' || active.quote_json !== mode.refresh.quote_json || active.expires_at !== mode.refresh.expires_at) throw new Error('The review quote changed. Reopen its latest status.');
+    } else if (active) throw new Error('Finish the saved conversion first.');
     if (await invoke<boolean>('spark_is_sending')) throw new Error('Wait for the current Bitcoin operation to finish.');
     const sdk = await checkedSdk();
     mode?.signal?.throwIfAborted();
@@ -88,17 +91,14 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
     const ownAddress = direction === 'toUsd' ? (await sdk.receivePayment({paymentMethod:{type:'sparkAddress'}})).paymentRequest : '';
     let quotingMinimum = false;
     let best: StableOperation | null = null;
-    let upperOutput: bigint | null = null;
     let previousRejectedDebit: bigint | null = null;
     const smallerOutput = (debit: bigint, principal: bigint): bigint => {
-      const rejected = outputAmount - 1n;
-      upperOutput = upperOutput === null || rejected < upperOutput ? rejected : upperOutput;
-      const lower = best ? BigInt(best.output_amount) : 0n;
       const predicted = resizeTransferOutput(outputAmount, sourceBudget!, debit, principal);
       // Fee reserves and whole-sat rounding can keep the debit unchanged across many outputs.
-      // Bisect a repeated plateau instead of taking the same tiny reduction indefinitely.
-      const next = previousRejectedDebit === debit || predicted > upperOutput || predicted <= lower
-        ? (lower + upperOutput) / 2n : predicted;
+      // Step down by at least 5% on a repeated plateau, rather than halving the
+      // user's output or making many tiny requests for the same fee tier.
+      const step = outputAmount - (outputAmount + 19n) / 20n;
+      const next = previousRejectedDebit === debit && step < predicted ? step : predicted;
       previousRejectedDebit = debit;
       return next;
     };
@@ -181,24 +181,61 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
         funding_sats: fundingSats, mint_quote_id: mintQuoteId, quote_json: encodeQuote(prep), payment_id: null, conversion_request_version: 0,
         prior_payment_ids: [], return_quote_id: '', return_quote_json: '', return_amount: 0,
       };
-      if (!best || outputAmount > BigInt(best.output_amount)) best = op;
-      if (sourceBudget === undefined || maxDebit * 100n >= sourceBudget * 99n) break;
-      const lower = BigInt(best.output_amount);
-      if (upperOutput !== null && upperOutput <= lower + 1n) break;
-      const predicted = resizeTransferOutput(outputAmount, sourceBudget, maxDebit, prep.conversionEstimate!.amountIn);
-      const next = upperOutput !== null && predicted >= upperOutput ? (lower + upperOutput) / 2n : predicted;
-      if (next <= lower) break;
-      quotingMinimum = false;
-      outputAmount = next;
+      best = op;
+      // A valid fee-inclusive quote is enough. Maximizing the remaining budget
+      // creates more invoices and mint requests for negligible additional output.
+      break;
     }
     mode?.signal?.throwIfAborted();
     if (!best) throw new Error('Could not find a transfer quote within this amount. Try a smaller amount.');
     if (mode?.preview) { previewContexts.set(best, {sdk, sourceBudget}); return best; }
+    if (mode?.refresh) return persistRefreshedQuote(mode.refresh, best);
     const prior = await sdk.listPayments({limit: 1000});
     return invoke('stable_begin', {operation: {...best, prior_payment_ids: prior.payments.map(p => p.id)}});
   };
   // Read-only previews must not queue behind a potentially slow background sweep.
   return mode?.preview ? prepare() : withSparkBalanceLock(prepare);
+}
+
+function persistRefreshedQuote(previous: StableOperation, next: StableOperation): Promise<StableOperation> {
+  return invoke('stable_refresh_quote', {
+    operation: {...next, id: previous.id}, expectedQuoteJson: previous.quote_json, expectedExpiresAt: previous.expires_at,
+  });
+}
+
+/** Refresh an unconfirmed review only. Reuse its invoice unless it no longer fits the cap. */
+export async function refreshStableQuote(id: string, cashuBalance: number): Promise<StableOperation> {
+  let previous: StableOperation | undefined;
+  const reused = await withSparkBalanceLock(async () => {
+    const op = (await getStableOperations()).find(o => o.id === id);
+    if (!op || op.stage !== 'quoted') throw new Error('Only a transfer still in review can refresh its rate.');
+    previous = op;
+    const sdk = await checkedSdk();
+    const old = decodeQuote<PrepareSendPaymentResponse>(op.quote_json);
+    const destination = old.paymentMethod.type === 'sparkAddress' ? old.paymentMethod.address
+      : old.paymentMethod.type === 'bolt11Invoice' ? old.paymentMethod.invoiceDetails.invoice.bolt11 : null;
+    if (!destination) throw new Error('Invalid saved conversion destination.');
+    try {
+      const prepared = await sdk.prepareSendPayment({
+        paymentRequest: {type: 'input', input: destination}, amount: BigInt(op.output_amount),
+        tokenIdentifier: op.direction === 'toUsd' ? USDB_TOKEN_ID : undefined,
+        conversionOptions: checkedEstimate(old, op.direction).options, feePolicy: 'feesExcluded',
+      });
+      const cost = conversionCost(checkedEstimate(prepared, op.direction));
+      if (op.direction === 'toUsd') {
+        if (prepared.paymentMethod.type !== 'sparkAddress' || prepared.paymentMethod.address !== destination || prepared.paymentMethod.fee !== 0n) throw new Error('Unexpected conversion destination or fee.');
+        if (cost > BigInt(op.funding_sats)) return null;
+      } else if (cost > BigInt(op.max_debit)) return null;
+      return await persistRefreshedQuote(op, {...op, quote_json: encodeQuote(prepared), expires_at: Math.floor(Date.now() / 1000) + 60});
+    } catch (error) {
+      // Replace expired invoices; transient/provider failures must not fan out into new mint requests.
+      if (/expired|invoice.*expiry/i.test(transferErrorDetails(error))) return null;
+      throw error;
+    }
+  });
+  if (reused) return reused;
+  if (!previous) throw new Error('Review quote unavailable.');
+  return quoteStableConversion(previous.direction, BigInt(previous.output_amount), previous.mint_url, cashuBalance, BigInt(previous.max_debit), {refresh: previous});
 }
 /** Persist a fresh Bitcoin preview directly; reverse payments still prepare their blinded receive outputs. */
 export async function reviewStableTransfer(preview: StableOperation, sourceBudget: bigint, cashuBalance: number): Promise<StableOperation> {
@@ -277,6 +314,14 @@ export async function executeStableConversion(id: string): Promise<StableOperati
   });
 }
 export async function checkStableConversion(id: string): Promise<StableOperation> {
+  // Cashu receipts do not depend on Spark sync or its balance-changing queue.
+  // In particular, a completed return must remain discoverable if Spark is offline.
+  const saved = (await getStableOperations()).find(o => o.id === id);
+  if (!saved) throw new Error('Conversion not found.');
+  if (saved.stage === 'returning') return checkCashuReceipt(saved, saved.return_quote_id);
+  if (saved.stage === 'settling') return checkCashuReceipt(saved, saved.mint_quote_id);
+  if (saved.stage === 'funding') return checkCashuReceipt(saved, `stable-fund-${saved.id}`, 'funded');
+  if (['complete', 'cancelled', 'refunded'].includes(saved.stage)) return saved;
   return withSparkBalanceLock(async () => {
     let op = (await getStableOperations()).find(o => o.id === id);
     if (!op) throw new Error('Conversion not found.');

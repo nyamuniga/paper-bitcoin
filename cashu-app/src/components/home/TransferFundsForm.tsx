@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUpDown, Bitcoin, Check, ChevronRight, Delete, DollarSign, Loader2 } from 'lucide-react';
 import { SovereignStampOverlay } from '../shared/SovereignStampOverlay';
 import { PageHeader } from '../shared/PageHeader';
 import { useWalletStore } from '../../store/wallet';
 import { useCurrencyStore } from '../../store/currencyStore';
 import { useTransferAvailability } from '../../hooks/useTransferAvailability';
-import { cancelConversion, checkStableConversion, executeStableConversion, executeFundingReturn, getActiveConversion, quoteFundingReturn, reviewStableTransfer, recoverPendingConversion } from '../../services/stableBalanceService';
-import { decodeQuote, formatUnits, parseUnits, USD_DECIMALS } from '../../services/stableBalanceModel';
+import { useReviewQuoteRefresh } from '../../hooks/useReviewQuoteRefresh';
+import { cancelConversion, checkStableConversion, executeStableConversion, executeFundingReturn, getActiveConversion, quoteFundingReturn, quoteStableConversion, recoverPendingConversion } from '../../services/stableBalanceService';
+import { conversionCost, decodeQuote, formatUnits, parseUnits, USD_DECIMALS } from '../../services/stableBalanceModel';
 import { dollarAmount, estimateTransferOutput, percentageAmount, TransferMinimumError } from '../../services/transferAmount';
 import type { StableDirection, StableOperation } from '../../services/stableBalanceModel';
 import type { PrepareSendPaymentResponse } from '@breeztech/breez-sdk-spark/web';
-import { TransferPendingError, TransferFailedError, transferErrorDetails, transferErrorMessage } from '../../services/transferError';
+import { TransferPendingError, TransferFailedError, transferErrorDetails, transferErrorMessage, transferRetrySeconds } from '../../services/transferError';
 import './TransferFundsForm.css';
 
 interface Props { initialDirection?: StableDirection; mintUrl: string; cashuBalance: number; stableBalance: bigint | null; onClose: () => void; onDone: () => void; onChange: () => void }
@@ -32,7 +33,11 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
   const [progressDetails, setProgressDetails] = useState('');
   const [checkingProgress, setCheckingProgress] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [quoteRetryAt, setQuoteRetryAt] = useState(0);
+  const quoteRetrySeconds = Math.max(0, Math.ceil((quoteRetryAt - now) / 1000));
   const busyRef = useRef(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   const usdRate = useCurrencyStore(s => s.rates.USD);
   const fetchRates = useCurrencyStore(s => s.fetchRates);
   useEffect(() => {
@@ -42,6 +47,9 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
     return () => { live = false; clearInterval(timer); };
   }, []);
   useEffect(() => { if (!usdRate) void fetchRates(); }, [usdRate, fetchRates]);
+  const applyReviewQuote = useCallback((next: StableOperation) => {setOperation(next);setError('');}, []);
+  const reviewRefresh = useReviewQuoteRefresh(operation, !busy, cashuBalance, busyRef, applyReviewQuote);
+  const reviewRetrySeconds = Math.max(0, Math.ceil((reviewRefresh.retryAt - now) / 1000));
   const run = async (work: () => Promise<StableOperation | void>) => {
     if (busyRef.current) return;
     busyRef.current = true; setBusy(true); setError(''); setProgressDetails('');
@@ -56,6 +64,12 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
         setProgressDetails(e.message);
         if (e.operation) setOperation(e.operation);
       } else {
+        const retry = transferRetrySeconds(transferErrorDetails(e));
+        if (retry !== null && !operation) {
+          const started = Date.now();
+          setNow(started);
+          setQuoteRetryAt(started + retry * 1000);
+        }
         setError(e instanceof TransferMinimumError ? `Enter at least ${money(e.minimum, direction === 'toSats')}${e.includesFees ? ', including fees' : ', plus fees'}.` : transferErrorDetails(e));
       }
       try {
@@ -87,7 +101,7 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
         if (next.stage === 'complete') setShowSuccess(true);
         if (['complete', 'refunded', 'funded'].includes(next.stage)) {
           void useWalletStore.getState().refreshWallet();
-          onChange();
+          onChangeRef.current();
         }
       } catch (failure) {
         if (!live) return;
@@ -102,7 +116,7 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
     };
     schedule();
     return () => {live = false;clearTimeout(timer);};
-  }, [monitoredId, monitoredStage, busy, error, onChange]);
+  }, [monitoredId, monitoredStage, busy, error]);
   const toDollars = direction === 'toUsd';
   const sourceDecimals = toDollars ? 0 : USD_DECIMALS;
   const sourceBalance = toDollars ? BigInt(cashuBalance) : stableBalance;
@@ -110,21 +124,16 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
   try { sourceAmount = parseUnits(amount, sourceDecimals); } catch { /* Empty or incomplete input. */ }
   const estimate = estimateTransferOutput(direction, sourceAmount, usdRate);
   const insufficient = sourceBalance !== null && sourceAmount > sourceBalance;
-  const availability = useTransferAvailability({enabled:!busy && !operation, direction, mintUrl, cashuBalance, sourceBalance, sourceAmount, estimate});
-  const suggestedMinimum = availability.minimumError?.minimum ?? availability.minimum;
-  const displayEstimate = availability.quote ? BigInt(availability.quote.output_amount) : estimate;
-  const constraintMessage = availability.limitsFailed ? 'Transfer limits unavailable. Retry to check what you can transfer.' : !availability.limitsReady ? 'Checking transfer limits…' : availability.minimum ? `Minimum ${money(availability.minimum, !toDollars)} + fees. Maximum ${sourceBalance === null ? 'not available' : money(sourceBalance, !toDollars)}.` : `Maximum ${sourceBalance === null ? 'not available' : money(sourceBalance, !toDollars)}. Minimum checked with your quote.`;
+  const availability = useTransferAvailability({enabled:!busy && !operation, direction, mintUrl, sourceAmount});
+  const suggestedMinimum = availability.minimum;
+  const displayEstimate = estimate;
+  const constraintMessage = availability.limitsFailed ? 'Limits will be checked with your quote.' : !availability.limitsReady ? 'Checking transfer limits…' : availability.minimum ? `Minimum ${money(availability.minimum, !toDollars)} + fees. Maximum ${sourceBalance === null ? 'not available' : money(sourceBalance, !toDollars)}.` : `Maximum ${sourceBalance === null ? 'not available' : money(sourceBalance, !toDollars)}. Minimum checked with your quote.`;
   let amountMessage = '';
   if (insufficient) amountMessage = `Enter ${money(sourceBalance!, !toDollars)} or less.`;
-  else if (suggestedMinimum !== null && sourceBalance !== null && suggestedMinimum > sourceBalance) amountMessage = `Your balance is below ${money(suggestedMinimum, !toDollars)}${availability.minimumError?.includesFees ? ' including fees' : ' plus fees'}. Add funds or switch balances.`;
-  else if (availability.minimumError) amountMessage = availability.minimumError.includesFees ? `This amount won’t cover the minimum and fees. Try ${money(availability.minimumError.minimum, !toDollars)} or more.` : `Enter at least ${money(availability.minimumError.minimum, !toDollars)}, plus fees.`;
+  else if (suggestedMinimum !== null && sourceBalance !== null && suggestedMinimum > sourceBalance) amountMessage = `Your balance is below ${money(suggestedMinimum, !toDollars)} plus fees. Add funds or switch balances.`;
   else if (availability.belowMinimum) amountMessage = `Enter at least ${money(availability.minimum!, !toDollars)}, plus fees.`;
-  else if (availability.checking && sourceAmount > 0n) amountMessage = 'Getting a live rate and transfer fees…';
-  else if (availability.expired) amountMessage = 'This quote expired. Check again for the current amount and fees.';
-  else if (availability.quoteError) amountMessage = transferErrorMessage(transferErrorDetails(availability.quoteError), 'quote');
-  else if (availability.quote) amountMessage = 'Amount checked. Fees are included in your quote.';
-  const canReview = !!availability.quote && !availability.checking && !availability.quoteError && !insufficient && !availability.belowMinimum;
-  const retryAvailability = availability.limitsFailed || !!availability.quoteError && !availability.minimumError || availability.expired;
+  else amountMessage = 'Estimate only. Your exact rate and fees appear at review.';
+  const canReview = sourceAmount > 0n && estimate !== null && estimate > 0n && sourceBalance !== null && !insufficient && !availability.belowMinimum;
 
   const setInput = (value: string) => {
     if (value.length > 18 || !/^\d*(?:\.\d*)?$/.test(value) || (toDollars && value.includes('.')) || (value.split('.')[1]?.length ?? 0) > USD_DECIMALS) return;
@@ -142,11 +151,20 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
   const quote = operation ? decodeQuote<PrepareSendPaymentResponse>(isReturn ? operation.return_quote_json : operation.quote_json) : null;
   const exactOutput = operation ? money(isReturn ? BigInt(operation.return_amount) : BigInt(operation.output_amount), !isReturn && toDollars) : '';
   const output = operation && !isReturn && toDollars ? dollarAmount(BigInt(operation.output_amount)) : exactOutput;
-  const debit = operation ? money(BigInt(operation.max_debit), !toDollars) : '';
+  const debit = operation ? money(isReview && !toDollars && quote?.conversionEstimate ? conversionCost(quote.conversionEstimate) : BigInt(operation.max_debit), !toDollars) : '';
+  const conversion = quote?.conversionEstimate;
+  const liveRate = conversion && conversion.amountIn > 0n && conversion.amountOut > 0n
+    ? dollarAmount(toDollars ? conversion.amountOut * 100000000n / conversion.amountIn : conversion.amountIn * 100000000n / conversion.amountOut) : null;
+  const errorMessage = !operation && quoteRetryAt > 0 && transferRetrySeconds(error) !== null
+    ? quoteRetrySeconds > 0
+      ? `The mint is busy. Try again in ${quoteRetrySeconds} seconds. No money was moved.`
+      : 'You can try again now. No money was moved.'
+    : transferErrorMessage(error, operation && !['quoted', 'cancelled'].includes(operation.stage) ? 'pending' : 'review');
   const edit = () => operation ? void run(async () => { await cancelConversion(operation); }) : onClose();
   const review = () => void run(() => {
-    if (!canReview || !availability.quote) throw new Error('Check the amount and fees before reviewing.');
-    return reviewStableTransfer(availability.quote, sourceAmount, cashuBalance);
+    if (Date.now() < quoteRetryAt) throw new Error('Wait for the mint’s retry delay before requesting another quote.');
+    if (!canReview || estimate === null) throw new Error('Enter an amount within your available balance.');
+    return quoteStableConversion(direction, estimate, mintUrl, cashuBalance, sourceAmount);
   });
 
   return (
@@ -155,7 +173,7 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
         title={operation?.stage === 'refunded' ? 'Transfer returned' : done ? 'Transfer complete' : isReview ? 'Review transfer' : operation ? 'Your transfer' : 'Transfer funds'}
         subtitle={done ? 'Return to your wallet to see your balance' : isReview ? 'Check your amount and fees' : operation ? 'View the progress of your transfer' : 'Move between Bitcoin and dollars'}
         onBack={isReview ? edit : onClose}
-        backDisabled={busy}
+        backDisabled={busy || reviewRefresh.refreshing}
       />
         <div className="transfer-content">
           {!operation && <>
@@ -172,18 +190,17 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
                 <p className="transfer-available">{toDollars ? stableBalance === null ? 'Balance unavailable' : `Balance: ${dollarAmount(stableBalance)}` : `Balance: ${cashuBalance.toLocaleString()} sats`}</p>
               </div>
             </div>
-            <div id="transfer-constraints" className="transfer-constraints" aria-live="polite"><p>{constraintMessage}</p>{amountMessage && <p className={insufficient || availability.belowMinimum || availability.quoteError ? 'transfer-hint-error' : ''}>{amountMessage}</p>}</div>
-            {availability.quoteError != null && !(availability.quoteError instanceof TransferMinimumError) && <details className="transfer-details"><summary>Technical details</summary><p>{transferErrorDetails(availability.quoteError)}</p></details>}
+            <div id="transfer-constraints" className="transfer-constraints" aria-live="polite"><p>{constraintMessage}</p>{amountMessage && <p className={insufficient || availability.belowMinimum ? 'transfer-hint-error' : ''}>{amountMessage}</p>}</div>
             <div className="transfer-entry-controls">
               <div className="transfer-percentages" aria-label="Choose a share of your balance">
-                {[25, 50, 75, 100].map(percent => <button key={percent} disabled={busy || !availability.limitsReady || sourceBalance === null || sourceBalance === 0n || (suggestedMinimum !== null && sourceBalance !== null && percentageAmount(sourceBalance, percent) < suggestedMinimum)} aria-pressed={selectedPercent === percent} onClick={() => {setAmount(formatUnits(percentageAmount(sourceBalance!, percent), sourceDecimals)); setSelectedPercent(percent); setError('');}}>{percent}%</button>)}
+                {[25, 50, 75, 100].map(percent => <button key={percent} disabled={busy || sourceBalance === null || sourceBalance === 0n || (suggestedMinimum !== null && sourceBalance !== null && percentageAmount(sourceBalance, percent) < suggestedMinimum)} aria-pressed={selectedPercent === percent} onClick={() => {setAmount(formatUnits(percentageAmount(sourceBalance!, percent), sourceDecimals)); setSelectedPercent(percent); setError('');}}>{percent}%</button>)}
               </div>
               <div className="transfer-keypad" aria-label="Amount keypad">
                 {['1','2','3','4','5','6','7','8','9','.','0','delete'].map(value => <button key={value} type="button" disabled={busy || (value === '.' && toDollars)} onClick={() => key(value)} aria-label={value === 'delete' ? 'Delete last digit' : value === '.' ? 'Decimal point' : value}>{value === 'delete' ? <Delete size={23}/> : value}</button>)}
               </div>
               {sourceBalance === null && <button className="transfer-text-button" disabled={busy} onClick={onChange}>Refresh balance</button>}
               {!usdRate && <button className="transfer-text-button" disabled={busy} onClick={() => void fetchRates()}>Refresh exchange rate</button>}
-              <button className="transfer-primary" disabled={busy || !mintUrl || (!retryAvailability && !canReview)} onClick={retryAvailability ? availability.retry : review}>{busy ? <><Loader2 className="animate-spin" size={19}/>Getting your quote…</> : availability.checking && sourceAmount > 0n ? <><Loader2 className="animate-spin" size={19}/>Getting quote…</> : retryAvailability ? 'Check again' : <>Review transfer<ChevronRight size={19}/></>}</button>
+              <button className="transfer-primary" disabled={busy || !mintUrl || !canReview || quoteRetrySeconds > 0} onClick={review}>{busy ? <><Loader2 className="animate-spin" size={19}/>Getting rate and fees…</> : quoteRetrySeconds > 0 ? `Try again in ${quoteRetrySeconds}s` : <>Review transfer<ChevronRight size={19}/></>}</button>
             </div>
           </>}
           {operation && <>
@@ -196,11 +213,15 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
             {isReview && <>
               <dl className="transfer-summary">
                 {!isReturn && <><div><dt>From</dt><dd>{toDollars ? 'Bitcoin' : 'Dollar'} balance</dd></div><div><dt>{toDollars ? 'You pay up to' : 'Estimated total'}</dt><dd>{debit}</dd></div></>}
+                {!isReturn && !toDollars && <div><dt>Maximum you pay</dt><dd>{money(BigInt(operation.max_debit), true)}</dd></div>}
                 <div><dt>Fees</dt><dd>{isReturn && quote?.paymentMethod.type === 'bolt11Invoice' ? `${quote.paymentMethod.lightningFeeSats + (quote.paymentMethod.sparkTransferFeeSats ?? 0)} sats` : 'Included in total'}</dd></div>
+                {!isReturn && liveRate && <div><dt>Rate</dt><dd>1 BTC ≈ {liveRate}</dd></div>}
               </dl>
+              {!isReturn && <p className="transfer-hint" role="status">{reviewRefresh.refreshing ? 'Updating rate and fees…' : reviewRefresh.error ? reviewRetrySeconds > 0 ? `Couldn’t update the rate. Retrying in ${reviewRetrySeconds}s…` : 'Couldn’t update the rate. Check again before confirming.' : `Live quote · updates in ${Math.max(0, Math.ceil((operation.expires_at * 1000 - 40000 - now) / 1000))}s`}</p>}
+              {!isReturn && reviewRefresh.error && <details className="transfer-details"><summary>Connection details</summary><p>{transferErrorDetails(reviewRefresh.error)}</p></details>}
               <p className="transfer-hint">{isReturn ? 'Return your Bitcoin without completing the transfer. A small amount may remain to cover fees.' : toDollars ? 'Only this amount moves. The rest of your Bitcoin stays in your balance.' : 'The rate may move slightly before the transfer completes.'}</p>
               {!isReturn && <details className="transfer-details"><summary>About this transfer</summary><p>Exact amount: {exactOutput}. Rate changes are limited to 0.1%. Your Dollar balance is held as a dollar-linked digital asset, rather than a bank deposit. Its value depends on it maintaining its link to the dollar.</p></details>}
-              <div className="transfer-actions"><button className="transfer-primary" disabled={busy || !!expired} onClick={() => void run(() => isReturn ? executeFundingReturn(operation.id) : executeStableConversion(operation.id))}>{busy ? <><Loader2 className="animate-spin" size={19}/>Transferring…</> : expired ? 'Quote expired' : isReturn ? 'Confirm return' : 'Confirm transfer'}</button><button className="transfer-secondary" disabled={busy} onClick={edit}>{isReturn ? 'Back to transfer' : expired ? 'Get a new quote' : 'Edit amount'}</button></div>
+              <div className="transfer-actions"><button className="transfer-primary" disabled={busy || reviewRefresh.refreshing || !!expired || (!isReturn && !!reviewRefresh.error)} onClick={() => void run(() => isReturn ? executeFundingReturn(operation.id) : executeStableConversion(operation.id))}>{busy ? <><Loader2 className="animate-spin" size={19}/>Transferring…</> : reviewRefresh.refreshing ? <><Loader2 className="animate-spin" size={19}/>Updating rate…</> : expired ? 'Updating quote…' : isReturn ? 'Confirm return' : 'Confirm transfer'}</button>{!isReturn && (reviewRefresh.error || expired) && <button className="transfer-secondary" disabled={busy || reviewRefresh.refreshing || reviewRetrySeconds > 0} onClick={reviewRefresh.retry}>{reviewRetrySeconds > 0 ? `Try again in ${reviewRetrySeconds}s` : 'Update quote'}</button>}<button className="transfer-secondary" disabled={busy || reviewRefresh.refreshing} onClick={edit}>{isReturn ? 'Back to transfer' : 'Edit amount'}</button></div>
             </>}
             {!isReview && !done && <>
               <p className="transfer-progress" role="status">{stages[operation.stage] ?? 'Your transfer is saved'}. {!error && ['funding', 'converting', 'settling', 'returning'].includes(operation.stage) ? 'We’ll check progress automatically. ' : ''}You can leave this screen and return later.</p>
@@ -208,10 +229,11 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
               <div className="transfer-actions"><button className="transfer-primary" disabled={busy || checkingProgress} onClick={() => void run(() => operation.stage === 'funded' ? executeStableConversion(operation.id) : checkStableConversion(operation.id))}>{busy || checkingProgress ? <><Loader2 className="animate-spin" size={19}/>Checking…</> : operation.stage === 'funded' ? 'Continue transfer' : 'Check progress'}</button>
               {operation.stage === 'funded' && <button className="transfer-secondary" disabled={busy || checkingProgress} onClick={() => void run(() => quoteFundingReturn(operation.id))}>Return to Bitcoin balance</button>}
               {operation.stage === 'converting' && <button className="transfer-secondary" disabled={busy || checkingProgress} onClick={() => void run(() => recoverPendingConversion(operation.id))}>Recover transfer</button>}</div>
+              <button className="transfer-secondary" onClick={onClose}>Back to wallet</button>
             </>}
             {done && <div className="transfer-actions"><button className="transfer-primary" onClick={onDone}>Back to wallet</button></div>}
           </>}
-          {error && <div className="transfer-error" role="alert"><p>{transferErrorMessage(error, operation && !['quoted', 'cancelled'].includes(operation.stage) ? 'pending' : 'review')}</p><details><summary>Technical details</summary><p>{error}</p></details></div>}
+          {error && <div className="transfer-error" role="alert"><p>{errorMessage}</p><details><summary>Technical details</summary><p>{error}</p></details></div>}
         </div>
       <SovereignStampOverlay
         status={showSuccess ? 'success' : null}

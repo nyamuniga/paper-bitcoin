@@ -4,6 +4,28 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 
 ---
 
+## [0.1.17] - 2026-11-09
+
+### Added
+- Voluntary Bitcoin/Dollar conversions from existing ecash, with explicit review, durable recovery journals and the shared animated success overlay.
+- Live review quotes refreshed every 20 seconds while visible, preserving the original spending ceiling and reusing payment invoices when possible.
+- Persistent QR ecash payment requests, interoperable Cashu request encoding and authenticated NIP-17 delivery, resumable from History and Recent activity.
+- Compact BTC/USD wallet tabs with swipe transitions, shared balance visibility, consistent Dollar formatting, and BTC as a selectable display currency.
+
+### Fixed
+- Completed Cashu receipts no longer report Pending during later checks; late network results cannot regress settled receipts.
+- Typing conversion amounts no longer creates mint quotes. Review stops at the first valid fee-inclusive quote and respects mint retry delays.
+- Conversion status reconciliation no longer waits for unrelated Spark sync/balance work when a Cashu receipt is authoritative.
+- Simplified invoice payment review, fee totals, saved-token delivery retries, receive/request keypad and transaction actions.
+
+### Release and security
+- Removed NFC support and its platform permissions; QR/token payments remain supported.
+- Replaced the private constants-file dependency with tracked, credential-free environment configuration and a public setup template.
+- Removed authentication/payment-response, phone-number and proof-secret debug output.
+- Corrected proxy encryption byte packing so generated AES keys are 32 bytes and IVs are 16 bytes, verified against independent AES-256-CBC/HMAC implementations.
+- Updated npm/Rust dependencies, including k256 0.14 and patched cryptographic arithmetic, synchronized release versions and website downloads, and added release/file-hygiene checks and reproducible lockfiles.
+- Updated contributor, configuration, security and release documentation. See the release guide for native device validation and advisory review requirements.
+
 ## [0.1.16] - 2026-11-06
 
 ### ⚡ Self-Custodial On-Chain Bitcoin via Breez SDK – Spark

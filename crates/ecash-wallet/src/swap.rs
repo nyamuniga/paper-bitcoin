@@ -77,7 +77,7 @@ pub async fn swap_proofs(
                     let privkey_bytes = hex::decode(privkey_hex)
                         .map_err(|e| anyhow::anyhow!("Invalid hex in nostr private key: {}", e))?;
                     
-                    let signing_key = k256::schnorr::SigningKey::from_bytes(privkey_bytes.as_slice())
+                    let signing_key = k256::schnorr::SigningKey::from_slice(privkey_bytes.as_slice())
                         .map_err(|_| anyhow::anyhow!("Invalid nostr private key bytes"))?;
 
                     let my_xonly = hex::encode(signing_key.verifying_key().to_bytes()).to_lowercase();
@@ -450,7 +450,7 @@ async fn isolate_and_purge_unverified_inputs(
     // 1. Check offline: keyset validity and curve point validity
     for p in inputs {
         if point_from_hex(&p.c).is_err() {
-            eprintln!("[isolate_unverified] Proof has invalid curve point C: {}", p.secret);
+            eprintln!("[isolate_unverified] Proof has invalid curve point C");
             bad_secrets.insert(p.secret.clone());
             continue;
         }
@@ -460,7 +460,7 @@ async fn isolate_and_purge_unverified_inputs(
                 || (ks.id.starts_with("01") && p.id.starts_with(&ks.id))
         }) || p.id == active_keyset.id;
         if !keyset_known {
-            eprintln!("[isolate_unverified] Proof has unknown keyset ID {}: {}", p.id, p.secret);
+            eprintln!("[isolate_unverified] Proof has unknown keyset ID {}", p.id);
             bad_secrets.insert(p.secret.clone());
         }
     }
@@ -479,7 +479,7 @@ async fn isolate_and_purge_unverified_inputs(
                 if let Some(mint_pk_hex) = pk_str {
                     if let Ok(mint_pk) = point_from_hex(&mint_pk_hex) {
                         if !verify_dleq(&mint_pk, &c_p, &b_p, dleq) {
-                            eprintln!("[isolate_unverified] Proof failed DLEQ verification: {}", p.secret);
+                            eprintln!("[isolate_unverified] Proof failed DLEQ verification");
                             bad_secrets.insert(p.secret.clone());
                             continue;
                         }
@@ -487,7 +487,7 @@ async fn isolate_and_purge_unverified_inputs(
                             let seeded_c = deriv.session_at(p.derivation_index).unblind(&c_p, &mint_pk, p.amount, &p.id, None).c;
                             let legacy_c = BlindingSession::new_legacy(&p.secret).unblind(&c_p, &mint_pk, p.amount, &p.id, None).c;
                             if p.c != seeded_c && p.c != legacy_c {
-                                eprintln!("[isolate_unverified] Proof unblinded signature C mismatches both seeded and legacy derivation: {}", p.secret);
+                                eprintln!("[isolate_unverified] Proof unblinded signature C mismatches both seeded and legacy derivation");
                                 bad_secrets.insert(p.secret.clone());
                             }
                         }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Lock, Trash2, AlertTriangle, ChevronDown, Wallet, Terminal } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../../store/wallet';
 import { useAuth } from '../../hooks/useAuth';
 import { CleanWalletModal, CleanWalletResult } from './CleanWalletModal';
@@ -75,7 +76,6 @@ export const WalletManagementSection: React.FC<WalletManagementSectionProps> = (
     setCleanError(null);
 
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
       const res: any = await invoke('clean_wallet');
       await refreshWallet();
 

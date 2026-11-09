@@ -28,6 +28,43 @@ pub struct StableOperation {
     pub return_amount: u64,
 }
 impl StableOperation {
+    /// Only unconfirmed reviews may replace pricing. Preserve the original debit
+    /// ceiling and recovery identity, and reject stale refreshes after confirmation.
+    pub fn refresh_review(
+        &mut self,
+        candidate: &Self,
+        expected_quote: &str,
+        expected_expiry: u64,
+    ) -> bool {
+        if self.stage != "quoted"
+            || candidate.stage != "quoted"
+            || self.quote_json != expected_quote
+            || self.expires_at != expected_expiry
+            || self.id != candidate.id
+            || self.direction != candidate.direction
+            || self.mint_url != candidate.mint_url
+            || candidate
+                .max_debit
+                .parse::<u64>()
+                .ok()
+                .zip(self.max_debit.parse::<u64>().ok())
+                .is_none_or(|(next, cap)| next > cap || next == 0)
+            || candidate
+                .output_amount
+                .parse::<u64>()
+                .ok()
+                .is_none_or(|amount| amount == 0)
+        {
+            return false;
+        }
+        self.expires_at = candidate.expires_at;
+        self.output_amount = candidate.output_amount.clone();
+        self.funding_invoice = candidate.funding_invoice.clone();
+        self.funding_sats = candidate.funding_sats;
+        self.mint_quote_id = candidate.mint_quote_id.clone();
+        self.quote_json = candidate.quote_json.clone();
+        true
+    }
     pub fn active(&self) -> bool {
         !matches!(self.stage.as_str(), "complete" | "cancelled" | "refunded")
     }
@@ -107,6 +144,39 @@ mod tests {
             return_quote_json: String::new(),
             return_amount: 0,
         }
+    }
+    #[test]
+    fn review_refresh_preserves_identity_and_cap_and_stops_after_confirmation() {
+        let original = op("quoted");
+        let mut updated = original.clone();
+        updated.expires_at = 60;
+        updated.quote_json = "new quote".into();
+        updated.output_amount = "950000".into();
+        updated.max_debit = "990".into();
+        let mut saved = original.clone();
+        assert!(saved.refresh_review(&updated, &original.quote_json, original.expires_at));
+        assert_eq!(saved.id, original.id);
+        assert_eq!(saved.max_debit, "1000");
+        assert_eq!(saved.output_amount, "950000");
+        for stage in ["funding", "funded", "converting", "complete", "cancelled"] {
+            let mut started = op(stage);
+            assert!(!started.refresh_review(&updated, &original.quote_json, original.expires_at));
+        }
+        let mut raised = updated.clone();
+        raised.max_debit = "1001".into();
+        assert!(!original.clone().refresh_review(
+            &raised,
+            &original.quote_json,
+            original.expires_at
+        ));
+        let mut foreign = updated.clone();
+        foreign.mint_url = "other-mint".into();
+        assert!(!original.clone().refresh_review(
+            &foreign,
+            &original.quote_json,
+            original.expires_at
+        ));
+        assert!(!saved.refresh_review(&updated, &original.quote_json, original.expires_at));
     }
     #[test]
     fn irreversible_stages_cannot_be_cancelled_or_retried() {

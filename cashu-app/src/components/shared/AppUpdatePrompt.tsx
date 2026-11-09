@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../../version';
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { UpdateInfo, checkAppUpdate } from '../../services/updateService';
@@ -36,7 +37,7 @@ export const AppUpdatePrompt: React.FC = () => {
         if (info && info.hasUpdate) {
           setUpdateInfo(info);
         } else if (isManual) {
-          toast.success(`You are on the latest version! (${info?.currentVersion || 'v0.1.16'})`, {
+          toast.success(`You are on the latest version! (${info?.currentVersion || APP_VERSION})`, {
             icon: '✨',
           });
         }
@@ -50,11 +51,11 @@ export const AppUpdatePrompt: React.FC = () => {
     window.addEventListener('check_app_update', handleManualCheck);
 
     // Provide a convenient developer helper on window for fast testing
-    (window as any).__checkBitnotesUpdate = (simulateUpdate = false) => {
+    if (import.meta.env.DEV) (window as any).__checkBitnotesUpdate = (simulateUpdate = false) => {
       if (simulateUpdate) {
         setUpdateInfo({
           hasUpdate: true,
-          currentVersion: '0.1.15',
+          currentVersion: APP_VERSION,
           latestVersion: '0.2.0',
           releaseName: 'v0.2.0 - Major New Release',
           releaseNotes: 'New MoMo top up & cash out features, enhanced speed.',

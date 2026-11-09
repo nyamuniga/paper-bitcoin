@@ -6,7 +6,7 @@ import initBreezSDK, {
   type SdkEvent,
   type PrepareSendPaymentResponse,
 } from '@breeztech/breez-sdk-spark/web';
-import { BREEZ_API_KEY } from '../constants.local';
+import { BREEZ_API_KEY } from '../constants';
 import { withSparkBalanceLock } from './sparkBalanceLock';
 
 export interface OnchainSendEstimate {
@@ -691,7 +691,7 @@ export async function syncAndSweepSpark(defaultMintUrl?: string): Promise<boolea
   try {
     return await sweepSparkToCashu(defaultMintUrl);
   } catch (e) {
-    console.debug('Background Spark sync/sweep skipped or deferred:', e);
+
     return false;
   }
 }

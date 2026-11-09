@@ -2,7 +2,7 @@ import { Encryption } from '../utils/encryption';
 
 import { fetch } from '@tauri-apps/plugin-http';
 
-import { LIGHTNING_API_ENDPOINT } from '../constants.local';
+import { LIGHTNING_API_ENDPOINT } from '../constants';
 
 let btcWalletId: string | null = null;
 

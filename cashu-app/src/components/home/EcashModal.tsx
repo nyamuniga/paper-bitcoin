@@ -321,7 +321,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
         {/* Content */}
         <div className="p-4 sm:p-6 flex flex-col gap-3.5 sm:gap-4 relative z-10 overflow-y-auto overflow-x-hidden flex-1">
           {/* Mint info */}
-          <div className="flex flex-col gap-1.5 sm:gap-2">
+          {!(activeTab === 'send' && requestBusy) && <div className="flex flex-col gap-1.5 sm:gap-2">
             <p className="text-body-md font-body-md text-on-surface-variant">
               {activeTab === 'send'
                 ? (token ? 'Ecash token created from:' : 'Send ecash token from:')
@@ -372,7 +372,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                 </div>
               )}
             </div>
-          </div>
+          </div>}
 
           <div
             key={activeTab}

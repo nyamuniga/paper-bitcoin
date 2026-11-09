@@ -1,8 +1,8 @@
 [package]
 name = "bitnotes"
-version = "0.1.16"
+version = "0.1.17"
 description = "Physical cashu system"
-authors = ["you"]
+authors = ["BitNotes contributors"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

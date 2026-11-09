@@ -36,7 +36,7 @@ export const IssuedNoteSuccess: React.FC<IssuedNoteSuccessProps> = ({ issuedNote
           const { openPath } = await import('@tauri-apps/plugin-opener');
           await openPath(savePath);
         } catch (e) {
-          console.log("Could not open file natively", e);
+
         }
       } else {
         setSaving(false);

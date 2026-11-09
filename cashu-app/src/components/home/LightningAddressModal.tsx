@@ -4,7 +4,7 @@ import { Copy, Check, Zap, X, Loader2, Edit2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import QRCode from 'react-qr-code';
 import { useNostr } from '../../hooks/useNostr';
-import { NPUB_DOMAIN } from '../../constants.local';
+import { NPUB_DOMAIN } from '../../constants';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { writeClipboardText } from '../../utils/clipboard';
 

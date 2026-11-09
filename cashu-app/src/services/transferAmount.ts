@@ -42,8 +42,8 @@ export function providerMinimum(error: unknown): {attempted: bigint; minimum: bi
 export function dollarFiatValue(units: bigint, currency: string, rates: Record<string, number>): number | null {
   const dollars = Number(units) / 1000000;
   if (currency === 'USD') return dollars;
-  const usd = rates.USD, target = rates[currency];
+  const usd = rates.USD, target = currency === 'BTC' ? 1 : rates[currency];
   if (!Number.isFinite(usd) || usd <= 0 || !Number.isFinite(target) || target <= 0) return null;
-  const value = dollars * (target / usd);
+  const value = currency === 'BTC' ? dollars / usd : dollars * (target / usd);
   return Number.isFinite(value) ? value : null;
 }
