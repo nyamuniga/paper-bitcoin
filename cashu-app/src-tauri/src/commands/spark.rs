@@ -303,8 +303,9 @@ pub async fn spark_get_limits() -> CommandResult<OnchainLimits> {
 }
 
 #[tauri::command]
-pub async fn spark_is_sending(spark_state: State<'_, SparkState>) -> CommandResult<bool> {
-    Ok(spark_state.is_sending.load(Ordering::SeqCst))
+pub async fn spark_is_sending(spark_state: State<'_, SparkState>, state: State<'_, AppState>) -> CommandResult<bool> {
+    let (guard, _, _) = state.lock_and_get_wallet().await?;
+    Ok(spark_state.is_sending.load(Ordering::SeqCst) || guard.as_ref().unwrap().stable_operations.iter().any(|o| o.active()))
 }
 
 #[tauri::command]
@@ -375,6 +376,11 @@ pub async fn spark_melt_to_spark(
         }
     };
     let w_state = wallet_guard.as_mut().unwrap();
+
+    if w_state.stable_operations.iter().any(|o| o.active()) {
+        spark_state.is_sending.store(false, Ordering::SeqCst);
+        return Err(CommandError("Finish the stable balance conversion first.".into()));
+    }
 
     let (sats_paid, _preimage) = match ecash_wallet::pay_invoice(
         w_state,
@@ -681,6 +687,9 @@ pub async fn spark_prepare_mint_from_spark(
 
     let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
     let w_state = wallet_guard.as_mut().unwrap();
+    if w_state.stable_operations.iter().any(|o| o.active()) {
+        return Err(CommandError("A stable balance conversion is in progress.".into()));
+    }
     w_state.cache_mint_keys(&resolved_mint_url, keyset.keys);
 
     let max_proof_idx = w_state

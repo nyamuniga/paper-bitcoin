@@ -2,7 +2,7 @@ import { Encryption } from '../utils/encryption';
 
 import { fetch } from '@tauri-apps/plugin-http';
 
-import { MOMO_API_BASE_URL } from '../constants.local';
+import { MOMO_API_BASE_URL } from '../constants';
 
 export const initiateMomoPaymentRequest = async (
   txId: string,
@@ -11,7 +11,6 @@ export const initiateMomoPaymentRequest = async (
   amount: number,
   phoneNumber: string
 ): Promise<any> => {
-  console.log(`[MomoService] Initiating payment for ${amount} RWF to ${phoneNumber}`);
 
   const targetUrl = `${MOMO_API_BASE_URL}/payment/request/octoba`;
 
@@ -28,7 +27,7 @@ export const initiateMomoPaymentRequest = async (
       payerMessage: `Bridge Payment`,
       payeeNote: `Order ${externalId}`
     };
-    
+
     const payload = {
       transaction: requestBody,
       security: {
@@ -89,7 +88,7 @@ export const checkMomoPaymentStatus = async (
   if (!txId) {
     return { status: 'FAILED', message: 'Missing reference ID.' };
   }
-  
+
   const targetUrl = `${MOMO_API_BASE_URL}/payment/request/octoba/status/${txId}`;
 
   try {
@@ -156,7 +155,7 @@ export const initiateMomoPayout = async (
       payerMessage: `RWF Bridge Payout`,
       payeeNote: `Payout ${externalId}`
     };
-    
+
     const payload = {
       transaction: requestBody,
       security: {

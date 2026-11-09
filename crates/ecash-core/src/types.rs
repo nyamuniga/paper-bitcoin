@@ -235,6 +235,8 @@ pub struct RedeemTransactionData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendTransactionData {
+    #[serde(default, alias = "nfc_request", skip_serializing_if = "Option::is_none")]
+    pub payment_request: Option<String>,
     pub token_string: String,
     pub proofs: Vec<Proof>,
 }
@@ -242,6 +244,8 @@ pub struct SendTransactionData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReceiveEcashTransactionData {
     pub token_string: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoice_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -296,4 +300,37 @@ pub struct Transaction {
     pub status: TransactionStatus,
     pub timestamp: u64,
     pub mint_url: String,
+}
+
+#[cfg(test)]
+mod payment_history_tests {
+    use super::{SendTransactionData, ReceiveEcashTransactionData};
+
+    #[test]
+    fn receive_invoice_identity_persists_and_old_receipts_still_load() {
+        let old: ReceiveEcashTransactionData = serde_json::from_str(r#"{"token_string":"fixture"}"#).unwrap();
+        assert!(old.invoice_id.is_none());
+        let receipt = ReceiveEcashTransactionData { token_string: "fixture".into(), invoice_id: Some("invoice-1".into()) };
+        let restored: ReceiveEcashTransactionData = serde_json::from_str(&serde_json::to_string(&receipt).unwrap()).unwrap();
+        assert_eq!(restored.invoice_id.as_deref(), Some("invoice-1"));
+    }
+
+    #[test]
+    fn old_send_history_loads_without_request_metadata() {
+        let data: SendTransactionData = serde_json::from_str(r#"{"token_string":"fixture","proofs":[]}"#).unwrap();
+        assert!(data.payment_request.is_none());
+    }
+
+    #[test]
+    fn legacy_payment_identity_is_preserved_when_loading_history() {
+        let data: SendTransactionData = serde_json::from_str(r#"{"token_string":"fixture","proofs":[],"nfc_request":"legacy-payment"}"#).unwrap();
+        assert_eq!(data.payment_request.as_deref(), Some("legacy-payment"));
+    }
+
+    #[test]
+    fn merchant_request_survives_history_serialization() {
+        let data = SendTransactionData { token_string: "fixture".into(), proofs: vec![], payment_request: Some("merchant-request".into()) };
+        let restored: SendTransactionData = serde_json::from_str(&serde_json::to_string(&data).unwrap()).unwrap();
+        assert_eq!(restored.payment_request.as_deref(), Some("merchant-request"));
+    }
 }

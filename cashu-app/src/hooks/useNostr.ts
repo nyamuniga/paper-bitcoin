@@ -12,7 +12,7 @@ import {
   deriveKeypairFromPrivateKey,
   fetchNpubCashUser,
 } from '../services/nostrService';
-import { NPUB_DOMAIN } from '../constants.local';
+import { NPUB_DOMAIN } from '../constants';
 import { toast } from 'react-hot-toast';
 
 const CLAIM_INTERVAL_MS = 60_000; // Poll every 60 seconds
@@ -44,7 +44,7 @@ function setupClaimLoop(npub: string, relays: string[]) {
   const claimOnce = async () => {
     if (!globalPrivateKey || globalIsClaiming) return;
     globalIsClaiming = true;
-    
+
     let wakeLock: any = null;
     try {
       // Prevent Android from sleeping and dropping the network connection
@@ -60,11 +60,10 @@ function setupClaimLoop(npub: string, relays: string[]) {
       if (claimResult && claimResult.token) {
         // Skip if we just processed this exact token
         if (claimResult.token === lastClaimedToken) {
-          console.log('[useNostr] Skipping duplicate token (already claimed)');
+
           return;
         }
 
-        console.log('[useNostr] Claim succeeded, receiving token...', claimResult.count);
         const toastId = toast.loading(`Claiming ${claimResult.count} token${claimResult.count > 1 ? 's' : ''}...`);
         try {
           await invoke('receive_ecash', { tokenString: claimResult.token, nostrKey: globalPrivateKey });
@@ -98,7 +97,7 @@ function setupClaimLoop(npub: string, relays: string[]) {
   // Fetch immediately when app is foregrounded / unlocked
   globalVisibilityHandler = () => {
     if (document.visibilityState === 'visible') {
-      console.log('[useNostr] App foregrounded, checking for payments...');
+
       claimOnce();
     }
   };
@@ -118,8 +117,8 @@ function setupClaimLoop(npub: string, relays: string[]) {
         }
       ],
       {
-        onevent(event: any) {
-          console.log('Received Nostr event, checking for pending payments...', event);
+        onevent(_event: any) {
+
           // Wait a brief moment to allow the npubx.cash server to finish saving the tokens
           setTimeout(() => claimOnce(), 2000);
         }
@@ -286,12 +285,11 @@ export const useNostr = () => {
       if (claimResult && claimResult.token) {
         // Skip if this exact token was already claimed
         if (claimResult.token === lastClaimedToken) {
-          console.log('[useNostr claimNow] Skipping duplicate token');
+
           await refreshWallet();
           return;
         }
 
-        console.log('[useNostr claimNow] Claim succeeded, receiving token...', claimResult.count);
         await invoke('receive_ecash', { 
           tokenString: claimResult.token,
           nostrKey: globalPrivateKey || undefined,
@@ -312,7 +310,6 @@ export const useNostr = () => {
       setClaiming(false);
     }
   }, [refreshWallet]);
-
 
   // Update preferred mint on npubx.cash
   const updatePreferredMint = useCallback(async (mintUrl: string) => {

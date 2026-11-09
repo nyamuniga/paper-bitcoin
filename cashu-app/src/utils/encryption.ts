@@ -1,5 +1,5 @@
 import CryptoJS from 'crypto-js';
-import { ENCRYPTION_KEY } from '../constants.local';
+import { ENCRYPTION_KEY } from '../constants';
 
 // Get the encryption key from environment variables
 
@@ -27,7 +27,7 @@ export class Encryption {
     const randomBytes = new Uint8Array(32);
     window.crypto.getRandomValues(randomBytes);
 
-    const wordArray = CryptoJS.lib.WordArray.create(Array.from(randomBytes) as unknown as number[]);
+    const wordArray = CryptoJS.lib.WordArray.create(randomBytes);
     return wordArray.toString(CryptoJS.enc.Base64);
   }
 
@@ -36,7 +36,8 @@ export class Encryption {
     const randomBytes = new Uint8Array(16);
     window.crypto.getRandomValues(randomBytes);
 
-    return CryptoJS.lib.WordArray.create(Array.from(randomBytes) as unknown as number[]);
+    // Preserve the byte representation. A number[] is interpreted as 32-bit words.
+    return CryptoJS.lib.WordArray.create(randomBytes);
   }
 
   // Encrypt data with AES

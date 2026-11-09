@@ -6,10 +6,14 @@ import { useTransactionStore } from '../store/transactionStore';
 import { AppPhase } from '../types/momo';
 import { getGlobalNostrPrivateKey } from './useNostr';
 import { Transaction } from '../components/history/TransactionCard';
+import { listEcashInvoices } from '../services/savedEcashInvoices';
+import type { EcashInvoiceSummary } from '../services/savedEcashInvoices';
+import { mergeEcashRequests } from '../services/ecashRequestHistory';
 import { syncAndSweepSpark } from '../services/sparkService';
 
 export const useHistory = () => {
   const [rawTransactions, setRawTransactions] = useState<Transaction[]>([]);
+  const [requests, setRequests] = useState<EcashInvoiceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const momoHistory = useTransactionStore((state) => state.history);
@@ -17,8 +21,13 @@ export const useHistory = () => {
 
   const fetchHistory = async () => {
     try {
-      const txs = await invoke<Transaction[]>('get_transactions');
-      setRawTransactions(txs);
+      const [txs, invoices] = await Promise.allSettled([
+        invoke<Transaction[]>('get_transactions'), listEcashInvoices(),
+      ]);
+      if (txs.status === 'fulfilled') setRawTransactions(txs.value);
+      else toast.error('Failed to load history');
+      if (invoices.status === 'fulfilled') setRequests(invoices.value);
+      else toast.error('Failed to load saved ecash requests');
     } catch (e) {
       toast.error('Failed to load history');
     } finally {
@@ -31,7 +40,7 @@ export const useHistory = () => {
       ? [activeTransaction, ...momoHistory.filter((t) => t.id !== activeTransaction.id)]
       : momoHistory;
 
-    return rawTransactions.map((tx) => {
+    return mergeEcashRequests(rawTransactions, requests).map((tx) => {
       let status = tx.status;
       let momo_direction: string | undefined = undefined;
 
@@ -84,7 +93,7 @@ export const useHistory = () => {
       }
       return { ...tx, status, momo_direction };
     });
-  }, [rawTransactions, momoHistory, activeTransaction]);
+  }, [rawTransactions, requests, momoHistory, activeTransaction]);
 
   const lastUpdate = useWalletStore((s) => s.lastUpdate);
 
@@ -109,7 +118,7 @@ export const useHistory = () => {
       toast.loading('Checking status...', { id: txId });
       await syncAndSweepSpark().catch(() => {});
       const status = await invoke<string>('check_transaction_status', { txId });
-      
+
       if (status === 'Success') {
         toast.success('Transaction was successful.', { id: txId });
       } else if (status === 'Failed') {
@@ -147,7 +156,7 @@ export const useHistory = () => {
     try {
       toast.loading('Generating PDF...', { id: txId });
       const filename = serial ? `note-${amount}-sats-${serial}.pdf` : `note-${amount}-sats.pdf`;
-      
+
       const { save } = await import('@tauri-apps/plugin-dialog');
       const { writeFile } = await import('@tauri-apps/plugin-fs');
       const savePath = await save({
@@ -160,12 +169,12 @@ export const useHistory = () => {
         const pdfBytes = await invoke<number[]>('get_note_pdf', { txId });
         await writeFile(savePath, new Uint8Array(pdfBytes));
         toast.success(`Successfully saved note!`, { id: txId, duration: 5000 });
-        
+
         try {
           const { openPath } = await import('@tauri-apps/plugin-opener');
           await openPath(savePath);
         } catch (e) {
-          console.log("Could not open file natively", e);
+
         }
       } else {
         toast.dismiss(txId);

@@ -12,10 +12,9 @@
 //!   Verify: C == k·Y                    // mint checks this on redemption
 
 use k256::{
-    AffinePoint, EncodedPoint, ProjectivePoint, SecretKey,
-    elliptic_curve::{group::GroupEncoding, sec1::FromEncodedPoint, Field},
+    AffinePoint, Sec1Point, ProjectivePoint, SecretKey,
+    elliptic_curve::{group::GroupEncoding, sec1::FromSec1Point, Generate},
 };
-use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
 
 use crate::error::{Error, Result};
@@ -56,8 +55,8 @@ pub fn hash_to_curve(message: &[u8]) -> ProjectivePoint {
         buf[0] = 0x02; // even-y compressed prefix
         buf[1..].copy_from_slice(&x);
 
-        if let Ok(ep) = EncodedPoint::from_bytes(&buf) {
-            let aff = AffinePoint::from_encoded_point(&ep);
+        if let Ok(ep) = Sec1Point::from_bytes(&buf) {
+            let aff = AffinePoint::from_sec1_point(&ep);
             if bool::from(aff.is_some()) {
                 return ProjectivePoint::from(aff.unwrap());
             }
@@ -76,8 +75,8 @@ pub fn point_to_hex(p: &ProjectivePoint) -> String {
 /// Decode a `ProjectivePoint` from a compressed hex string.
 pub fn point_from_hex(s: &str) -> Result<ProjectivePoint> {
     let bytes = hex::decode(s)?;
-    let ep = EncodedPoint::from_bytes(&bytes).map_err(|_| Error::InvalidPoint)?;
-    let aff = AffinePoint::from_encoded_point(&ep);
+    let ep = Sec1Point::from_bytes(&bytes).map_err(|_| Error::InvalidPoint)?;
+    let aff = AffinePoint::from_sec1_point(&ep);
     if bool::from(aff.is_some()) {
         Ok(ProjectivePoint::from(aff.unwrap()))
     } else {
@@ -96,7 +95,7 @@ impl MintKeypair {
     /// Generate a fresh random keypair.
     pub fn generate() -> Self {
         Self {
-            inner: SecretKey::random(&mut OsRng),
+            inner: SecretKey::generate(),
         }
     }
 
@@ -142,7 +141,7 @@ impl MintKeypair {
         let expected = y * k;
         if let Ok(c) = point_from_hex(&proof.c) {
             if c != expected {
-                tracing::warn!("verify_proof FAILED! Expected: {}, Got: {}", point_to_hex(&expected), proof.c);
+                tracing::warn!("verify_proof failed: signature mismatch");
                 false
             } else {
                 true
@@ -156,7 +155,7 @@ impl MintKeypair {
     pub fn blind_sign_with_dleq(&self, b_prime: &ProjectivePoint) -> (ProjectivePoint, Dleq) {
         let c_prime = self.blind_sign(b_prime);
         
-        let r = <k256::Scalar as Field>::random(&mut OsRng);
+        let r = k256::Scalar::generate();
         let r1 = ProjectivePoint::GENERATOR * r;
         let r2 = *b_prime * r;
         
@@ -182,9 +181,9 @@ pub fn hash_e(
     a: &ProjectivePoint,
     c_prime: &ProjectivePoint,
 ) -> k256::Scalar {
-    use k256::elliptic_curve::sec1::ToEncodedPoint;
+    use k256::elliptic_curve::sec1::ToSec1Point;
     let to_uncompressed_hex = |p: &ProjectivePoint| -> String {
-        let ep = p.to_affine().to_encoded_point(false);
+        let ep = p.to_affine().to_sec1_point(false);
         hex::encode(ep.as_bytes())
     };
 
@@ -196,7 +195,7 @@ pub fn hash_e(
 
     let hash = Sha256::digest(e_str.as_bytes());
     use k256::elliptic_curve::ops::Reduce;
-    <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(&hash)
+    <k256::Scalar as Reduce<k256::FieldBytes>>::reduce(&<[u8; 32]>::from(hash).into())
 }
 
 /// Offline DLEQ verification.
@@ -216,8 +215,8 @@ pub fn verify_dleq(
     use k256::elliptic_curve::ops::Reduce;
     let e_arr: [u8; 32] = e_bytes.try_into().unwrap_or([0u8; 32]);
     let s_arr: [u8; 32] = s_bytes.try_into().unwrap_or([0u8; 32]);
-    let e = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(&e_arr.into());
-    let s = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(&s_arr.into());
+    let e = <k256::Scalar as Reduce<k256::FieldBytes>>::reduce(&e_arr.into());
+    let s = <k256::Scalar as Reduce<k256::FieldBytes>>::reduce(&s_arr.into());
 
     let r1 = (ProjectivePoint::GENERATOR * s) - (*mint_pubkey * e);
     let r2 = (*b_prime * s) - (*c_prime * e);
@@ -258,7 +257,7 @@ impl BlindingSession {
     /// derived independently from the wallet's master seed (preserving Chaumian blindness).
     pub fn with_blinding_factor(secret: &str, r_bytes: &[u8; 32]) -> Self {
         use k256::elliptic_curve::ops::Reduce;
-        let r = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(&(*r_bytes).into());
+        let r = <k256::Scalar as Reduce<k256::FieldBytes>>::reduce(&(*r_bytes).into());
         let y = hash_to_curve(secret.as_bytes());
         let b_prime = y + ProjectivePoint::GENERATOR * r;
         Self {
@@ -377,5 +376,40 @@ mod tests {
         let mut proof = session.unblind(&c_prime, &mint.public_point(), 64, "00aabbcc", None);
         proof.secret = "fake-secret".to_string();
         assert!(!mint.verify_proof(&proof));
+    }
+}
+
+#[cfg(test)]
+mod interoperability_vectors {
+    use super::*;
+
+    // Published protocol fixtures, never funded wallet secrets:
+    // https://github.com/cashubtc/nuts/blob/main/tests/00-tests.md
+    #[test]
+    fn nut00_hash_to_curve_vectors() {
+        for (last, expected) in [
+            (0, "024cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a725"),
+            (1, "022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf"),
+            (2, "026cdbe15362df59cd1dd3c9c11de8aedac2106eca69236ecd9fbe117af897be4f"),
+        ] {
+            let mut message = [0u8; 32]; message[31] = last;
+            assert_eq!(point_to_hex(&hash_to_curve(&message)), expected);
+        }
+    }
+
+    // https://github.com/cashubtc/nuts/blob/main/tests/12-tests.md
+    #[test]
+    fn nut12_challenge_and_external_dleq_verification() {
+        let r = point_from_hex("020000000000000000000000000000000000000000000000000000000000000001").unwrap();
+        let b = point_from_hex("02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2").unwrap();
+        assert_eq!(hex::encode(hash_e(&r, &r, &r, &b).to_bytes()), "a4dc034b74338c28c6bc3ea49731f2a24440fc7c4affc08b31a93fc9fbe6401e");
+        let key = point_from_hex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798").unwrap();
+        let dleq = Dleq {
+            e: "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73d9".into(),
+            s: "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73da".into(),
+        };
+        assert!(verify_dleq(&key, &b, &b, &dleq));
+        let mut tampered = dleq; tampered.s = "00".repeat(32);
+        assert!(!verify_dleq(&key, &b, &b, &tampered));
     }
 }

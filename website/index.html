@@ -1549,7 +1549,7 @@
 
             <!-- Right Actions -->
             <div class="header-actions">
-                <span class="nav-link-version" id="version-text">v0.1.16</span>
+                <span class="nav-link-version" id="version-text">v0.1.17</span>
                 <a href="#download" class="btn-header-cta">
                     <span>Get Wallet</span>
                 </a>
@@ -1607,7 +1607,7 @@
                 <span>Get Wallet</span>
             </a>
             <div class="mobile-menu-version">
-                <span>Release Version </span><span class="version-tag" id="mobile-version-text">v0.1.16</span>
+                <span>Release Version </span><span class="version-tag" id="mobile-version-text">v0.1.17</span>
             </div>
         </div>
     </div>
@@ -1698,7 +1698,7 @@
                 </span>
                 <span class="manifesto-muted">
                     Print and verify tamper-evident notes backed by independent Cashu mints. Transact offline with
-                    instant settlement, or bridge seamlessly across Lightning, on-chain Bitcoin, and Mobile Money.
+                    instant handovers, or use Lightning, on-chain Bitcoin, Mobile Money, and optional Dollar conversions.
                 </span>
             </h2>
 
@@ -1727,8 +1727,8 @@
                         </svg>
                     </div>
                     <h3>Digital Ecash</h3>
-                    <p>Send and receive private Cashu tokens across independent mints with instant settlement and
-                        blind-signature privacy.</p>
+                    <p>Share Cashu tokens or pay a QR invoice. Saved payment requests stay in History so you can
+                        return later and check their status.</p>
                 </div>
 
                 <div class="pillar-col">
@@ -1751,12 +1751,14 @@
                             <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                         </svg>
                     </div>
-                    <h3>Fiat Ramps</h3>
-                    <p>Seamless on and off ramps between traditional currencies, Mobile Money, and Bitcoin
-                        satoshis.</p>
+                    <h3>Bitcoin &amp; Dollars</h3>
+                    <p>Choose how much of your ecash to convert between sats and a Dollar balance. Review the
+                        live rate and fees before you confirm.</p>
                 </div>
             </div>
         </section>
+
+        <p class="container" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1.5rem;">The Dollar balance uses a dollar-linked digital asset, not a bank deposit. Its value depends on maintaining its dollar link. Ecash also depends on the issuing mint.</p>
 
         <!-- Bento Grid Features Section -->
         <section id="features" class="features-section container">
@@ -1970,7 +1972,7 @@
     </footer>
 
     <!-- Config + Dynamic Version Resolution (cache-busted with version tag) -->
-    <script src="config.js?v=0.1.16"></script>
+    <script src="config.js?v=0.1.17"></script>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             if (window.ENV) {
