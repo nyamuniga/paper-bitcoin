@@ -45,6 +45,7 @@ RustSec still emits these upstream informational warnings; none has been silentl
 
 - 62 Rust workspace tests passed with the locked dependency set, including official Cashu interoperability vectors. Local verification disabled debug symbols/incremental caches after exhausting disk space; assertions and test coverage were retained.
 - 100 frontend/payment tests passed.
+- After aligning Tauri dependencies, the signed Android arm64 release APK built successfully. `apksigner verify --verbose` verified its v2 signature; package inspection confirmed `io.cashu.physical`, version `0.1.17` (code `1017`), and `arm64-v8a`. This verifies packaging/signing, not device payment flows. Existing Java/Gradle deprecation warnings remain visible.
 - A credential-free public-source snapshot passed `npm ci`, payment tests and a production build; no ignored `.env` or local constants were copied.
 - Public file hygiene/version checks and the extended history check passed after the maintainer reported rotating the exposed transit key. The same history check had previously failed on the old configured value.
 - npm audit and RustSec report zero known vulnerabilities. The 11 upstream informational warnings above remain documented.
