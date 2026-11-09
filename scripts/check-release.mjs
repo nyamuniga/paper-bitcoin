@@ -28,6 +28,22 @@ for (const id of ['version-text', 'mobile-version-text']) assert(html.includes(`
 assert(read('CHANGELOG.md').includes(`## [${version}]`), 'Release changelog is missing.');
 assert(fs.existsSync(path.join(root, 'Cargo.lock')), 'Rust application lockfile is missing.');
 
+// Tauri's native CLI requires each Rust/JavaScript pair to share major/minor versions.
+const cargoPackages = read('Cargo.lock').split('[[package]]').map(block => ({
+  name: /^name = "([^"]+)"/m.exec(block)?.[1],
+  version: /^version = "([^"]+)"/m.exec(block)?.[1],
+}));
+const tauriPairs = [
+  ['tauri', '@tauri-apps/api'],
+  ...cargoPackages.filter(pkg => pkg.name?.startsWith('tauri-plugin-')).map(pkg => [pkg.name, `@tauri-apps/plugin-${pkg.name.slice('tauri-plugin-'.length)}`]).filter(([, javascript]) => lock.packages[`node_modules/${javascript}`]),
+];
+for (const [rust, javascript] of tauriPairs) {
+  const native = cargoPackages.find(pkg => pkg.name === rust)?.version;
+  const frontend = lock.packages[`node_modules/${javascript}`]?.version;
+  const majorMinor = version => /^(\d+\.\d+)\./.exec(version ?? '')?.[1];
+  assert(native && frontend && majorMinor(native) === majorMinor(frontend), `${rust} ${native ?? 'missing'} and ${javascript} ${frontend ?? 'missing'} must have matching major/minor versions.`);
+}
+
 // Check the proposed public tree, including tracked files that someone forced past .gitignore.
 const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], {cwd: root, encoding: 'utf8'}).split('\0').filter(Boolean);
 const prohibited = /(?:^|\/)(?:credentials|keystores?|notes|new-notes|newnotes|demo-notes|node_modules|dist|target)(?:\/|$)|(?:^|\/)\.env(?:\..*)?$|(?:^|\/)wallet[^/]*\.(?:json|bak)$|\.(?:jks|keystore|pem|key|p12|pfx|mobileprovision|apk|aab|dmg|ipa|log|bak|orig|rej)$|(?:^|\/)(?:key|keystore)\.properties$|\.local(?:\.ts)?$/i;
