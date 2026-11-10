@@ -5,9 +5,11 @@ interface NumberPadProps {
   value: string;
   onChange: (value: string) => void;
   compact?: boolean;
+  disabled?: boolean;
+  allowDecimal?: boolean;
 }
 
-export const NumberPad: React.FC<NumberPadProps> = ({ value, onChange, compact = false }) => {
+export const NumberPad: React.FC<NumberPadProps> = ({ value, onChange, compact = false, disabled = false, allowDecimal = false }) => {
   const handleDigit = (digit: string) => {
     if (digit === '.' && value.includes('.')) return;
     if (value === '0' && digit !== '.') {
@@ -43,6 +45,7 @@ export const NumberPad: React.FC<NumberPadProps> = ({ value, onChange, compact =
         <button
           key={digit}
           type="button"
+          disabled={disabled}
           onClick={() => handleDigit(digit)}
           className={btnClass}
         >
@@ -51,13 +54,16 @@ export const NumberPad: React.FC<NumberPadProps> = ({ value, onChange, compact =
       ))}
       <button
         type="button"
-        onClick={handleClear}
+        disabled={disabled}
+        onClick={allowDecimal ? () => handleDigit('.') : handleClear}
+        aria-label={allowDecimal ? 'Decimal point' : 'Clear amount'}
         className={clearBtnClass}
       >
-        CLR
+        {allowDecimal ? '.' : 'CLR'}
       </button>
       <button
         type="button"
+        disabled={disabled}
         onClick={() => handleDigit('0')}
         className={btnClass}
       >
@@ -65,7 +71,9 @@ export const NumberPad: React.FC<NumberPadProps> = ({ value, onChange, compact =
       </button>
       <button
         type="button"
+        disabled={disabled}
         onClick={handleDelete}
+        aria-label="Delete last digit"
         className={deleteBtnClass}
       >
         <Delete size={compact ? 18 : 22} />

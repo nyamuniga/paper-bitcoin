@@ -1,3 +1,21 @@
+# Release 0.1.18 preparation
+
+Prepared on 2026-11-10. This update synchronizes source and website versions and includes the responsive payment-page changes. No 0.1.18 APK or macOS artifact has been built or uploaded; website download URLs require those assets before they will resolve.
+
+## Checks for 0.1.18
+
+- All 156 payment/service tests passed.
+- All seven bottom-sheet browser regression checks passed.
+- TypeScript and the production frontend build passed. Vite still reports the existing large Spark/WASM chunk advisory.
+- Public-tree version/file checks and the extended history credential check passed (319 public text files).
+- Responsive payment and Scan layouts were checked in Chrome at portrait and landscape viewport sizes with mocked payment data.
+- `cargo test --workspace --locked --offline` did not complete: the shared `target/` directory disappeared during compilation, producing missing fingerprint/object-file errors. Rust/native validation remains incomplete for this update.
+- No APK or macOS release artifact was built or uploaded.
+
+ The earlier 0.1.17 report remains historical evidence and does not establish native-device validation for 0.1.18.
+
+---
+
 # Release 0.1.17 review
 
 Prepared on 2026-11-09. This report describes release preparation, not a published release or independent security audit.

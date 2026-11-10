@@ -27,14 +27,14 @@ export function EcashReceiveInvoice({ mintUrl, onPaid, invoiceId, embedded = fal
   useEffect(() => {
     if (state.invoice && !state.loading) onStatusChange?.(state.paid ? 'paid' : state.retryToken ? 'received' : 'pending');
   }, [state.invoice?.id, state.loading, state.paid, state.retryToken, onStatusChange]);
-  return <section className="flex flex-col gap-4" aria-label="Ecash receive invoice">
+  return <section className={`flex flex-col gap-4 ${!state.invoice ? 'ecash-invoice-entry' : ''}`} aria-label="Ecash receive invoice">
     {state.loading && !state.invoice ? <p role="status" className="text-sm text-on-surface-variant flex items-center gap-2"><Loader2 className="animate-spin" size={18}/>{invoiceId ? 'Loading saved request…' : 'Saving request…'}</p> : !state.invoice && invoiceId ? <button type="button" className={button} onClick={state.checkStatus}>Retry loading request</button> : !state.invoice ? <form className="flex flex-col gap-2.5 sm:gap-3" onSubmit={event => { event.preventDefault(); if (!canCreate) return; void state.create(invoiceAmount, description); setCopied(false); }}>
-      <div role="status" aria-live="polite" aria-label="Requested amount in sats"><AmountDisplay amount={amount} compact /></div>
-      <div role="group" aria-label="Invoice amount keypad"><NumberPad value={amount} onChange={setAmount} compact /></div>
       <label className="flex flex-col gap-1 mt-0.5"><span className="text-[11px] font-label-caps text-on-surface-variant ml-1">Description (optional)</span>
         <input maxLength={160} value={description} onChange={event => setDescription(event.target.value)} className="w-full bg-[#0c1b14] py-2.5 px-3 rounded-xl border border-[#142d20] text-[13px] text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary transition-colors" placeholder="What is the payment for?" />
       </label>
-      <button type="submit" disabled={!canCreate} className={`btn-gradient w-full py-3.5 sm:py-4 rounded-2xl text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${canCreate ? 'cursor-pointer hover:opacity-90 active:scale-[0.98]' : 'opacity-50 cursor-not-allowed'}`}>Create invoice</button>
+      <div role="status" aria-live="polite" aria-label="Requested amount in sats"><AmountDisplay amount={amount} compact /></div>
+      <div role="group" aria-label="Invoice amount keypad"><NumberPad value={amount} onChange={setAmount} compact /></div>
+      <button type="submit" disabled={!canCreate} className={`btn-gradient w-full py-3.5 sm:py-4 rounded-2xl text-on-primary font-headline-lg-mobile font-bold text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center ${canCreate ? 'cursor-pointer hover:opacity-90 active:scale-[0.98]' : 'opacity-50 cursor-not-allowed'}`}>Create invoice</button>
     </form> : <>
       {!embedded && <div className="text-center"><p className="text-3xl font-semibold text-on-surface">{state.invoice.amount.toLocaleString()} <span className="text-base text-on-surface-variant">sats</span></p>{state.description && <p className="text-sm text-on-surface-variant mt-1">{state.description}</p>}</div>}
       {(!state.paid || !embedded) && <div className="self-center bg-white p-3.5 rounded-2xl shadow-xl">

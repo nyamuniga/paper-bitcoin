@@ -21,6 +21,7 @@ import {
   SATS_PER_BTC,
   SPREAD,
   MOMO_WITHDRAWAL_FIXED_FEE,
+  ECASH_LIGHTNING_FEE,
   RWF_USD_PEG,
   POLLING_INTERVAL_MS,
   POLLING_TIMEOUT_MS,
@@ -30,6 +31,8 @@ import { useTransactionStore } from "../store/transactionStore";
 import { useWalletStore } from "../store/wallet";
 import { useAddressBookStore } from "../store/addressBookStore";
 import { withDeadline } from './proxyRequest';
+import { buildMomoReview, assertMomoReviewApproved } from './momoReview';
+import type { MomoReview } from './momoReview';
 import { MOMO_RECOVERY_MESSAGE } from './momoRecovery';
 
 const recoveryChecks = new Set<string>();
@@ -100,11 +103,21 @@ export const fetchProxyBlinkBalance = async (): Promise<number> => {
   }
 };
 
+async function reviewedMomoRate(approved: MomoReview | undefined, direction: 'RWF_TO_SATS' | 'SATS_TO_RWF', amount: number, phone: string, mint: string) {
+  if (!approved) return undefined;
+  const rate = await fetchCurrentRate();
+  const current = buildMomoReview({ direction, amount, phone, mint, rate, spread: SPREAD,
+    fixedFee: MOMO_WITHDRAWAL_FIXED_FEE, networkReserve: ECASH_LIGHTNING_FEE });
+  assertMomoReviewApproved(approved, current);
+  return rate;
+}
+
 export const calculateQuote = async (
   rwfAmount: string,
   momoPhoneNumber: string,
   activeTab: AppTab,
-  mintUrl: string
+  mintUrl: string,
+  approved?: MomoReview
 ) => {
   const store = useTransactionStore.getState();
   if (store.activeTransaction?.status === 'PENDING' && store.activeTransaction.currentPhase !== AppPhase.IDLE) return;
@@ -122,6 +135,11 @@ export const calculateQuote = async (
     return;
   }
 
+  const reviewedRate = approved ? await reviewedMomoRate(approved, 'RWF_TO_SATS', amount, momoPhoneNumber, mintUrl) : undefined;
+  // Claim the foreground transaction synchronously after the asynchronous rate check.
+  if (approved && store.activeTransaction?.status === 'PENDING' && store.activeTransaction.currentPhase !== AppPhase.IDLE) {
+    throw new Error('Another transfer is already in progress.');
+  }
   const txId = crypto.randomUUID();
   store.setActiveTransaction({
     id: txId,
@@ -146,7 +164,7 @@ export const calculateQuote = async (
   });
 
   try {
-    const rwfToSatsRate = await fetchCurrentRate();
+    const rwfToSatsRate = reviewedRate ?? await fetchCurrentRate();
 
     const feeRwf = 0;
     const totalRwfToPay = amount;
@@ -367,7 +385,8 @@ export const calculateSendQuote = async (
   rwfAmount: string,
   momoPhoneNumber: string,
   activeTab: AppTab,
-  mintUrl: string
+  mintUrl: string,
+  approved?: MomoReview
 ) => {
   const store = useTransactionStore.getState();
   if (store.activeTransaction?.status === 'PENDING' && store.activeTransaction.currentPhase !== AppPhase.IDLE) return;
@@ -385,6 +404,11 @@ export const calculateSendQuote = async (
     return;
   }
 
+  const reviewedRate = approved ? await reviewedMomoRate(approved, 'SATS_TO_RWF', amount, momoPhoneNumber, mintUrl) : undefined;
+  // Claim the foreground transaction synchronously after the asynchronous rate check.
+  if (approved && store.activeTransaction?.status === 'PENDING' && store.activeTransaction.currentPhase !== AppPhase.IDLE) {
+    throw new Error('Another transfer is already in progress.');
+  }
   const txId = crypto.randomUUID();
   store.setActiveTransaction({
     id: txId,
@@ -409,7 +433,7 @@ export const calculateSendQuote = async (
   });
 
   try {
-    const rwfToSatsRate = await fetchCurrentRate();
+    const rwfToSatsRate = reviewedRate ?? await fetchCurrentRate();
 
     const feeRwf = 0;
     // Total RWF equivalent in sats to charge user: covers amount + 120 RWF MTN payout fee + 5% spread margin

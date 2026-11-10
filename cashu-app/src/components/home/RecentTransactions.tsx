@@ -171,7 +171,7 @@ export const RecentTransactions: React.FC = () => {
 
       {selectedTx && (
         <TransactionDetailsModal
-          tx={selectedTx}
+          tx={transactions.find(tx => tx.id === selectedTx.id) ?? selectedTx}
           onClose={() => setSelectedTx(null)}
           onRecover={() => handleRecoverPendingTransaction(selectedTx.id)}
           onCheckClaimed={() => handleCheckTokenSpendStatus(selectedTx.id)}
