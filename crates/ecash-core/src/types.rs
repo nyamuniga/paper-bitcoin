@@ -244,6 +244,9 @@ pub struct SendTransactionData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReceiveEcashTransactionData {
     pub token_string: String,
+    /// Saved for a later explicit claim; status recovery must not redeem this token.
+    #[serde(default)]
+    pub claim_deferred: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub invoice_id: Option<String>,
 }
@@ -310,7 +313,8 @@ mod payment_history_tests {
     fn receive_invoice_identity_persists_and_old_receipts_still_load() {
         let old: ReceiveEcashTransactionData = serde_json::from_str(r#"{"token_string":"fixture"}"#).unwrap();
         assert!(old.invoice_id.is_none());
-        let receipt = ReceiveEcashTransactionData { token_string: "fixture".into(), invoice_id: Some("invoice-1".into()) };
+        assert!(!old.claim_deferred);
+        let receipt = ReceiveEcashTransactionData { token_string: "fixture".into(), claim_deferred: false, invoice_id: Some("invoice-1".into()) };
         let restored: ReceiveEcashTransactionData = serde_json::from_str(&serde_json::to_string(&receipt).unwrap()).unwrap();
         assert_eq!(restored.invoice_id.as_deref(), Some("invoice-1"));
     }

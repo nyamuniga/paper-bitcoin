@@ -4,6 +4,10 @@ import { useLocation, useNavigationType } from 'react-router-dom';
 const ROUTE_RANKS: Record<string, number> = {
   '/': 0,
   '/convert': 0.5,
+  '/top-up': 0.5,
+  '/cash-out': 0.5,
+  '/send-bitcoin': 0.5,
+  '/receive-bitcoin': 0.5,
   '/issue': 1,
   '/scan': 2,
   '/mints': 3,
@@ -71,7 +75,7 @@ export const PageTransition: React.FC<PageTransitionProps> = ({ children }) => {
   return (
     <div
       key={location.pathname}
-      className={`w-full flex-1 flex flex-col ${activeClass}`}
+      className={`w-full min-h-0 flex-1 flex flex-col ${activeClass}`}
     >
       {children}
     </div>

@@ -91,6 +91,7 @@ pub fn run() {
             commands::payment_request::ecash_validate_payment,
             commands::send::send_ecash,
             commands::send::receive_ecash,
+            commands::send::save_ecash_for_later,
             commands::receive::receive_lightning,
             commands::receive::batch_mint_external_quotes,
             commands::auth::is_wallet_setup,

@@ -40,8 +40,8 @@ export const Settings = () => {
         subtitle="Keys, connections & preferences"
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start mt-1">
-        <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start mt-0.5">
+        <div className="flex flex-col gap-3">
           <LearnSection
             isExpanded={activeSection === 'learn'}
             onToggle={() => toggleSection('learn')}
@@ -54,16 +54,11 @@ export const Settings = () => {
             isExpanded={activeSection === 'address-book'}
             onToggle={() => toggleSection('address-book')}
           />
-          <RecoveryPhraseSection
-            isExpanded={activeSection === 'recovery'}
-            onToggle={() => toggleSection('recovery')}
-          />
+
           <NWCSection
             isExpanded={activeSection === 'nwc'}
             onToggle={() => toggleSection('nwc')}
           />
-        </div>
-        <div className="flex flex-col gap-6">
           <NostrSection
             isExpanded={activeSection === 'nostr'}
             onToggle={() => toggleSection('nostr')}
@@ -72,12 +67,18 @@ export const Settings = () => {
             isExpanded={activeSection === 'locked-ecash'}
             onToggle={() => toggleSection('locked-ecash')}
           />
+          <RecoveryPhraseSection
+            isExpanded={activeSection === 'recovery'}
+            onToggle={() => toggleSection('recovery')}
+          />
           <WalletManagementSection
             isExpanded={activeSection === 'wallet'}
             onToggle={() => toggleSection('wallet')}
           />
         </div>
+
       </div>
+
 
       {appInfo.name && appInfo.version && (
         <div className="text-center mt-8 pb-4 flex flex-col items-center gap-1.5">

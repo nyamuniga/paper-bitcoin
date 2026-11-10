@@ -1,5 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Phone, PhoneOutgoing, PhoneIncoming, ChevronDown, Check, BookUser } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '../shared/PageHeader';
+import { MomoPaymentForm } from './MomoPaymentForm';
+import { buildMomoReview, MomoReviewChangedError } from '../../services/momoReview';
+import type { MomoReview } from '../../services/momoReview';
+import './MomoPages.css';
 import { AppPhase } from '../../types/momo';
 import { calculateQuote, calculateSendQuote, fetchCurrentRate, fetchProxyBlinkBalance, checkMomoRecovery } from '../../services/flowServices';
 import { MOMO_WITHDRAWAL_FIXED_FEE, ECASH_LIGHTNING_FEE, SPREAD } from '../../constants';
@@ -16,6 +22,7 @@ import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { canSaveMomoTransaction } from '../../services/momoRecovery';
 
 interface MomoTransferModalProps {
+  page?: boolean;
   initialTab?: 'send' | 'receive';
   onClose: () => void;
   mintUrl?: string;
@@ -24,8 +31,10 @@ interface MomoTransferModalProps {
 export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   initialTab = 'receive',
   onClose,
-  mintUrl: initialMintUrl = ''
+  mintUrl: initialMintUrl = '',
+  page = false
 }) => {
+  const navigate = useNavigate();
   const { activeTransaction, history, error, setError, updateTransaction, setActiveTransaction, saveActiveTransaction, resumeTransaction } = useTransactionStore();
   const phase = activeTransaction?.currentPhase || AppPhase.IDLE;
 
@@ -42,6 +51,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({
     onClose,
     disabled: false,
+    modal: !page,
   });
 
   const initialDerivedTab = activeTransaction && !canSaveMomoTransaction(activeTransaction)
@@ -51,6 +61,10 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   const [activeTab, setActiveTab] = useState<'send' | 'receive'>(initialDerivedTab);
   const [amount, setAmount] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [review, setReview] = useState<MomoReview | null>(null);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const confirming = useRef(false);
+
   const [showAddressBook, setShowAddressBook] = useState(false);
   const [stampDismissed, setStampDismissed] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
@@ -64,10 +78,12 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   }, []);
   const startNewTopup = () => {
     if (!saveActiveTransaction()) return;
+    setReview(null);
     setActiveTab('receive');
     setAmount('');
     setPhoneNumber('');
     setStampDismissed(false);
+    if (page) navigate('/top-up', { replace:true, state:{mintUrl} });
   };
   const needsRecovery = phase === AppPhase.RECOVERY_REQUIRED || phase === AppPhase.RETRYABLE_ERROR;
   const handleCheckStatus = async () => {
@@ -205,6 +221,34 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
       ? 'failed'
       : null;
 
+  const reviewTransfer = () => {
+    if (!isFormValid || !currentRate) return;
+    setError(null);
+    try {
+      setReview(buildMomoReview({ direction: activeTab === 'send' ? 'SATS_TO_RWF' : 'RWF_TO_SATS',
+        amount: amountNum, phone: phoneNumber, mint: mintUrl, rate: currentRate,
+        spread: SPREAD, fixedFee: MOMO_WITHDRAWAL_FIXED_FEE, networkReserve: ECASH_LIGHTNING_FEE }));
+    } catch (error) { setError(error instanceof Error ? error.message : 'Could not review transfer.'); }
+  };
+  const confirmReview = async () => {
+    if (!review || confirming.current || phase !== AppPhase.IDLE) return;
+    confirming.current = true;
+    setSubmittingReview(true);
+    setError(null);
+    setStampDismissed(false);
+    try {
+      const submit = review.direction === 'SATS_TO_RWF' ? calculateSendQuote : calculateQuote;
+      await submit(String(review.amount), review.phone, 'ecash', review.mint, review);
+      setReview(null);
+    } catch (error) {
+      if (error instanceof MomoReviewChangedError) {
+        setReview(error.review);
+        setCurrentRate(error.review.rate);
+      }
+      setError(error instanceof Error ? error.message : 'Could not confirm transfer.');
+    } finally { confirming.current = false; setSubmittingReview(false); }
+  };
+
   const handleReceiveFromMomo = async () => {
     setError(null);
     setStampDismissed(false);
@@ -227,6 +271,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   };
 
   const handleClose = () => {
+    if (confirming.current && phase === AppPhase.IDLE) return;
     if (
       phase === AppPhase.READY_TO_CLAIM ||
       phase === AppPhase.PAYOUT_COMPLETE ||
@@ -237,7 +282,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
       setError(null);
       setStampDismissed(false);
     }
-    closeWithAnimation();
+    if (page) onClose(); else closeWithAnimation();
   };
 
   useEffect(() => {
@@ -250,20 +295,19 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleClose]);
 
+  const renderContent = (content: React.ReactNode) => page ? content : createPortal(content, document.body);
   return (
     <>
-      {createPortal(
+      {renderContent(
         <div
-          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
-          style={backdropStyle}
-          onClick={() => {
-            handleClose();
-          }}
+          className={page ? "momo-page" : "fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"}
+          style={page ? undefined : backdropStyle}
+          onClick={page ? undefined : handleClose}
         >
       <div
         onClick={e => e.stopPropagation()}
-        style={sheetStyle}
-        className="w-full max-w-lg bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden relative max-h-[92vh] pb-6 sm:pb-0"
+        style={page ? undefined : sheetStyle}
+        className={page ? "momo-sheet" : "w-full max-w-lg bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden relative max-h-[92vh] pb-6 sm:pb-0"}
       >
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
 
@@ -277,7 +321,11 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
 
-        {phase === AppPhase.IDLE && (
+        {page && <PageHeader title={review ? activeTab === 'send' ? 'Review cashout' : 'Review top-up' : activeTab === 'send' ? 'Cash out' : 'Top up'}
+          subtitle={review ? 'Check your phone number, amount and fees' : activeTab === 'send' ? 'Send RWF to a Mobile Money account' : 'Add funds using Mobile Money'}
+          sticky={false} className="momo-page-header" backDisabled={submittingReview}
+          onBack={() => { if (review) {setReview(null);setError(null);} else handleClose(); }} />}
+        {!page && phase === AppPhase.IDLE && (
           <>
             <div
               {...dragHandleProps}
@@ -330,7 +378,21 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           </>
         )}
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 relative z-10 custom-scrollbar">
+        {page && phase === AppPhase.IDLE ? <MomoPaymentForm
+          cashout={activeTab === 'send'} amount={amount} phone={phoneNumber} mint={mintUrl} balances={mintBalances}
+          onAmount={setAmount} onPhone={setPhoneNumber} onMint={setMintUrl} onAddressBook={() => setShowAddressBook(true)}
+          valid={Boolean(isFormValid && currentRate && mintUrl)} loadingRate={isFetchingRate}
+          validation={phoneError || (amountError === 'INSUFFICIENT_BALANCE' ? 'Insufficient wallet balance for this amount and fees.' : amountError)}
+          review={review} submitting={submittingReview} error={error} maxAmount={maxWithdrawableRwf}
+          rateUnavailable={!currentRate && !isFetchingRate} onRefreshRate={async () => {
+            setIsFetchingRate(true);
+            try { setCurrentRate(await fetchCurrentRate()); setError(null); }
+            catch { setError('Could not load the exchange rate. Try again.'); }
+            finally { setIsFetchingRate(false); }
+          }}
+          onReview={reviewTransfer} onConfirm={confirmReview} saved={savedTransfers}
+          onResume={id => { if (resumeTransaction(id)) { const tx = history.find(t => t.id === id); if (tx) setActiveTab(tx.direction === 'RWF_TO_SATS' ? 'receive' : 'send'); setReview(null); setStampDismissed(false); } }}
+        /> : <div className="momo-progress-body flex-1 overflow-y-auto overflow-x-hidden p-6 relative z-10 custom-scrollbar">
           {error && (
             <div className="p-3 mb-4 rounded-xl bg-error/10 text-error text-body-md text-center">
               {error}
@@ -818,7 +880,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           </div>}
           {isProcessPhase && <button onClick={handleClose} className="w-full mt-5 text-primary py-3 rounded-2xl font-label-lg">Close and keep transfer</button>}
           {isProcessPhase && canSaveMomoTransaction(activeTransaction) && <button onClick={startNewTopup} className="w-full text-primary py-3 rounded-2xl font-label-lg">New top-up</button>}
-        </div>
+        </div>}
       </div>
       <SovereignStampOverlay
         status={stampStatus}
@@ -848,8 +910,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           setError(null);
         } : undefined}
       />
-          </div>,
-          document.body
+          </div>
         )}
 
         <AddressBookPickerModal

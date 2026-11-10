@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUpDown, Bitcoin, Check, ChevronRight, Delete, DollarSign, Loader2 } from 'lucide-react';
+import { ArrowDown, ArrowUpDown, Bitcoin, Check, ChevronRight, DollarSign, Loader2 } from 'lucide-react';
 import { SovereignStampOverlay } from '../shared/SovereignStampOverlay';
+import { NumberPad } from '../shared/NumberPad';
 import { PageHeader } from '../shared/PageHeader';
 import { useWalletStore } from '../../store/wallet';
 import { useCurrencyStore } from '../../store/currencyStore';
@@ -146,11 +147,6 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
     if (value.length > 18 || !/^\d*(?:\.\d*)?$/.test(value) || (toDollars && value.includes('.')) || (value.split('.')[1]?.length ?? 0) > USD_DECIMALS) return;
     setAmount(value.startsWith('.') ? '0' + value : value); setSelectedPercent(null); setError('');
   };
-  const key = (value: string) => {
-    if (value === 'delete') setInput(amount.slice(0, -1));
-    else if (value === '.') { if (!toDollars && !amount.includes('.')) setInput((amount || '0') + '.'); }
-    else setInput(amount === '0' ? value : amount + value);
-  };
   const isReturn = operation?.stage === 'returnQuoted' || operation?.stage === 'returning' || (operation?.stage === 'complete' && !!operation.return_quote_id);
   const isReview = operation?.stage === 'quoted' || operation?.stage === 'returnQuoted';
   const protectedReview = !!operation?.protection_bps && !isReturn;
@@ -176,8 +172,10 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
   });
 
   return (
-    <main className="transfer-screen flex-grow w-full max-w-[480px] md:max-w-[600px] mx-auto px-container-padding md:px-10 pt-6 pb-6">
+    <main className={`transfer-screen ${!operation ? 'is-entry' : ''} flex-grow w-full max-w-[480px] md:max-w-[600px] mx-auto px-container-padding md:px-10`}>
       <PageHeader
+        sticky={false}
+        className="transfer-page-header"
         title={operation?.stage === 'refunded' ? 'Transfer returned' : done ? 'Transfer complete' : isReview ? 'Review transfer' : operation ? 'Your transfer' : 'Transfer funds'}
         subtitle={done ? 'Return to your wallet to see your balance' : isReview ? 'Check your amount and fees' : operation ? 'View the progress of your transfer' : 'Move between Bitcoin and dollars'}
         onBack={isReview ? edit : onClose}
@@ -204,7 +202,7 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
                 {[25, 50, 75, 100].map(percent => <button key={percent} disabled={busy || sourceBalance === null || sourceBalance === 0n || (suggestedMinimum !== null && sourceBalance !== null && percentageAmount(sourceBalance, percent) < suggestedMinimum)} aria-pressed={selectedPercent === percent} onClick={() => {setAmount(formatUnits(percentageAmount(sourceBalance!, percent), sourceDecimals)); setSelectedPercent(percent); setError('');}}>{percent}%</button>)}
               </div>
               <div className="transfer-keypad" aria-label="Amount keypad">
-                {['1','2','3','4','5','6','7','8','9','.','0','delete'].map(value => <button key={value} type="button" disabled={busy || (value === '.' && toDollars)} onClick={() => key(value)} aria-label={value === 'delete' ? 'Delete last digit' : value === '.' ? 'Decimal point' : value}>{value === 'delete' ? <Delete size={23}/> : value}</button>)}
+                <NumberPad value={amount} onChange={setInput} compact disabled={busy} allowDecimal={!toDollars} />
               </div>
               {sourceBalance === null && <button className="transfer-text-button" disabled={busy} onClick={onChange}>Refresh balance</button>}
               {!usdRate && <button className="transfer-text-button" disabled={busy} onClick={() => void fetchRates()}>Refresh exchange rate</button>}

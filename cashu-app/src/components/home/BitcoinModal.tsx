@@ -1,4 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { MintBalancePicker } from '../shared/MintBalancePicker';
+import { PageHeader } from '../shared/PageHeader';
+import './BitcoinPages.css';
 import { X, Copy, Check, Loader2, Zap, Bitcoin, ArrowUp, ArrowDown, QrCode, ChevronDown, BookUser } from 'lucide-react';
 import { OnchainSendEstimate, OnchainLimits, getOnchainSendLimits } from '../../services/sparkService';
 import { useAddressBookStore } from '../../store/addressBookStore';
@@ -29,6 +33,7 @@ import { openMempoolTx, openMempoolAddress } from '../../utils/mempool';
 import { SlidingSegmentedControl } from '../shared/SlidingSegmentedControl';
 
 interface BitcoinModalProps {
+  page?: boolean;
   mintUrl: string;
   initialTab?: 'send' | 'receive';
   initialInvoice?: string;
@@ -40,8 +45,17 @@ type Tab = 'send' | 'receive';
 type SendStep = 'input' | 'amount' | 'confirm';
 type ReceiveMode = 'lightning' | 'onchain';
 
-export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialInvoice = '', initialAmountSats, onClose }) => {
-  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
+export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialInvoice = '', initialAmountSats, onClose, page = false }) => {
+  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose, modal: !page });
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!page) {
+      navigate(initialTab === 'send' ? '/send-bitcoin' : '/receive-bitcoin', {
+        state: { mintUrl: initialMintUrl, invoice: initialInvoice, amountSats: initialAmountSats },
+      });
+      onClose();
+    }
+  }, [page, initialTab, initialMintUrl, initialInvoice, initialAmountSats, navigate, onClose]);
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [mintUrl, setMintUrl] = useState(initialMintUrl);
   const [showMintDropdown, setShowMintDropdown] = useState(false);
@@ -355,18 +369,42 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
     }
   };
 
+  const confirmAction = (
+                      <button
+                        onClick={handleConfirmOnchain}
+                        disabled={paying}
+                        className="bitcoin-primary w-full bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary py-4 rounded-2xl font-bold text-[16px] tracking-wide transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] shadow-lg cursor-pointer"
+                      >
+                        {paying ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>Sending On-Chain...</span>
+                          </>
+                        ) : (
+                          <span>Confirm & Send</span>
+                        )}
+                      </button>
+  );
+
+  const receiveEntry = activeTab === 'receive' && !receiveSuccess && !receiveInvoice && !boardingAddress;
+  const amountEntry = activeTab === 'send' && sendStep === 'amount';
+  const back = () => {
+    if (activeTab === 'send' && sendStep !== 'input') setSendStep(sendStep === 'confirm' ? 'amount' : 'input');
+    else onClose();
+  };
+  const renderContent = (content: React.ReactNode) => page ? content : createPortal(content, document.body);
   return (
     <>
-      {createPortal(
+      {renderContent(
         <div
-          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
-          style={backdropStyle}
-          onClick={closeWithAnimation}
+          className={page ? `bitcoin-page ${receiveEntry ? "bitcoin-receive-entry" : amountEntry ? "bitcoin-send-amount" : activeTab === 'send' && sendStep === 'input' ? "bitcoin-send-input" : ""}` : "fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"}
+          style={page ? undefined : backdropStyle}
+          onClick={page ? undefined : closeWithAnimation}
         >
       <div
         onClick={e => e.stopPropagation()}
-        style={sheetStyle}
-        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl w-full max-w-lg border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[92vh] pb-6 sm:pb-4"
+        style={page ? undefined : sheetStyle}
+        className={page ? "bitcoin-sheet" : "bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl w-full max-w-lg border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[92vh] pb-6 sm:pb-4"}
       >
         <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
 
@@ -379,7 +417,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
         </div>
 
         {/* Header */}
-        <div
+        {page ? <PageHeader title={activeTab === 'send' ? sendStep === 'confirm' ? 'Review Bitcoin send' : 'Send Bitcoin' : 'Receive Bitcoin'} subtitle={activeTab === 'send' ? sendStep === 'confirm' ? 'Check the destination, amount and fees' : 'Pay a Lightning invoice or Bitcoin address' : 'Create a Lightning invoice or Bitcoin deposit'} sticky={false} onBack={back} backDisabled={paying || requesting || isFetchingLnurl} className="bitcoin-page-header" /> : <div
           {...dragHandleProps}
           className="flex justify-between items-center px-5 sm:px-6 py-3 sm:py-4 border-b border-outline-variant/10 relative z-10 cursor-grab active:cursor-grabbing"
         >
@@ -392,10 +430,10 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
           >
             <X size={18} />
           </button>
-        </div>
+        </div>}
 
         {/* Tabs */}
-        {sendStep === 'input' && (
+        {!page && sendStep === 'input' && (
           <div className="relative flex border-b border-outline-variant/10 z-10 bg-surface-container-high/40 select-none">
             <button
               onClick={() => switchTab('send')}
@@ -429,7 +467,10 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
         )}
 
         {/* Content */}
-        <div className="p-4 sm:p-6 flex flex-col gap-3.5 sm:gap-4 relative z-10 overflow-y-auto overflow-x-hidden flex-1">
+        <div className="bitcoin-body p-4 sm:p-6 flex flex-col gap-3.5 sm:gap-4 relative z-10 overflow-y-auto overflow-x-hidden flex-1">
+          {page ? ((activeTab === 'send' && sendStep !== 'confirm') || receiveEntry) && <div className="bitcoin-mint-row flex items-stretch gap-2">
+            <div className="flex-1 min-w-0"><MintBalancePicker mintUrl={mintUrl} balances={mintBalances} onSelect={setMintUrl} disabled={paying || requesting || isFetchingLnurl || Boolean(receiveInvoice || boardingAddress) || (activeTab === 'send' && sendStep === 'confirm')} /></div>
+          </div> : <>
           {/* Mint info */}
           <div className="flex flex-col gap-1.5 sm:gap-2">
             <p className="text-body-md font-body-md text-on-surface-variant">
@@ -487,17 +528,18 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
               )}
             </div>
           </div>
+          </>}
 
           <div
             key={activeTab}
-            className={`flex flex-col gap-4 ${activeTab === 'receive' ? 'animate-tab-from-right' : 'animate-tab-from-left'
+            className={`bitcoin-flow flex flex-col gap-4 ${activeTab === 'receive' ? 'animate-tab-from-right' : 'animate-tab-from-left'
               }`}
           >
             {activeTab === 'send' ? (
               /* ─── SEND TAB ──────────────────────────────── */
-              <div className="flex flex-col gap-4">
+              <div className="bitcoin-send-form flex flex-col gap-4">
                 {sendStep === 'input' && (
-                  <div className="relative flex flex-col gap-2">
+                  <div className="bitcoin-destination-form relative flex flex-col gap-2">
                     {showScanner ? (
                       <div className="relative rounded-xl overflow-hidden border border-outline-variant/30 aspect-square">
                         <Scanner
@@ -512,7 +554,23 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         <button onClick={() => setShowScanner(false)} className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-highest px-4 py-2 rounded-full text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface">Cancel Scanner</button>
                       </div>
                     ) : (
-                      <div className="flex flex-col gap-1.5">
+                      <div className="bitcoin-payment-input flex flex-col gap-1.5">
+                        {page && <button
+                          type="button"
+                          aria-label="Scan Bitcoin payment"
+                          onClick={() => setShowScanner(true)}
+                          disabled={paying}
+                          className="bitcoin-scan-button rounded-lg border-2 border-dashed border-outline-variant/50 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-3 group relative bg-surface-container-lowest/50 text-primary cursor-pointer disabled:opacity-40"
+                        >
+                          <div className="relative w-16 h-16 flex items-center justify-center shrink-0">
+                            <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-primary rounded-tl-sm" />
+                            <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-primary rounded-tr-sm" />
+                            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-primary rounded-bl-sm" />
+                            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-primary rounded-br-sm" />
+                            <QrCode className="w-10 h-10 text-primary opacity-80 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                          <span className="text-label-caps font-label-caps">Tap to Scan QR Code</span>
+                        </button>}
                         <p className="text-body-md font-body-md text-on-surface-variant">Pay to:</p>
                         <div className={`relative glow-effect transition-all duration-300 rounded-xl bg-[#0c1b14] border overflow-hidden ${
                           isInsufficient || lnurlValidation.status === 'invalid'
@@ -573,6 +631,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                                 onClick={() => setShowScanner(true)}
                                 className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
                                 title="Scan QR Code"
+                                hidden={page}
                               >
                                 <QrCode size={15} />
                               </button>
@@ -614,11 +673,11 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       <LnurlValidationStatus input={parsedInput.addressOrInvoice} validation={lnurlValidation} />
                     )}
 
-                    {parsedInput.type === 'lightning' ? (
+                    {!showScanner && (parsedInput.type === 'lightning' ? (
                       <button
                         onClick={handlePayLightning}
                         disabled={paying || !destinationInput || isInsufficient}
-                        className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${paying || !destinationInput || isInsufficient ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                        className={`bitcoin-primary mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${paying || !destinationInput || isInsufficient ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                           }`}
                       >
                         {paying ? <Loader2 className="animate-spin w-6 h-6" /> : <><Zap className="w-5 h-5 mr-2" /> Pay Invoice</>}
@@ -627,7 +686,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       <button
                         onClick={handleNextFromInput}
                         disabled={(!isLnurlInput && parsedInput.type !== 'onchain') || isLnurlBlocked || isFetchingLnurl}
-                        className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${((!isLnurlInput && parsedInput.type !== 'onchain') || isLnurlBlocked || isFetchingLnurl) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                        className={`bitcoin-primary mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${((!isLnurlInput && parsedInput.type !== 'onchain') || isLnurlBlocked || isFetchingLnurl) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                           }`}
                       >
                         {isFetchingLnurl || (isLnurlInput && lnurlValidation.status === 'checking') ? (
@@ -638,7 +697,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                           'Next'
                         )}
                       </button>
-                    )}
+                    ))}
                   </div>
                 )}
 
@@ -653,15 +712,15 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   const canProceed = typedAmount > 0 && !isBelowMin && !isAboveMax && !isAboveBalance;
 
                   return (
-                    <div className="flex flex-col gap-4 animate-fade-in">
-                      <div className="flex items-center justify-between mb-1">
+                    <div className="bitcoin-send-amount-form flex flex-col gap-4 animate-fade-in">
+                      <div className="bitcoin-step-caption flex items-center justify-between mb-1">
                         <button onClick={() => setSendStep('input')} className="text-on-surface-variant hover:text-on-surface text-sm font-bold cursor-pointer">← Back</button>
                         <p className="text-label-caps font-label-caps text-on-surface-variant">
                           {isOnchain ? 'SEND ON-CHAIN' : 'SEND AMOUNT'}
                         </p>
                       </div>
 
-                      <div className="flex flex-col gap-2 items-center">
+                      <div className="bitcoin-amount-display flex flex-col gap-2 items-center">
                         <AmountDisplay amount={lnurlSendAmount} compact />
 
                         {/* On-Chain Limits and Real-Time Feedback */}
@@ -691,16 +750,17 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                         )}
                       </div>
 
-                      <NumberPad
+                      <div className="bitcoin-keypad" role="group" aria-label="Send amount keypad"><NumberPad
                         value={lnurlSendAmount}
+                        disabled={requesting || isFetchingLnurl || paying}
                         onChange={setLnurlSendAmount}
                         compact
-                      />
+                      /></div>
 
                       <button
                         onClick={handleNextFromAmount}
                         disabled={!canProceed || requesting || isFetchingLnurl}
-                        className={`mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${(!canProceed || requesting || isFetchingLnurl) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                        className={`bitcoin-primary mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${(!canProceed || requesting || isFetchingLnurl) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
                           }`}
                       >
                         {isFetchingLnurl || requesting ? (
@@ -726,55 +786,30 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                 })()}
 
                 {sendStep === 'confirm' && onchainEstimate && (
-                  <div className="flex-1 overflow-y-auto flex flex-col pt-4 animate-fade-in">
-                    <div className="flex items-center justify-between mb-6">
-                      <button onClick={() => setSendStep('amount')} className="text-on-surface-variant hover:text-on-surface text-sm font-bold">← Back</button>
-                      <p className="text-label-caps font-label-caps text-on-surface-variant">CONFIRM SEND</p>
+                  <section className="bitcoin-review" aria-label="Review on-chain Bitcoin payment">
+                    {!page && <button type="button" onClick={() => setSendStep('amount')} className="text-primary text-sm self-start">Back to amount</button>}
+                    <div className="bitcoin-review-amount">
+                      <p className="text-sm text-on-surface-variant">Sending</p>
+                      <p className="bitcoin-review-value text-primary">₿{onchainEstimate.amount.toLocaleString()}</p>
                     </div>
-                    <div className="flex-1 flex flex-col justify-start items-center px-4 mx-auto w-full">
-                      <div className="text-center mb-8 w-full">
-                        <div className="text-on-surface-variant text-[14px] mb-2 font-medium">Sending to</div>
-                        <div className="text-on-surface text-[14px] break-all w-full mx-auto font-mono bg-surface-container-high p-3 rounded-lg border border-outline-variant/30">
-                          {parsedInput.addressOrInvoice}
-                        </div>
+                    <dl className="bitcoin-review-details">
+                      <div className="bitcoin-review-row">
+                        <dt>From</dt>
+                        <dd className="flex items-center gap-2 min-w-0">
+                          <MintIcon mintUrl={mintUrl} className="w-6 h-6 shrink-0 rounded-full" textClassName="text-primary text-[10px]" />
+                          <MintName mintUrl={mintUrl} className="truncate text-on-surface" />
+                        </dd>
                       </div>
-
-                      <div className="w-full bg-surface-container rounded-[24px] p-6 mb-8 flex flex-col gap-4 border border-outline-variant/20">
-                        <div className="flex justify-between items-center">
-                          <span className="text-on-surface-variant font-medium text-[15px]">Target Amount</span>
-                          <span className="text-on-surface font-bold text-[15px]">{onchainEstimate.amount.toLocaleString()} sats</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-on-surface-variant font-medium text-[15px]">Fee</span>
-                          <span className="text-on-surface font-bold text-[15px]">{onchainEstimate.ark_fee.toLocaleString()} sats</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-on-surface-variant font-medium text-[15px]">Lightning Routing</span>
-                          <span className="text-on-surface font-bold text-[15px]">{onchainEstimate.cashu_fee.toLocaleString()} sats</span>
-                        </div>
-                        <div className="h-[1px] bg-outline-variant/50 w-full my-1"></div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-on-surface-variant font-medium text-[16px]">Total Deducted</span>
-                          <span className="text-on-surface font-bold text-[18px]">{(onchainEstimate.total_cost).toLocaleString()} sats</span>
-                        </div>
+                      <div className="bitcoin-review-destination">
+                        <dt>To</dt>
+                        <dd className="text-on-surface font-mono">{parsedInput.addressOrInvoice}</dd>
                       </div>
-
-                      <button
-                        onClick={handleConfirmOnchain}
-                        disabled={paying}
-                        className="w-full bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary py-4 rounded-2xl font-bold text-[16px] tracking-wide transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] shadow-lg cursor-pointer"
-                      >
-                        {paying ? (
-                          <>
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            <span>Sending On-Chain...</span>
-                          </>
-                        ) : (
-                          <span>Confirm & Send</span>
-                        )}
-                      </button>
-                    </div>
-                  </div>
+                      <div className="bitcoin-review-row"><dt>Network &amp; bridge fee</dt><dd>{onchainEstimate.ark_fee.toLocaleString()} sats</dd></div>
+                      <div className="bitcoin-review-row"><dt>Lightning &amp; mint fee</dt><dd>{onchainEstimate.cashu_fee.toLocaleString()} sats</dd></div>
+                      <div className="bitcoin-review-row bitcoin-review-total"><dt>Total deducted</dt><dd>{onchainEstimate.total_cost.toLocaleString()} sats</dd></div>
+                    </dl>
+                    {!page && confirmAction}
+                  </section>
                 )}
               </div>
             ) : (
@@ -798,11 +833,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
               ) : receiveInvoice ? (
                 /* Show invoice QR */
                 <div className="flex flex-col items-center gap-5">
-                  <div className="text-center">
-                    <p className="text-label-caps font-label-caps text-on-surface-variant mb-1">AMOUNT</p>
-                    <p className="text-[28px] font-display-lg text-primary">₿{parsedReceiveAmount.toLocaleString()}</p>
-                  </div>
-
                   <div className="relative">
                     <div className="bg-white p-4 rounded-xl shadow-lg">
                       <QRCode value={receiveInvoice} size={200} />
@@ -810,6 +840,10 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <div className="absolute inset-0 bg-primary/20 rounded-xl blur-xl -z-10 animate-pulse"></div>
                   </div>
 
+                  <div className="w-full flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2 min-w-0"><MintIcon mintUrl={mintUrl} className="w-6 h-6 shrink-0 rounded-full" textClassName="text-primary text-[10px]" /><MintName mintUrl={mintUrl} className="text-sm text-on-surface truncate" /></div>
+                    <p className="text-xl text-primary shrink-0">₿{parsedReceiveAmount.toLocaleString()}</p>
+                  </div>
                   <div className="w-full flex flex-col gap-2">
                     <div
                       onClick={() => handleCopy(receiveInvoice)}
@@ -841,22 +875,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
               ) : boardingAddress ? (
                 /* Show ASP Boarding QR */
                 <div className="flex flex-col items-center gap-5">
-                  <div className="text-center">
-                    <p className="text-[20px] font-display-sm text-primary">Bitcoin On-Chain Deposit</p>
-                    {depositSats && (
-                      <div className="flex flex-col items-center gap-0.5 mt-1">
-                        <p className="text-[13px] font-mono text-on-surface-variant">
-                          Send: <strong className="text-on-surface">{depositSats.toLocaleString()} sats</strong> ({(depositSats / 100_000_000).toFixed(8)} BTC)
-                        </p>
-                        {receiveFeeEstimateSats !== null && receiveFeeEstimateSats > 0 && (
-                          <p className="text-[11px] font-mono text-emerald-400/90">
-                            You receive: ~<strong>{parsedReceiveAmount.toLocaleString()} sats</strong> (incl. ~{receiveFeeEstimateSats.toLocaleString()} sats claim &amp; bridge fee)
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
                   <div className="relative">
                     <div className="bg-white p-4 rounded-xl shadow-lg">
                       <QRCode
@@ -869,6 +887,18 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       />
                     </div>
                   </div>
+
+                  <div className="w-full flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2 min-w-0"><MintIcon mintUrl={mintUrl} className="w-6 h-6 shrink-0 rounded-full" textClassName="text-primary text-[10px]" /><MintName mintUrl={mintUrl} className="text-sm text-on-surface truncate" /></div>
+                    <p className="text-sm text-on-surface-variant shrink-0">Receive ₿{parsedReceiveAmount.toLocaleString()}</p>
+                  </div>
+
+                  <dl className="w-full text-sm text-on-surface-variant">
+                    <div className="flex items-center justify-between gap-4">
+                      <dt>Fees</dt>
+                      <dd>{receiveFeeEstimateSats === null ? '—' : `≈ ₿${receiveFeeEstimateSats.toLocaleString()}`}</dd>
+                    </div>
+                  </dl>
 
                   {(() => {
                     const bip21Uri = depositSats
@@ -939,9 +969,9 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col gap-3.5 sm:gap-4">
+                <div className="bitcoin-receive-form flex flex-col gap-3.5 sm:gap-4">
                   {/* Mode Toggle */}
-                  <SlidingSegmentedControl<ReceiveMode>
+                  <div className="bitcoin-receive-mode"><SlidingSegmentedControl<ReceiveMode>
                     value={receiveMode}
                     onChange={(mode) => {
                       setReceiveMode(mode);
@@ -951,14 +981,15 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                       { id: 'lightning', label: 'Lightning', icon: <Zap size={15} /> },
                       { id: 'onchain', label: 'On-Chain', icon: <Bitcoin size={20} /> },
                     ]}
-                  />
+                  /></div>
 
-                  <div className="flex flex-col gap-2.5 sm:gap-3">
-                    <div key={receiveMode} className="flex flex-col gap-2.5 sm:gap-3 animate-fade-in">
-                      <AmountDisplay amount={receiveAmount} compact />
+                  <div className="bitcoin-receive-fields flex flex-col gap-2.5 sm:gap-3">
+                    <div key={receiveMode} className="bitcoin-receive-inputs flex flex-col gap-2.5 sm:gap-3 animate-fade-in">
+                      <div className="bitcoin-amount-display"><AmountDisplay amount={receiveAmount} compact /></div>
 
-                      <NumberPad
+                      <div className="bitcoin-keypad" role="group" aria-label="Receive amount keypad"><NumberPad
                         value={receiveAmount}
+                        disabled={requesting}
                         onChange={(val) => {
                           setReceiveAmount(val);
                           setReceiveInvoice(null);
@@ -968,13 +999,13 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                           setReceiveFeeEstimateSats(null);
                         }}
                         compact
-                      />
+                      /></div>
 
                       {/* On-Chain Receive Limits & Real-Time Feedback */}
                       {receiveMode === 'onchain' && (
                         (parsedReceiveAmount > 0 && parsedReceiveAmount < minReceiveOnchain) || parsedReceiveAmount > maxReceiveOnchain
                       ) && (
-                        <div className="flex flex-col items-center gap-1.5 w-full">
+                        <div className="bitcoin-receive-limits flex flex-col items-center gap-1.5 w-full">
                           {parsedReceiveAmount > 0 && parsedReceiveAmount < minReceiveOnchain && (
                             <div className="text-[12px] font-medium text-amber-400 bg-amber-500/15 px-3 py-1.5 rounded-lg border border-amber-500/30 text-center animate-fade-in shadow-sm">
                               ⚠️ Minimum on-chain deposit is {minReceiveOnchain.toLocaleString()} sats ({(minReceiveOnchain - parsedReceiveAmount).toLocaleString()} more needed)
@@ -992,7 +1023,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                     <button
                       onClick={handleRequestInvoice}
                       disabled={isReceiveDisabled}
-                      className={`bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] w-full py-3.5 sm:py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center mt-1 cursor-pointer ${
+                      className={`bitcoin-primary bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] w-full py-3.5 sm:py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center mt-1 cursor-pointer ${
                         isReceiveDisabled
                           ? 'opacity-50 cursor-not-allowed'
                           : 'hover:opacity-90 active:scale-[0.98]'
@@ -1018,6 +1049,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
             )}
           </div>
         </div>
+        {page && activeTab === 'send' && sendStep === 'confirm' && onchainEstimate && <div className="bitcoin-actions">{confirmAction}</div>}
         {isFetchingLnurl && (
           <FullScreenLoader title="Generating Invoice..." message="Resolving address and fetching Lightning invoice..." />
         )}
@@ -1045,8 +1077,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
           onRetry={lastPayAction}
         />
           </div>
-        </div>,
-        document.body
+        </div>
       )}
 
       <AddressBookPickerModal

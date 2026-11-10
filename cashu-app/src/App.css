@@ -560,18 +560,18 @@ section,
   }
   100% {
     opacity: 1;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    background-color: rgba(6, 17, 12, 0.55);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    background-color: rgba(6, 17, 12, 0.2);
   }
 }
 
 @keyframes mint-backdrop-fade-out {
   0% {
     opacity: 1;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    background-color: rgba(6, 17, 12, 0.55);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    background-color: rgba(6, 17, 12, 0.2);
   }
   100% {
     opacity: 0;

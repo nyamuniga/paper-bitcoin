@@ -81,7 +81,7 @@ export default function History() {
 
       {selectedTx && (
         <TransactionDetailsModal
-          tx={selectedTx}
+          tx={transactions.find(tx => tx.id === selectedTx.id) ?? selectedTx}
           onClose={() => {setSelectedTx(null);void fetchHistory();}}
           onRecover={() => handleRecoverPendingTransaction(selectedTx.id)}
           onCheckClaimed={() => handleCheckTokenSpendStatus(selectedTx.id)}

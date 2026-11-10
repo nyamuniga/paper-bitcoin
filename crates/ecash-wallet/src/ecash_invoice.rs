@@ -146,6 +146,7 @@ mod tests {
             tx_type: TransactionType::ReceiveEcash(
                 ecash_core::types::ReceiveEcashTransactionData {
                     token_string: "cashuBfixture".into(),
+                    claim_deferred: false,
                     invoice_id: Some(invoice.id.clone()),
                 },
             ),

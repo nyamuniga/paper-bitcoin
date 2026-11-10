@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useLayoutEffect, useMemo } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { useNavigate } from 'react-router-dom';
 import { X, Loader2, Copy, Check, Coins, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { toast } from 'react-hot-toast';
@@ -14,15 +16,19 @@ import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
 import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
-import { extractMintFromToken } from '../../utils/format';
+import { parseReceivedTokenPreview } from '../../services/receivedTokenPreview';
+import { ReceivedTokenPreview } from './ReceivedTokenPreview';
 import { readClipboardText, writeClipboardText } from '../../utils/clipboard';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { SlidingSegmentedControl } from '../shared/SlidingSegmentedControl';
-import { EcashRequestPayment } from './EcashRequestPayment';
 import { EcashReceiveInvoice } from './EcashReceiveInvoice';
+import { EcashRequestPayment } from './EcashRequestPayment';
+import './SendEcashPage.css';
+import { PageHeader } from '../shared/PageHeader';
 import { isCashuRequest } from '../../services/cashuRequests';
 
 interface EcashModalProps {
+  page?: boolean;
   mintUrl: string;
   initialTab?: 'send' | 'receive';
   initialToken?: string;
@@ -32,11 +38,52 @@ interface EcashModalProps {
 
 type Tab = 'send' | 'receive';
 
-export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialToken, initialRequest, onClose }) => {
-  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
+export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialToken, initialRequest, onClose, page = false }) => {
+  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose, modal: !page });
+  const navigate = useNavigate();
+  React.useEffect(() => {
+    if (!page) {
+      navigate(initialTab === 'send' ? '/send-ecash' : '/receive-ecash', { state: { mintUrl: initialMintUrl, ecashRequest: initialRequest, ecashToken: initialToken } });
+      onClose();
+    }
+  }, [page, initialTab, initialMintUrl, initialRequest, initialToken, navigate, onClose]);
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [mintUrl, setMintUrl] = useState(initialMintUrl);
   const [showMintDropdown, setShowMintDropdown] = useState(false);
+  const mintButtonRef = useRef<HTMLButtonElement>(null);
+  const [mintMenuStyle, setMintMenuStyle] = useState<React.CSSProperties>({visibility:'hidden'});
+  useLayoutEffect(() => {
+    if (!page || !showMintDropdown) return;
+    const position = () => {
+      const anchor = mintButtonRef.current?.getBoundingClientRect();
+      if (!anchor) return;
+      const viewport = window.visualViewport;
+      const top = (viewport?.offsetTop ?? 0) + 8;
+      const bottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight) - 8;
+      const below = bottom - anchor.bottom - 8;
+      const above = anchor.top - top - 8;
+      const openAbove = above > below;
+      const height = Math.max(0, Math.min(250, openAbove ? above : below));
+      setMintMenuStyle({position:'fixed', left:anchor.left, right:'auto', width:anchor.width,
+        top:openAbove ? 'auto' : anchor.bottom + 8,
+        bottom:openAbove ? window.innerHeight - anchor.top + 8 : 'auto',
+        maxHeight:height, margin:0, zIndex:111});
+    };
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setShowMintDropdown(false); mintButtonRef.current?.focus(); }
+    };
+    position();
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+    window.visualViewport?.addEventListener('resize', position);
+    document.addEventListener('keydown', dismiss);
+    return () => {
+      window.removeEventListener('resize', position);
+      window.removeEventListener('scroll', position, true);
+      window.visualViewport?.removeEventListener('resize', position);
+      document.removeEventListener('keydown', dismiss);
+    };
+  }, [page, showMintDropdown]);
   const [isClosingMintDropdown, setIsClosingMintDropdown] = useState(false);
 
   const closeMintDropdown = () => {
@@ -66,10 +113,15 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
 
   // Receive state
   const [receiveToken, setReceiveToken] = useState(initialToken || '');
+  const receivePreview = useMemo(() => {
+    try { return parseReceivedTokenPreview(receiveToken); } catch { return null; }
+  }, [receiveToken]);
+  const [savingToken, setSavingToken] = useState(false);
+  const refreshWallet = useWalletStore(s => s.refreshWallet);
+
   const [showScanner, setShowScanner] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState<number | null>(null);
   const [requestBusy, setRequestBusy] = useState(false);
-  const [receiveMode, setReceiveMode] = useState<'token' | 'invoice'>('token');
   const [scannedRequest, setScannedRequest] = useState(initialRequest);
 
   // Overlay state
@@ -88,7 +140,8 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
 
   const handleTokenInput = (text: string) => {
     setReceiveToken(text);
-    const extractedMint = extractMintFromToken(text.trim());
+    let extractedMint: string | null = null;
+    try { extractedMint = parseReceivedTokenPreview(text).mint; } catch { /* Incomplete input remains editable. */ }
     if (extractedMint) {
       const normalizedExtracted = extractedMint.replace(/\/$/, '');
       const matchedMint = mintUrls.find(m => m.replace(/\/$/, '') === normalizedExtracted) || extractedMint;
@@ -183,8 +236,8 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   };
 
   const handleReceive = async () => {
-    let trimmed = receiveToken.trim();
-    if (!trimmed) return;
+    if (!receivePreview || savingToken) return;
+    let trimmed = receivePreview.token;
     if (trimmed.toLowerCase().startsWith('cashu://')) {
       trimmed = trimmed.substring(8).trim();
     } else if (trimmed.toLowerCase().startsWith('cashu:')) {
@@ -223,6 +276,18 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
     }
   };
 
+  const handleClaimLater = async () => {
+    if (!receivePreview || receiving || savingToken) return;
+    setSavingToken(true);
+    try {
+      await invoke('save_ecash_for_later', { tokenString: receivePreview.token });
+      await refreshWallet();
+      toast.success('Token saved in History. Claim it whenever you’re ready.');
+      navigate('/');
+    } catch { toast.error('Could not save the token. Please try again.'); }
+    finally { setSavingToken(false); }
+  };
+
   const resetSend = () => {
     setAmount('');
     setToken(null);
@@ -247,177 +312,11 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
     else resetReceive();
   };
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
-      style={backdropStyle}
-      onClick={closeWithAnimation}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={sheetStyle}
-        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl w-full max-w-lg border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[92vh] pb-6 sm:pb-4"
-      >
-        <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
-
-        {/* Drag Handle */}
-        <div
-          {...dragHandleProps}
-          className="w-full flex justify-center pt-2.5 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
-        >
-          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
-        </div>
-
-        {/* Header */}
-        <div
-          {...dragHandleProps}
-          className="flex justify-between items-center px-5 sm:px-6 py-3 sm:py-4 border-b border-outline-variant/10 relative z-10 cursor-grab active:cursor-grabbing"
-        >
-          <h2 className="text-headline-sm font-headline-sm text-on-surface flex items-center gap-2">
-            <Coins className="text-primary w-5 h-5" /> eCash
-          </h2>
-          <button
-            onClick={closeWithAnimation}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="relative flex border-b border-outline-variant/10 z-10 bg-surface-container-high/40 select-none">
-          <button
-            onClick={() => switchTab('send')}
-            className={`flex-1 py-2.5 sm:py-3 text-[13px] sm:text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
-              activeTab === 'send'
-                ? 'text-primary'
-                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
-            }`}
-          >
-            <ArrowUp size={16} className={`transition-transform duration-200 ${activeTab === 'send' ? 'scale-110 text-primary' : ''}`} /> 
-            <span>SEND</span>
-          </button>
-          <button
-            onClick={() => switchTab('receive')}
-            className={`flex-1 py-2.5 sm:py-3 text-[13px] sm:text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
-              activeTab === 'receive'
-                ? 'text-primary'
-                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
-            }`}
-          >
-            <ArrowDown size={16} className={`transition-transform duration-200 ${activeTab === 'receive' ? 'scale-110 text-primary' : ''}`} /> 
-            <span>RECEIVE</span>
-          </button>
-
-          {/* Gliding active indicator */}
-          <div
-            className="absolute bottom-0 left-0 h-[2.5px] bg-primary shadow-[0_0_12px_rgba(242,169,59,0.7)] rounded-t-full transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] w-1/2 pointer-events-none"
-            style={{
-              transform: `translate3d(${activeTab === 'send' ? '0%' : '100%'}, 0, 0)`
-            }}
-          />
-        </div>
-
-        {/* Content */}
-        <div className="p-4 sm:p-6 flex flex-col gap-3.5 sm:gap-4 relative z-10 overflow-y-auto overflow-x-hidden flex-1">
-          {/* Mint info */}
-          {!(activeTab === 'send' && requestBusy) && <div className="flex flex-col gap-1.5 sm:gap-2">
-            <p className="text-body-md font-body-md text-on-surface-variant">
-              {activeTab === 'send'
-                ? (token ? 'Ecash token created from:' : 'Send ecash token from:')
-                : (receivedAmount !== null ? 'Ecash received to:' : 'Receive ecash token to:')}
-            </p>
-            <div className="relative">
-              {showMintDropdown && (
-                <div className="fixed inset-0 z-40" onClick={closeMintDropdown}></div>
-              )}
-              <button
-                onClick={toggleMintDropdown}
-                className="w-full flex items-center justify-between bg-surface-container-highest p-2.5 sm:p-3 rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-colors relative z-50 cursor-pointer"
-              >
-                <div className="flex items-center gap-2 min-w-0 pr-4">
-                  <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
-                  <MintName mintUrl={mintUrl} className="text-body-md font-body-md text-on-surface font-medium truncate" />
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap">
-                  <span className="text-body-md font-body-md font-semibold text-on-surface">₿{availableBalance.toLocaleString()}</span>
-                  <ChevronDown 
-                    size={16} 
-                    className={`flex-shrink-0 transition-transform duration-300 ease-out ${
-                      showMintDropdown && !isClosingMintDropdown ? 'rotate-180 text-primary' : 'text-on-surface-variant'
-                    }`} 
-                  />
-                </div>
-              </button>
-
-              {showMintDropdown && (
-                <div className={`absolute top-full left-0 right-0 mt-2 bg-surface-container-highest rounded-2xl shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] border border-outline-variant/20 overflow-hidden flex flex-col z-50 max-h-[250px] overflow-y-auto ${
-                  isClosingMintDropdown ? 'animate-dropdown-collapse' : 'animate-dropdown-expand'
-                }`}>
-                  {mintUrls.map((m, index) => (
-                    <button
-                      key={m}
-                      style={{ animationDelay: `${index * 30}ms` }}
-                      onClick={() => { setMintUrl(m); closeMintDropdown(); }}
-                      className="flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left w-full border-b border-outline-variant/10 last:border-b-0 animate-dropdown-item cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 pr-2">
-                        <MintIcon mintUrl={m} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
-                        <MintName mintUrl={m} className="text-body-sm font-body-sm text-on-surface truncate" />
-                        {mintUrl === m && <Check size={14} className="text-primary flex-shrink-0" />}
-                      </div>
-                      <span className="text-body-sm font-body-sm font-bold text-on-surface flex-shrink-0">₿{(mintBalances![m] || 0).toLocaleString()}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>}
-
-          <div
-            key={activeTab}
-            className={`flex flex-col gap-4 ${
-              activeTab === 'receive' ? 'animate-tab-from-right' : 'animate-tab-from-left'
-            }`}
-          >
-            {activeTab === 'receive' && receivedAmount === null && <SlidingSegmentedControl
-              options={[{ id: 'token', label: 'Receive' }, { id: 'invoice', label: 'Request' }]}
-              value={receiveMode}
-              onChange={value => { setShowScanner(false); setReceiveMode(value as 'token' | 'invoice'); }}
-              buttonClassName="py-2.5 text-sm"
-            />}
-            {activeTab === 'send' && <EcashRequestPayment
-              key={activeTab}
-              mintUrl={mintUrl}
-              paused={sending || receiving || showScanner || paymentStatus !== null}
-              onBusy={setRequestBusy}
-              onStartRequest={resetSend}
-              initialRequest={activeTab === 'send' ? scannedRequest : undefined}
-              onPrepared={(payment, netAmount) => {
-                setMintUrl(payment.mint_url);
-                setAmount(String(netAmount));
-                setPaymentAmount(netAmount);
-                setToken(payment.token);
-                setTokenV4(payment.token);
-                setTokenV3(payment.token_v3 || null);
-                setFormatVersion('v4');
-                setHasCelebratedClaim(false);
-                trackOutgoing(payment.tx_id);
-              }}
-            />}
-            {activeTab === 'send' ? (
-            /* ─── SEND TAB ────────────────────────────────────────────── */
-            <div className="flex flex-col gap-3 sm:gap-4">
-              {/* Amount input */}
-              <div className="flex flex-col gap-2.5 sm:gap-3">
-                {!token && !requestBusy && (
-                  <>
-                    <AmountDisplay amount={amount} compact />
-                    <NumberPad value={amount} onChange={(val) => { setAmount(val); setToken(null); }} compact />
-
-                    <div className="flex flex-col gap-1 mt-0.5">
-                      <label className="text-[11px] font-label-caps text-on-surface-variant ml-1">Lock to Pubkey (Optional)</label>
+  const pubkeyField = (
+                    <div className="ecash-pubkey-field flex flex-col gap-1">
+                      <label htmlFor="ecash-lock-pubkey" className="text-[11px] font-label-caps text-on-surface-variant ml-1">Lock to Pubkey (Optional)</label>
                       <input
+                        id="ecash-lock-pubkey"
                         type="text"
                         value={pubkey}
                         onChange={(e) => {
@@ -442,13 +341,220 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                         className="w-full bg-[#0c1b14] py-2.5 px-3 rounded-xl border border-[#142d20] text-[13px] text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary transition-colors"
                       />
                     </div>
+  );
+
+  const receiveAction = (
+                  <button
+                    onClick={handleReceive}
+                    disabled={receiving || !receiveToken.trim() || showScanner}
+                    className={`btn-gradient w-full py-3.5 sm:py-4 rounded-2xl text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${receiving || !receiveToken.trim() || showScanner ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
+                      }`}
+                  >
+                    {receiving ? <Loader2 className="animate-spin w-6 h-6" /> : 'Receive Ecash'}
+                  </button>
+  );
+
+  const mintOptions = (
+                <div id="ecash-mint-options" style={page ? mintMenuStyle : undefined} className={`ecash-mint-options absolute top-full left-0 right-0 mt-2 bg-surface-container-highest rounded-2xl shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] border border-outline-variant/20 overflow-hidden flex flex-col z-50 max-h-[250px] overflow-y-auto ${
+                  page ? '' : isClosingMintDropdown ? 'animate-dropdown-collapse' : 'animate-dropdown-expand'
+                }`}>
+                  {mintUrls.map((m, index) => (
+                    <button
+                      key={m}
+                      style={{ animationDelay: `${index * 30}ms` }}
+                      onClick={() => { setMintUrl(m); closeMintDropdown(); }}
+                      className="shrink-0 flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left w-full border-b border-outline-variant/10 last:border-b-0 animate-dropdown-item cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 pr-2">
+                        <MintIcon mintUrl={m} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
+                        <MintName mintUrl={m} className="text-body-sm font-body-sm text-on-surface truncate" />
+                        {mintUrl === m && <Check size={14} className="text-primary flex-shrink-0" />}
+                      </div>
+                      <span className="text-body-sm font-body-sm font-bold text-on-surface flex-shrink-0">₿{(mintBalances![m] || 0).toLocaleString()}</span>
+                    </button>
+                  ))}
+                </div>
+  );
+
+  const content = (
+    <div
+      className={page ? `ecash-send-page ${activeTab === 'receive' ? 'ecash-receive-page' : !token && !requestBusy ? "is-entry" : ""}` : "fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"}
+      style={page ? undefined : backdropStyle}
+      onClick={page ? undefined : closeWithAnimation}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={page ? undefined : sheetStyle}
+        className={`${page ? "ecash-sheet w-full" : "ecash-sheet bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl w-full max-w-lg border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[92vh] pb-6 sm:pb-4"}`}
+      >
+        <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
+
+        {/* Drag Handle */}
+        <div
+          {...dragHandleProps}
+          className="w-full flex justify-center pt-2.5 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
+        >
+          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
+        </div>
+
+        {/* Header */}
+        {page ? <PageHeader title={activeTab === 'receive' ? 'Receive ecash' : 'Send ecash'} subtitle={activeTab === 'receive' ? 'Request ecash or scan a token' : 'Create an ecash token to share'} onBack={onClose} sticky={false} className="ecash-page-header" /> : <div
+          {...dragHandleProps}
+          className="flex justify-between items-center px-5 sm:px-6 py-3 sm:py-4 border-b border-outline-variant/10 relative z-10 cursor-grab active:cursor-grabbing"
+        >
+          <h2 className="text-headline-sm font-headline-sm text-on-surface flex items-center gap-2">
+            <Coins className="text-primary w-5 h-5" /> {page ? "Send ecash" : "eCash"}
+          </h2>
+          <button
+            onClick={page ? onClose : closeWithAnimation}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>}
+
+        {/* Tabs */}
+        <div className={`${page ? "hidden" : "relative flex"} border-b border-outline-variant/10 z-10 bg-surface-container-high/40 select-none`}>
+          <button
+            onClick={() => { onClose(); navigate('/send-ecash', { state: { mintUrl } }); }}
+            className={`flex-1 py-2.5 sm:py-3 text-[13px] sm:text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
+              activeTab === 'send'
+                ? 'text-primary'
+                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
+            }`}
+          >
+            <ArrowUp size={16} className={`transition-transform duration-200 ${activeTab === 'send' ? 'scale-110 text-primary' : ''}`} />
+            <span>SEND</span>
+          </button>
+          <button
+            onClick={() => switchTab('receive')}
+            className={`flex-1 py-2.5 sm:py-3 text-[13px] sm:text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
+              activeTab === 'receive'
+                ? 'text-primary'
+                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
+            }`}
+          >
+            <ArrowDown size={16} className={`transition-transform duration-200 ${activeTab === 'receive' ? 'scale-110 text-primary' : ''}`} />
+            <span>RECEIVE</span>
+          </button>
+
+          {/* Gliding active indicator */}
+          <div
+            className="absolute bottom-0 left-0 h-[2.5px] bg-primary shadow-[0_0_12px_rgba(242,169,59,0.7)] rounded-t-full transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] w-1/2 pointer-events-none"
+            style={{
+              transform: `translate3d(${activeTab === 'send' ? '0%' : '100%'}, 0, 0)`
+            }}
+          />
+        </div>
+
+        {/* Content */}
+        <div className={page ? 'ecash-page-content' : 'contents'}>
+        <div className="ecash-body p-4 sm:p-6 flex flex-col gap-3.5 sm:gap-4 relative z-10 overflow-y-auto overflow-x-hidden flex-1">
+          {/* Mint info */}
+          {!(activeTab === 'send' && (requestBusy || token)) && !(activeTab === 'receive' && receivePreview && !showScanner) && <div className="flex flex-col gap-1.5 sm:gap-2">
+
+            <div className="flex items-stretch gap-2">
+            <div className="relative flex-1 min-w-0">
+              {showMintDropdown && !page && (
+                <div className="fixed inset-0 z-40" onClick={closeMintDropdown}></div>
+              )}
+              <button
+                ref={mintButtonRef}
+                onClick={toggleMintDropdown}
+                aria-expanded={showMintDropdown}
+                aria-controls="ecash-mint-options"
+                className="w-full flex items-center justify-between bg-surface-container-highest p-2.5 sm:p-3 rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-colors relative z-50 cursor-pointer"
+              >
+                <div className="flex items-center gap-2 min-w-0 pr-4">
+                  <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
+                  <MintName mintUrl={mintUrl} className="text-body-md font-body-md text-on-surface font-medium truncate" />
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap">
+                  <span className="text-body-md font-body-md font-semibold text-on-surface">₿{availableBalance.toLocaleString()}</span>
+                  <ChevronDown
+                    size={16}
+                    className={`flex-shrink-0 transition-transform duration-300 ease-out ${
+                      showMintDropdown && !isClosingMintDropdown ? 'rotate-180 text-primary' : 'text-on-surface-variant'
+                    }`}
+                  />
+                </div>
+              </button>
+
+              {showMintDropdown && (
+                page ? createPortal(<>
+                  <div className="fixed inset-0 z-[110]" onClick={closeMintDropdown} />
+                  {mintOptions}
+                </>, document.body) : mintOptions
+              )}
+            </div>
+            {activeTab === 'receive' && receivedAmount === null && <button
+              type="button"
+              onClick={() => { urDecoder.reset(); setShowScanner(true); }}
+              disabled={receiving || showScanner}
+              aria-label="Scan ecash token"
+              title="Scan ecash token"
+              className="w-12 min-h-11 shrink-0 rounded-xl bg-surface-container-highest hover:bg-surface-bright text-primary border border-outline-variant/20 flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-default"
+            >
+              <QrCode size={20} />
+            </button>}
+            </div>
+          </div>}
+          {page && activeTab === 'send' && !token && !requestBusy && pubkeyField}
+
+          <div
+            key={activeTab}
+            className={`ecash-flow flex flex-col gap-4 ${
+              activeTab === 'receive' ? 'animate-tab-from-right' : 'animate-tab-from-left'
+            }`}
+          >
+            {activeTab === 'receive' && receivedAmount === null && <div className="ecash-request-panel" hidden={showScanner || Boolean(receiveToken.trim())}>
+              <EcashReceiveInvoice mintUrl={mintUrl} onPaid={amount => {
+                setReceivedAmount(amount);
+                setPaymentAmount(amount);
+                setPaymentTitle('eCash Received');
+                setPaymentSubtitle('Invoice paid and ecash redeemed to your wallet.');
+                setPaymentBadgeLabel('Received');
+                setPaymentStatus('success');
+              }} />
+            </div>}
+            {activeTab === 'send' && <EcashRequestPayment
+              key={activeTab}
+              mintUrl={mintUrl}
+              paused={sending || receiving || showScanner || paymentStatus !== null}
+              onBusy={setRequestBusy}
+              onStartRequest={resetSend}
+              initialRequest={activeTab === 'send' ? scannedRequest : undefined}
+              onPrepared={(payment, netAmount) => {
+                setMintUrl(payment.mint_url);
+                setAmount(String(netAmount));
+                setPaymentAmount(netAmount);
+                setToken(payment.token);
+                setTokenV4(payment.token);
+                setTokenV3(payment.token_v3 || null);
+                setFormatVersion('v4');
+                setHasCelebratedClaim(false);
+                trackOutgoing(payment.tx_id);
+              }}
+            />}
+            {activeTab === 'send' ? (
+            /* ─── SEND TAB ────────────────────────────────────────────── */
+            <div className="ecash-send-entry flex flex-col gap-3 sm:gap-4">
+              {/* Amount input */}
+              <div className="flex flex-col gap-2.5 sm:gap-3">
+                {!token && !requestBusy && (
+                  <>
+                    {!page && <AmountDisplay amount={amount} compact />}
+                    {!page && <NumberPad value={amount} onChange={(val) => { setAmount(val); setToken(null); }} compact />}
+
+
+                    {!page && pubkeyField}
                   </>
                 )}
-                {isInsufficient && !token && (
+                {isInsufficient && !token && !page && (
                   <p className="text-error text-[12px] font-label-caps text-center">Insufficient balance</p>
                 )}
 
-                {!token && !requestBusy && (
+                {!page && !token && !requestBusy && (
                   <button
                     onClick={handleSend}
                     disabled={sending || requestBusy || !isValid}
@@ -462,11 +568,6 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
 
               {token && (
                 <div className="flex flex-col items-center gap-5 pt-2">
-                  <div className="text-center">
-                    <p className="text-label-caps font-label-caps text-on-surface-variant mb-1">AMOUNT SENT</p>
-                    <p className="text-[28px] font-display-lg text-primary">₿{parsedAmount.toLocaleString()}</p>
-                  </div>
-
                   {/* Format Selector */}
                   <SlidingSegmentedControl<'v3' | 'v4'>
                     options={[
@@ -494,7 +595,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                       </div>
                     ) : (
                       <>
-                        <div 
+                        <div
                           onClick={handleCopy}
                           className="bg-white p-4 rounded-xl shadow-lg relative min-w-[232px] min-h-[232px] flex items-center justify-center cursor-pointer hover:shadow-[0_0_25px_rgba(255,184,116,0.35)] transition-all active:scale-[0.98]"
                           title="Click to copy token"
@@ -515,6 +616,14 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                         <div className="absolute inset-0 bg-primary/20 rounded-xl blur-xl -z-10 animate-pulse"></div>
                       </>
                     )}
+                  </div>
+
+                  <div className="w-full flex items-center justify-between gap-4" aria-label="Token mint and amount">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <MintIcon mintUrl={mintUrl} className="w-6 h-6 rounded-full shrink-0" textClassName="text-primary text-[10px]" />
+                      <MintName mintUrl={mintUrl} className="text-sm text-on-surface truncate" />
+                    </div>
+                    <p className="text-xl font-display-lg text-primary shrink-0">₿{parsedAmount.toLocaleString()}</p>
                   </div>
 
                   <div className="w-full flex flex-col gap-2">
@@ -546,22 +655,15 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                   <p className="text-[28px] font-display-lg text-emerald-400">₿{receivedAmount.toLocaleString()}</p>
                 </div>
                 <button
-                  onClick={closeWithAnimation}
+                  onClick={page ? onClose : closeWithAnimation}
                   className="w-full py-3.5 sm:py-4 rounded-2xl bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20 cursor-pointer"
                 >
                   Done
                 </button>
               </div>
-            ) : receiveMode === 'invoice' ? (
-              <EcashReceiveInvoice mintUrl={mintUrl} onPaid={amount => {
-                setReceivedAmount(amount);
-                setPaymentAmount(amount);
-                setPaymentTitle('eCash Received');
-                setPaymentSubtitle('Invoice paid and ecash redeemed to your wallet.');
-                setPaymentBadgeLabel('Received');
-                setPaymentStatus('success');
-              }} />
-            ) : (
+            ) : receivePreview && !showScanner ? (
+              <ReceivedTokenPreview key={receivePreview.token} preview={receivePreview} />
+            ) : showScanner || receiveToken.trim() ? (
               <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-4">
                   {showScanner ? (
@@ -641,33 +743,37 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                           )}
                         </div>
 
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setShowScanner(true)}
-                            className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
-                            title="Scan QR Code"
-                          >
-                            <QrCode size={15} />
-                          </button>
-                        </div>
+
                       </div>
                     </div>
                   )}
 
-                  <button
-                    onClick={handleReceive}
-                    disabled={receiving || !receiveToken.trim() || showScanner}
-                    className={`btn-gradient w-full py-3.5 sm:py-4 rounded-2xl text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${receiving || !receiveToken.trim() || showScanner ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
-                      }`}
-                  >
-                    {receiving ? <Loader2 className="animate-spin w-6 h-6" /> : 'Receive Ecash'}
-                  </button>
+                  {!page && receiveAction}
                 </div>
               </div>
-            )
+            ) : null
           )}
           </div>
+        </div>
+        {page && activeTab === 'receive' && receivedAmount === null && !showScanner && <div className="ecash-receive-actions">
+          {receivePreview ? <div className="flex flex-col gap-2">
+            <button type="button" onClick={handleReceive} disabled={receiving || savingToken} className="ecash-create disabled:opacity-40">{receiving ? 'Claiming…' : 'Claim now'}</button>
+            <button type="button" onClick={handleClaimLater} disabled={receiving || savingToken} className="w-full min-h-11 rounded-2xl border border-outline-variant/30 text-primary cursor-pointer disabled:opacity-40">{savingToken ? 'Saving…' : 'Claim later'}</button>
+          </div> : receiveToken.trim() ? <p role="alert" className="text-error text-sm">Invalid or unsupported ecash token. Clear it and scan another token.</p> : <button type="button" onClick={async () => {
+            try { const text = await readClipboardText(); if (text) handleTokenInput(text.trim()); }
+            catch { toast.error('Could not read clipboard'); }
+          }} className="w-full text-sm text-primary cursor-pointer">Paste token</button>}
+        </div>}
+        {page && activeTab === 'send' && !token && !requestBusy && <div className="ecash-page-amount">
+          <AmountDisplay amount={amount} compact />
+          {isInsufficient && <p role="alert" className="text-error text-xs text-center">Insufficient balance</p>}
+        </div>}
+        {page && activeTab === 'send' && !token && !requestBusy && <div className="ecash-controls">
+          <div className="ecash-number-pad" role="group" aria-label="Amount keypad">
+            <NumberPad value={amount} onChange={setAmount} compact />
+          </div>
+          <button type="button" onClick={handleSend} disabled={sending || !isValid} className="ecash-create">{sending ? <Loader2 className="animate-spin" /> : 'Create Token'}</button>
+        </div>}
         </div>
       </div>
       {sending && (
@@ -696,7 +802,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
         }}
         onRetry={lastAction}
       />
-    </div>,
-    document.body
+    </div>
   );
+  return page ? content : createPortal(content, document.body);
 };

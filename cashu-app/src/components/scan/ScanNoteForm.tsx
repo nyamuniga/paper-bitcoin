@@ -32,11 +32,10 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
   const isLnurlBlocked = isLnurlInput && lnurlValidation.status !== 'valid';
 
   return (
-    <div className="w-full max-w-2xl bg-surface-container-high rounded-xl relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] p-card-gap flex flex-col gap-8 border border-outline-variant/30">
-      <div className="noise-overlay"></div>
-      <div className="relative z-10 flex flex-col gap-8 w-full">
+    <div className="scan-note-form">
+      <div className="scan-form-content">
         {showScanner ? (
-          <div className="rounded-xl overflow-hidden border-2 border-primary">
+          <div className="scan-camera rounded-xl overflow-hidden border-2 border-primary">
             <Scanner
               formats={['qr_code']}
               onScan={(result) => {
@@ -73,30 +72,27 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
           </div>
         ) : (
           <button
+            type="button"
+            aria-label="Scan QR code"
             onClick={() => setShowScanner(true)}
-            className="w-full aspect-[21/9] sm:aspect-[21/7] rounded-lg border-2 border-dashed border-outline-variant/50 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-4 group relative bg-surface-container-lowest/50"
+            className="scan-launch rounded-lg border-2 border-dashed border-outline-variant/50 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-3 group relative bg-surface-container-lowest/50 text-primary cursor-pointer"
           >
-            <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></div>
             <div className="relative w-16 h-16 flex items-center justify-center">
-              <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-primary rounded-tl-sm shadow-[0_0_10px_rgba(255,184,116,0.3)]"></div>
-              <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-primary rounded-tr-sm shadow-[0_0_10px_rgba(255,184,116,0.3)]"></div>
-              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-primary rounded-bl-sm shadow-[0_0_10px_rgba(255,184,116,0.3)]"></div>
-              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-primary rounded-br-sm shadow-[0_0_10px_rgba(255,184,116,0.3)]"></div>
+              <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-primary rounded-tl-sm"></div>
+              <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-primary rounded-tr-sm"></div>
+              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-primary rounded-bl-sm"></div>
+              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-primary rounded-br-sm"></div>
               <QrCode className="w-10 h-10 text-primary opacity-80 group-hover:opacity-100 transition-opacity" />
             </div>
             <span className="text-label-caps font-label-caps text-primary relative z-10">Tap to Scan QR Code</span>
           </button>
         )}
 
-        <div className="flex items-center gap-4 w-full px-4">
-          <div className="flex-grow h-px bg-outline-variant/30"></div>
-          <span className="text-label-caps font-label-caps text-on-surface-variant opacity-60">OR PASTE</span>
-          <div className="flex-grow h-px bg-outline-variant/30"></div>
-        </div>
-
-        <div className="flex flex-col gap-4">
+        <div className="scan-paste-fields flex flex-col gap-2">
+          <label htmlFor="scan-data" className="text-body-md font-body-md text-on-surface-variant">Or paste:</label>
           <div className="relative bg-[#0c1b14] rounded-xl px-3.5 pt-3 pb-2.5 border border-[#142d20] focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/40 transition-all flex flex-col gap-2">
             <textarea
+              id="scan-data"
               value={binB64}
               onChange={(e) => setBinB64(e.target.value)}
               className="w-full bg-transparent text-on-surface border-none p-0 min-h-[50px] resize-none focus:outline-none text-body-md font-body-md placeholder:text-on-surface-variant/40"
@@ -156,6 +152,8 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
             />
           </div>
 
+          <p className="scan-security-note">All processing happens locally on your device. Private keys are never transmitted.</p>
+
           {isLnurlInput && (
             <LnurlValidationStatus input={parsed.addressOrInvoice} validation={lnurlValidation} />
           )}
@@ -171,22 +169,23 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
             </div>
           )}
 
-          {error && <div className="text-error text-sm text-center">{error}</div>}
+          {error && <div role="alert" className="text-error text-sm text-center">{error}</div>}
 
-          <button
-            onClick={() => onDecode(binB64)}
-            disabled={loading || !binB64 || isLnurlBlocked}
-            className="w-full bg-gradient-to-r from-[#d4a055] to-[#f7931a] hover:from-[#e8b566] hover:to-[#ffa633] text-on-primary font-headline-lg-mobile text-body-md rounded-2xl py-4 transition-all transform active:scale-[0.98] shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-          >
-            {loading || (isLnurlInput && lnurlValidation.status === 'checking') ? (
-              <Loader2 className="animate-spin w-5 h-5" />
-            ) : isLnurlInput && lnurlValidation.status === 'invalid' ? (
-              <span className="font-bold tracking-wide">Invalid Address</span>
-            ) : (
-              <span className="font-bold tracking-wide">Process</span>
-            )}
-          </button>
         </div>
+
+        <button
+          onClick={() => onDecode(binB64)}
+          disabled={loading || !binB64 || isLnurlBlocked}
+          className="scan-primary w-full flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+        >
+          {loading || (isLnurlInput && lnurlValidation.status === 'checking') ? (
+            <Loader2 className="animate-spin w-5 h-5" />
+          ) : isLnurlInput && lnurlValidation.status === 'invalid' ? (
+            <span className="font-bold tracking-wide">Invalid Address</span>
+          ) : (
+            <span className="font-bold tracking-wide">Process</span>
+          )}
+        </button>
       </div>
 
       <AddressBookPickerModal

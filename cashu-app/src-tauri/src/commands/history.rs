@@ -252,6 +252,18 @@ pub async fn check_token_spend_status(
     let mut spent_tokens = 0;
 
     match &tx.tx_type {
+        ecash_core::types::TransactionType::ReceiveEcash(data) => {
+            let (mint, proofs, _) = ecash_wallet::decode_token_string(&data.token_string)?;
+            let ys: Vec<String> = proofs.iter().map(|proof| ecash_core::dhke::point_to_hex(
+                &ecash_core::dhke::hash_to_curve(proof.secret.as_bytes()))).collect();
+            let client = ecash_wallet::client::MintClient::new(&mint);
+            let states = client.check_state(&ys).await?;
+            if ys.iter().any(|y| !states.contains_key(y)) {
+                return Err(CommandError("The mint returned an incomplete token status".into()));
+            }
+            total_tokens = ys.len();
+            spent_tokens = ys.iter().filter(|y| states.get(*y).is_some_and(|status| status == "SPENT")).count();
+        }
         ecash_core::types::TransactionType::Send(data) => {
             // Send transactions are digital tokens with 1 mint.
             let mint_url = &tx.mint_url;
