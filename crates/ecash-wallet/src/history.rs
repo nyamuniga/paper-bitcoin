@@ -209,6 +209,7 @@ pub async fn check_transaction_network(
             }
         },
         TransactionType::ReceiveEcash(recv_data) => {
+            if recv_data.claim_deferred { return Ok(TransactionDiff::NoChange); }
             let (mint_url, input_proofs, _) = crate::token::decode_token_string(&recv_data.token_string)
                 .map_err(|e| anyhow!("Failed to decode token: {}", e))?;
             

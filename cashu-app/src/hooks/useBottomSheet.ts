@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 
 interface UseBottomSheetOptions {
+  modal?: boolean;
   onClose: () => void;
   dismissThreshold?: number;
   disabled?: boolean;
@@ -24,23 +26,29 @@ export function registerBottomSheetClose() {
   }
 }
 
-export function useBottomSheet({ onClose, dismissThreshold = 60, disabled = false }: UseBottomSheetOptions) {
+export function useBottomSheet({ onClose, dismissThreshold = 60, disabled = false, modal = true }: UseBottomSheetOptions) {
   const [isOpen, setIsOpen] = useState(false);
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
 
-  const startYRef = useRef(0);
+  const startYRef = useRef<number | null>(null);
+  const closingRef = useRef(false);
+  const closeCleanupRef = useRef<(() => void) | null>(null);
+  const mouseCleanupRef = useRef<(() => void) | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const currentYRef = useRef(0);
   const startTimeRef = useRef(0);
 
   // Lock background scroll and register active sheet
   useEffect(() => {
+    if (!modal || isClosing) return;
     registerBottomSheetOpen();
     return () => {
       registerBottomSheetClose();
     };
-  }, []);
+  }, [modal, isClosing]);
 
   // Trigger smooth entrance on mount
   useEffect(() => {
@@ -50,40 +58,65 @@ export function useBottomSheet({ onClose, dismissThreshold = 60, disabled = fals
     return () => cancelAnimationFrame(frame);
   }, []);
 
+  useEffect(() => () => {
+    closeCleanupRef.current?.();
+    mouseCleanupRef.current?.();
+  }, []);
+
   const closeWithAnimation = useCallback(() => {
-    if (disabled || isClosing) return;
+    if (disabled || closingRef.current) return;
+    closingRef.current = true;
     setIsClosing(true);
-    // Wait for the slide down transition to complete before unmounting
-    setTimeout(() => {
-      onClose();
-    }, 280);
-  }, [disabled, isClosing, onClose]);
+    setIsDragging(false);
+    startYRef.current = null;
+    mouseCleanupRef.current?.();
+
+    let finished = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const cleanup = () => {
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', finishBeforeInteraction, true);
+      document.removeEventListener('keydown', finishBeforeInteraction, true);
+      closeCleanupRef.current = null;
+    };
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      onCloseRef.current();
+    };
+    // Release the owner's "open" state before the next button processes a press.
+    // Otherwise reopening this same sheet during its exit is a no-op.
+    const finishBeforeInteraction = () => flushSync(finish);
+    document.addEventListener('pointerdown', finishBeforeInteraction, true);
+    document.addEventListener('keydown', finishBeforeInteraction, true);
+    timer = setTimeout(finish, 280);
+    closeCleanupRef.current = cleanup;
+  }, [disabled]);
 
   const handleStart = useCallback((clientY: number) => {
-    if (disabled || isClosing) return;
+    if (disabled || closingRef.current) return;
     startYRef.current = clientY;
     currentYRef.current = clientY;
     startTimeRef.current = Date.now();
     setIsDragging(true);
-  }, [disabled, isClosing]);
+  }, [disabled]);
 
   const handleMove = useCallback((clientY: number) => {
-    if (disabled || !startYRef.current || isClosing) return;
+    if (disabled || startYRef.current === null || closingRef.current) return;
     const deltaY = clientY - startYRef.current;
-    if (deltaY > 0) {
-      currentYRef.current = clientY;
-      setDragY(deltaY);
-    }
-  }, [disabled, isClosing]);
+    currentYRef.current = clientY;
+    setDragY(Math.max(0, deltaY));
+  }, [disabled]);
 
   const handleEnd = useCallback(() => {
-    if (disabled || !startYRef.current || isClosing) return;
+    if (disabled || startYRef.current === null || closingRef.current) return;
     const deltaY = currentYRef.current - startYRef.current;
     const timeDelta = Date.now() - startTimeRef.current;
     const velocity = timeDelta > 0 ? deltaY / timeDelta : 0;
 
     setIsDragging(false);
-    startYRef.current = 0;
+    startYRef.current = null;
 
     // Dismiss if pulled past threshold or swiped down quickly (> 0.35 px/ms)
     if (deltaY > dismissThreshold || (deltaY > 20 && velocity > 0.35)) {
@@ -91,7 +124,7 @@ export function useBottomSheet({ onClose, dismissThreshold = 60, disabled = fals
     } else {
       setDragY(0);
     }
-  }, [disabled, dismissThreshold, closeWithAnimation, isClosing]);
+  }, [disabled, dismissThreshold, closeWithAnimation]);
 
   const onTouchStart = useCallback(
     (e: React.TouchEvent) => {
@@ -117,9 +150,18 @@ export function useBottomSheet({ onClose, dismissThreshold = 60, disabled = fals
     [handleEnd]
   );
 
+  const onTouchCancel = useCallback((e: React.TouchEvent) => {
+    e.stopPropagation();
+    startYRef.current = null;
+    setIsDragging(false);
+    setDragY(0);
+  }, []);
+
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+      if (disabled || closingRef.current) return;
+      mouseCleanupRef.current?.();
       handleStart(e.clientY);
 
       const onMouseMove = (moveEvent: MouseEvent) => {
@@ -128,14 +170,19 @@ export function useBottomSheet({ onClose, dismissThreshold = 60, disabled = fals
 
       const onMouseUp = () => {
         handleEnd();
+        cleanup();
+      };
+      const cleanup = () => {
         window.removeEventListener('mousemove', onMouseMove);
         window.removeEventListener('mouseup', onMouseUp);
+        mouseCleanupRef.current = null;
       };
+      mouseCleanupRef.current = cleanup;
 
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     },
-    [handleStart, handleMove, handleEnd]
+    [disabled, handleStart, handleMove, handleEnd]
   );
 
   // Compute transform:
@@ -162,6 +209,7 @@ export function useBottomSheet({ onClose, dismissThreshold = 60, disabled = fals
     transform: currentTransform,
     transition: currentTransition,
     willChange: 'transform',
+    pointerEvents: isClosing ? 'none' : undefined,
   };
 
   const backdropOpacity = !isOpen || isClosing
@@ -174,6 +222,7 @@ export function useBottomSheet({ onClose, dismissThreshold = 60, disabled = fals
     opacity: backdropOpacity,
     transition: isDragging ? 'none' : 'opacity 260ms ease',
     willChange: 'opacity',
+    pointerEvents: isClosing ? 'none' : undefined,
   };
 
   const dragHandleProps = disabled
@@ -184,6 +233,7 @@ export function useBottomSheet({ onClose, dismissThreshold = 60, disabled = fals
         onTouchStart,
         onTouchMove,
         onTouchEnd,
+        onTouchCancel,
         onMouseDown,
         style: { touchAction: 'none' as const, userSelect: 'none' as const },
       };

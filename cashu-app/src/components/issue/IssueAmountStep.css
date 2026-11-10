@@ -1,0 +1,36 @@
+/* Only step 1 uses the viewport frame; later issuance steps retain normal scrolling. */
+.app-frame:has(.issue-amount-screen) {
+  height:100dvh;
+  min-height:0;
+  overflow:hidden;
+  padding-bottom:0;
+}
+.issue-amount-screen {
+  height:100%; min-height:0; overflow:hidden;
+  padding-top:clamp(8px,2dvh,24px);
+  padding-bottom:max(8px,env(safe-area-inset-bottom,0px));
+}
+.issue-amount-screen .issue-amount-header { flex:none; margin-bottom:clamp(8px,2dvh,16px); }
+.issue-amount-content {
+  flex:1; min-height:0; display:grid;
+  grid-template-rows:minmax(0,1fr) minmax(0,1.6fr);
+  gap:clamp(6px,1.5dvh,16px);
+}
+.issue-amount-display { min-height:0; min-width:0; display:grid; align-items:center; }
+.issue-amount-display > div { padding:0; }
+.issue-amount-display h1 { font-size:clamp(32px,8dvh,72px); overflow-wrap:anywhere; }
+.issue-amount-display.has-long-amount h1 { font-size:clamp(24px,6dvh,52px); }
+.issue-amount-display > div > span { margin-bottom:clamp(2px,1dvh,12px); }
+.issue-amount-keypad { height:100%; max-height:360px; min-height:0; align-self:end; }
+.issue-amount-keypad > div {
+  height:100%; min-height:0; margin:0; gap:clamp(4px,1dvh,12px);
+  grid-template-rows:repeat(4,minmax(0,1fr));
+}
+.issue-amount-keypad button { height:100%; min-height:0; padding:0; touch-action:manipulation; }
+.issue-amount-actions { flex:none; padding-top:clamp(8px,2dvh,16px); }
+.issue-amount-actions button { min-height:44px; padding-top:12px; padding-bottom:12px; }
+@media(max-height:520px) {
+  .issue-amount-content { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:12px; }
+  .issue-amount-keypad button { font-size:18px; }
+  .issue-amount-actions button { min-height:36px; padding-top:6px; padding-bottom:6px; }
+}
