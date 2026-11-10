@@ -1,6 +1,6 @@
 use crate::error::CommandResult;
 use ecash_core::types::{
-    split_into_powers_of_2, Proof, ReceiveEcashTransactionData, SendTransactionData, Transaction,
+    split_into_powers_of_2, Proof, SendTransactionData, Transaction,
     TransactionStatus, TransactionType,
 };
 use ecash_wallet::swap::swap_proofs;
@@ -405,31 +405,9 @@ pub async fn receive_ecash(
         ecash_wallet::payment_request::validate_invoice_payment(&mint_url, total_amount, fee, mint, amount)?;
     }
 
-    // Record pending transaction before swap
-    let tx_id = format!(
-        "tx_receive_{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-    );
-
-    let pending_tx = Transaction {
-        id: tx_id.clone(),
-        tx_type: TransactionType::ReceiveEcash(ReceiveEcashTransactionData {
-            token_string: token_string.clone(),
-            invoice_id: expected_invoice_id,
-        }),
-        amount: net_amount,
-        fee,
-        status: TransactionStatus::Pending,
-        timestamp: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-        mint_url: mint_url.clone(),
-    };
-    w_state.transactions.push(pending_tx);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let tx_id = ecash_wallet::deferred_ecash::record_claim_attempt(
+        w_state, &token_string, &mint_url, net_amount, fee, expected_invoice_id, now)?;
     w_state.save_encrypted(&path, &passphrase)?;
 
     // Swap proofs with the mint to re-blind them (prevents sender tracking)
@@ -522,4 +500,14 @@ pub async fn receive_ecash(
     w_state.save_encrypted(&path, &passphrase)?;
 
     Ok(actual_received)
+}
+
+#[tauri::command]
+pub async fn save_ecash_for_later(token_string: String, state: State<'_, AppState>) -> CommandResult<String> {
+    let (mut guard, path, passphrase) = state.lock_and_get_wallet().await?;
+    let wallet = guard.as_mut().unwrap();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let id = ecash_wallet::deferred_ecash::save_for_later(wallet, &token_string, now)?;
+    wallet.save_encrypted(&path, &passphrase)?;
+    Ok(id)
 }

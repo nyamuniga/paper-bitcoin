@@ -1,7 +1,7 @@
 {
   "name": "bitnotes",
   "private": true,
-  "version": "0.1.17",
+  "version": "0.1.18",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test:payments": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:bottom-sheets": "node --test tests/browser/bottomSheet.test.mjs",
     "check:release": "node ../scripts/check-release.mjs"
   },
   "dependencies": {

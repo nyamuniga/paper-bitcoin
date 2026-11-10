@@ -62,6 +62,8 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   const isRedeem = 'Redeem' in tx.tx_type;
   const isSend = 'Send' in tx.tx_type;
   const isReceiveEcash = 'ReceiveEcash' in tx.tx_type;
+  const isDeferredReceive = isReceiveEcash && status === 'Pending' && Boolean(tx.tx_type.ReceiveEcash.claim_deferred);
+  const [claimingSaved, setClaimingSaved] = useState(false);
   const isReceiveLightning = 'ReceiveLightning' in tx.tx_type;
   const isSendOnchain = 'SendOnchain' in tx.tx_type;
   const isReceiveOnchain = 'ReceiveOnchain' in tx.tx_type;
@@ -147,7 +149,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   };
 
   const hasActions = Boolean(
-    isRequest ||
+    isRequest || (isDeferredReceive && onRetryReceiveEcash) ||
     (!isRequest && status === 'Pending' && (onRecover || (isMint && onRetryMint) || (isIssue && onCheckIssue))) ||
     (isIssue && status === 'Success' && onDownloadNote) ||
     (status !== 'Pending' && (isSend || isIssue || isRedeem) && onCheckClaimed) ||
@@ -257,7 +259,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             )}
 
             {/* QR Code for Sent eCash (right below status label) */}
-            {isSend && tokenString && (
+            {(isSend || isReceiveEcash) && tokenString && (
               <div className="mt-4 flex flex-col items-center">
                 <div 
                   onClick={handleCopyToken}
@@ -382,7 +384,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             </div>
 
             {/* Token (single-line, same box style as txid, right below it) */}
-            {isSend && tokenString && (
+            {(isSend || isReceiveEcash) && tokenString && (
               <div className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-container/60 border border-outline-variant/20 shadow-sm">
                 <div className="flex flex-col min-w-0 pr-2">
                   <span className="text-[10px] font-semibold tracking-wider text-on-surface-variant uppercase">Token</span>
@@ -474,7 +476,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
 
         {/* Action Buttons Sticky Footer (Always visible at the bottom) */}
         {hasActions && (
-          <div ref={isRequest ? setInvoiceActionsContainer : undefined} className="px-6 pt-3 pb-6 sm:pb-5 bg-surface-container-high/95 backdrop-blur-xl border-t border-outline-variant/15 relative z-20 flex flex-col gap-2 shadow-[0_-8px_24px_rgba(0,0,0,0.3)]">
+          <div ref={isRequest ? setInvoiceActionsContainer : undefined} className="px-6 pt-3 pb-6 sm:pb-5 bg-surface-container-high/95 backdrop-blur-xl relative z-20 flex flex-col gap-2">
             {isIssue && status === 'Success' && onDownloadNote && (
               <button
                 onClick={() => onDownloadNote(tx.id, tx.amount, tx.tx_type?.Issue?.note?.serial)}
@@ -505,7 +507,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               </button>
             )}
 
-            {!isRequest && status === 'Pending' && onRecover && !isMint && !isIssue && (
+            {!isRequest && !isDeferredReceive && status === 'Pending' && onRecover && !isMint && !isIssue && (
               <button
                 onClick={onRecover}
                 className="w-full py-3 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl font-bold text-body-md transition-colors border border-primary/30 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
@@ -527,9 +529,17 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
               </button>
             )}
 
-            {status !== 'Pending' && (isSend || isIssue || isRedeem) && onCheckClaimed && (
+            {isDeferredReceive && onRetryReceiveEcash && <button
+              type="button"
+              disabled={claimingSaved}
+              onClick={async () => { setClaimingSaved(true); try { await onRetryReceiveEcash(); } finally { setClaimingSaved(false); } }}
+              className="w-full min-h-11 rounded-2xl bg-primary text-on-primary font-bold cursor-pointer disabled:opacity-40"
+            >{claimingSaved ? 'Claiming…' : 'Claim now'}</button>}
+
+            {((status !== 'Pending' && (isSend || isIssue || isRedeem)) || isDeferredReceive) && onCheckClaimed && (
               <button
                 onClick={onCheckClaimed}
+                disabled={claimingSaved}
                 className="w-full py-3 bg-surface-container-highest hover:bg-surface-bright text-on-surface rounded-xl font-bold text-body-md transition-colors border border-outline-variant/20 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
               >
                 <CheckCircle className="w-4 h-4 text-emerald-400" />

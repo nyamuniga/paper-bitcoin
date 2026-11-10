@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 
 import { NumberPad } from '../shared/NumberPad';
 import { AmountDisplay } from '../shared/AmountDisplay';
+import './IssueAmountStep.css';
 
 interface IssueAmountStepProps {
   sats: string;
@@ -15,19 +16,22 @@ export const IssueAmountStep: React.FC<IssueAmountStepProps> = ({ sats, setSats,
   const amount = parseInt(sats) || 0;
 
   return (
-    <main className="flex-grow w-full max-w-[480px] md:max-w-[600px] mx-auto px-container-padding pt-6 pb-0 -mb-8 flex flex-col">
-      <PageHeader title="Enter Amount" subtitle="Step 1 of 3" />
+    <main className="issue-amount-screen flex-grow w-full max-w-[480px] md:max-w-[600px] mx-auto px-container-padding flex flex-col">
+      <PageHeader title="Enter Amount" subtitle="Step 1 of 3" sticky={false} className="issue-amount-header" />
 
-      <div className="flex-1 flex flex-col justify-center pb-6">
+      <div className="issue-amount-content">
         {/* Amount display */}
-        <AmountDisplay amount={sats} />
+        <div className={`issue-amount-display ${sats.length > 6 ? 'has-long-amount' : ''}`}>
+          <AmountDisplay amount={sats} />
+        </div>
 
         {/* Number pad */}
-        <NumberPad value={sats} onChange={setSats} />
+        <div className="issue-amount-keypad" role="group" aria-label="Amount keypad">
+          <NumberPad value={sats} onChange={setSats} />
+        </div>
       </div>
 
-      {/* Sticky Bottom Navigation */}
-      <div className="sticky bottom-0 z-30 mt-auto bg-[#06110c]/95 backdrop-blur-md -mx-container-padding px-container-padding md:-mx-10 md:px-10 pt-3.5 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t border-[rgba(247,244,235,0.08)] shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
+      <div className="issue-amount-actions">
         <button
           onClick={onNext}
           disabled={amount <= 0}

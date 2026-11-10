@@ -25,6 +25,7 @@ pub mod history;
 pub mod restore;
 pub mod direct;
 pub mod token;
+pub mod deferred_ecash;
 pub mod payment_request;
 pub mod ecash_invoice;
 

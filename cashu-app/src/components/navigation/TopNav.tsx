@@ -117,8 +117,14 @@ export const TopNav = () => {
       updateDesktopPill();
       updateMobilePill();
     };
+    const observer = new ResizeObserver(handleResize);
+    [navRef.current, mobileNavRef.current, ...Object.values(desktopTabRefs.current), ...Object.values(mobileTabRefs.current)]
+      .forEach(element => { if (element) observer.observe(element); });
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', handleResize);
+    };
   }, [location.pathname]);
 
   return (
@@ -196,7 +202,7 @@ export const TopNav = () => {
         {/* Mobile Navigation with Animated Sliding Indicator Pill */}
         <nav
           ref={mobileNavRef}
-          className="flex md:hidden items-center gap-1 bg-[#0c1b14] border border-[#142d20] rounded-full p-1 shadow-sm relative overflow-hidden"
+          className="flex md:hidden h-11 items-center gap-1 bg-[#0c1b14] border border-[#142d20] rounded-full p-0.5 shadow-sm relative overflow-hidden"
         >
           {/* Sliding Mobile Indicator Pill */}
           <div
@@ -225,7 +231,7 @@ export const TopNav = () => {
                 ref={(el) => {
                   mobileTabRefs.current[tab.path] = el;
                 }}
-                className={`relative z-10 p-2 min-w-11 min-h-11 inline-flex items-center justify-center transition-colors duration-200 active:scale-95 rounded-full ${
+                className={`relative z-10 p-1.5 w-9 h-9 shrink-0 inline-flex items-center justify-center transition-colors duration-200 active:scale-95 rounded-full ${
                   isActive
                     ? 'text-primary'
                     : 'text-[#8b9e94] hover:text-primary hover:bg-[#12261d]/50'

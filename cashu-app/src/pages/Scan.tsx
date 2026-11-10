@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Info, CheckCircle } from 'lucide-react';
+import './Scan.css';
+import { CheckCircle } from 'lucide-react';
 import { ScanNoteForm } from '../components/scan/ScanNoteForm';
 import { NoteVerificationResult } from '../components/scan/NoteVerificationResult';
 import { RedeemNoteForm } from '../components/scan/RedeemNoteForm';
@@ -53,13 +54,13 @@ export const Scan = () => {
   const noteAmount = noteInfo?.amount ?? verifyResult?.proof_total_sats ?? 0;
 
   return (
-    <main className="flex-grow w-full max-w-[1200px] mx-auto px-container-padding md:px-10 py-6">
-      <PageHeader title="Scan" subtitle="Scan notes, eCash tokens, Bitcoin addresses, or Lightning invoices" />
+    <main className="scan-page">
+      <PageHeader className="scan-page-header" sticky={false} title="Scan" subtitle="Scan notes, eCash, Bitcoin, or Lightning" />
 
-      <div className="w-full max-w-2xl mx-auto flex flex-col items-center">
+      <div className={`scan-content ${!noteInfo ? 'scan-entry' : 'scan-results'}`}>
         {!noteInfo ? (
           <>
-            <ScanNoteForm 
+            <ScanNoteForm
               showScanner={showScanner}
               setShowScanner={setShowScanner}
               binB64={binB64}
@@ -68,20 +69,13 @@ export const Scan = () => {
               loading={loading}
               error={error}
             />
-            <div className="w-full mt-8 flex items-start gap-3 p-4 rounded-lg bg-surface-container/30 border border-outline-variant/20">
-              <Info className="text-on-surface-variant w-5 h-5 mt-0.5" />
-              <div>
-                <p className="text-label-caps font-label-caps text-on-surface-variant mb-1">SECURE SCANNING</p>
-                <p className="text-body-md font-body-md text-on-background/70 text-sm">All processing happens locally on your device. Private keys are never transmitted.</p>
-              </div>
-            </div>
           </>
         ) : (
           <div className="w-full bg-surface-container-high rounded-xl p-6 relative overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-outline-variant/30 flex flex-col space-y-6">
             <div className="noise-overlay"></div>
             <div className="flex flex-col space-y-6">
-              
-              <NoteVerificationResult 
+
+              <NoteVerificationResult
                 noteInfo={noteInfo}
                 verified={verified}
                 verifyResult={verifyResult}
@@ -91,7 +85,7 @@ export const Scan = () => {
               />
 
               {verified && noteInfo.type === 'full' && !redeemSuccess && (
-                <RedeemNoteForm 
+                <RedeemNoteForm
                   invoice={invoice}
                   setInvoice={setInvoice}
                   redeeming={redeeming}
@@ -112,7 +106,7 @@ export const Scan = () => {
                   </div>
                 </div>
               )}
-              
+
             </div>
           </div>
         )}

@@ -117,13 +117,16 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
         let token_json: serde_json::Value = serde_json::from_slice(&json_bytes)
             .map_err(|e| anyhow!("JSON parse error: {}", e))?;
 
+        if token_json.get("unit").and_then(|v| v.as_str()).unwrap_or("sat") != "sat" {
+            return Err(anyhow!("Only sat tokens are supported"));
+        }
         let token_array = token_json
             .get("token")
             .and_then(|t| t.as_array())
             .ok_or_else(|| anyhow!("Invalid token format: missing 'token' array"))?;
 
-        if token_array.is_empty() {
-            return Err(anyhow!("Token contains no entries"));
+        if token_array.len() != 1 {
+            return Err(anyhow!("Token must contain exactly one mint entry"));
         }
 
         mint_url = token_array[0]
@@ -197,6 +200,9 @@ pub fn decode_token_string(token_string: &str) -> Result<(String, Vec<Proof>, u6
                 .map(|(_, v)| v)
         }
 
+        if get_val(cbor_map, "u").and_then(|v| v.as_text()).unwrap_or("sat") != "sat" {
+            return Err(anyhow!("Only sat tokens are supported"));
+        }
         let bytes_to_hex =
             |v: &ciborium::Value| -> Option<String> { v.as_bytes().map(|b| hex::encode(b)) };
 

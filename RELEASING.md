@@ -1,6 +1,6 @@
 # Releasing BitNotes
 
-The prepared release is **0.1.17**. Read [the current verification report](RELEASE_CHECKS.md), including the rotation record, upstream warnings and remaining native-device checks, before pushing. Release preparation does not publish a GitHub release, upload binaries, deploy the website, or rotate credentials.
+The prepared release is **0.1.18**. Read [the current verification report](RELEASE_CHECKS.md), including the rotation record, upstream warnings and remaining native-device checks, before pushing. Release preparation does not publish a GitHub release, upload binaries, deploy the website, or rotate credentials.
 
 ## Public source boundary
 
@@ -55,10 +55,10 @@ CI=true npx tauri build
 npx tauri android build --apk --target aarch64
 ```
 
-Verify signatures and checksums, then publish the intended release artifacts under tag `v0.1.17`:
+Verify signatures and checksums, then publish the intended release artifacts under tag `v0.1.18`:
 
-- `bitnotes-android-wallet-v0.1.17.apk`
-- `bitnotes_0.1.17_aarch64.dmg`
+- `bitnotes-android-wallet-v0.1.18.apk`
+- `bitnotes_0.1.18_aarch64.dmg`
 
 These filenames are the website contract. Upload and verify both assets before deploying `website/`; otherwise its new download links will return 404. The site is a static directory and can be previewed with `python3 -m http.server 8080 --directory website`. Check both desktop and mobile navigation/download buttons.
 

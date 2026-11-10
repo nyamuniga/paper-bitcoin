@@ -24,14 +24,13 @@
 .transfer-hint-error { color:#ffb4ab; }
 .transfer-entry-controls { margin-top:auto; padding-top:20px; }
 .transfer-percentages { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px; }
-.transfer-percentages button { min-height:44px; border-radius:24px; background:#222c28; color:#ffc564; font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; }
+.transfer-percentages button { min-height:44px; border-radius:12px; background:#222c28; color:#ffc564; font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; }
 .transfer-percentages button:hover, .transfer-percentages button[aria-pressed=true] { background:#ffc564; color:#281900; }
-.transfer-keypad { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:18px; }
-.transfer-keypad button { min-height:52px; display:grid; place-items:center; border-radius:12px; font-size:26px; font-weight:500; background:#141e19; border:1px solid #33453a; }
-.transfer-keypad button:hover:not(:disabled) { background:#26372e; }
-.transfer-keypad button:last-child { color:#ffc564; }
+.transfer-keypad { margin-bottom:12px; }
+.transfer-keypad > div { gap:6px; margin-bottom:0; }
+.transfer-keypad button { padding:0; height:clamp(32px,5.8dvh,48px); }
 .transfer-primary, .transfer-secondary { width:100%; min-height:52px; border-radius:26px; display:flex; gap:8px; align-items:center; justify-content:center; padding:14px 18px; font-size:15px; font-weight:600; }
-.transfer-primary { background:#f2a93b; color:#06110c; }
+.transfer-primary { min-height:44px; padding:12px 18px; border-radius:16px; background:#f2a93b; color:#06110c; }
 .transfer-primary:hover:not(:disabled) { background:#ffc564; }
 .transfer-secondary { margin-top:8px; color:#d0e0d5; }
 .transfer-secondary:hover { background:#222c28; }
@@ -64,7 +63,6 @@
   .transfer-entry-controls { padding-top:4px; }
   .transfer-percentages { margin-bottom:12px; }
   .transfer-keypad { gap:6px; margin-bottom:12px; }
-  .transfer-keypad button { min-height:44px; font-size:23px; }
   .transfer-hint { font-size:11px; line-height:1.4; margin:8px 2px; }
 }
 @media(prefers-reduced-motion:reduce) {
@@ -78,4 +76,47 @@
   .transfer-entry-controls { padding-top:0; }
   .transfer-percentages { margin-bottom:8px; }
   .transfer-keypad { margin-bottom:8px; }
+}
+
+/* The app frame reserves navigation space; the header stays outside scrolling content. */
+.transfer-screen { height:100%; min-height:0; overflow:hidden; padding-top:clamp(8px,2dvh,24px); padding-bottom:max(8px,env(safe-area-inset-bottom,0px)); }
+.transfer-screen .transfer-page-header { flex:none; margin-bottom:clamp(8px,2dvh,16px); }
+.transfer-content { min-height:0; overflow:auto; overscroll-behavior:contain; }
+.transfer-content > * { flex-shrink:0; }
+.transfer-screen.is-entry .transfer-content { overflow:hidden; }
+.transfer-screen.is-entry .transfer-pair { flex:none; }
+.transfer-screen.is-entry .transfer-constraints { flex:0 1 auto; min-height:0; max-height:25%; overflow:auto; margin:6px 2px; }
+.transfer-entry-controls { display:flex; flex-direction:column; flex:1 1 260px; min-height:0; max-height:340px; padding-top:0; margin-top:auto; }
+.transfer-percentages { gap:6px; margin-bottom:8px; }
+.transfer-keypad { margin-bottom:8px; }
+.transfer-screen.is-entry .transfer-error { flex:0 1 auto; min-height:0; max-height:20dvh; overflow:auto; margin-top:8px; }
+@media(max-height:740px) {
+  .transfer-page-header p { display:none; }
+  .transfer-percentages button { min-height:32px; }
+  .transfer-keypad button { height:32px; }
+  .transfer-text-button { min-height:24px; margin-bottom:4px; font-size:12px; }
+}
+@media(max-height:520px) {
+  .transfer-screen.is-entry .transfer-content { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:8px 12px; }
+  .transfer-screen.is-entry .transfer-pair { grid-column:1; grid-row:1; display:block; }
+  .transfer-source { border-radius:16px 16px 0 0; padding-bottom:16px; }
+  .transfer-destination { padding-top:16px; }
+  .transfer-screen.is-entry .transfer-constraints { grid-column:1; grid-row:2; margin:0; }
+  .transfer-entry-controls { grid-column:2; grid-row:1 / 3; }
+  .transfer-keypad button { height:clamp(24px,7dvh,32px); }
+  .transfer-keypad > div { gap:4px; }
+  .transfer-percentages { gap:4px; margin-bottom:6px; }
+  .transfer-percentages button { min-height:26px; font-size:12px; }
+  .transfer-primary { min-height:32px; padding:6px 8px; font-size:13px; }
+  .transfer-screen.is-entry .transfer-error { grid-column:1; grid-row:2; z-index:1; max-height:100%; }
+}
+
+/* Key rows share remaining space instead of imposing a fixed total height. */
+.transfer-entry-controls > :not(.transfer-keypad) { flex-shrink:0; }
+.transfer-entry-controls .transfer-keypad { flex:1 1 0; min-height:0; max-height:224px; }
+.transfer-entry-controls .transfer-keypad > div { height:100%; min-height:0; grid-template-rows:repeat(4,minmax(0,1fr)); }
+.transfer-entry-controls .transfer-keypad button { height:100%; min-height:0; padding:0; font-size:clamp(14px,3dvh,20px); }
+@media(max-height:520px) {
+  .transfer-entry-controls { max-height:none; margin-top:0; }
+  .transfer-screen.is-entry .transfer-constraints { max-height:none; }
 }

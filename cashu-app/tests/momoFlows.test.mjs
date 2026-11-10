@@ -18,7 +18,7 @@ registerHooks({resolve(specifier, context, next) {
     if (specifier === '../store/addressBookStore') return stub('export const useAddressBookStore={getState:()=>({recordSuccessfulUse:()=>{}})};');
     if (specifier === '@tauri-apps/api/core') return stub('export const invoke=(...a)=>globalThis.__momo.invoke(...a);');
     if (specifier === '@tauri-apps/plugin-http') return stub('export const fetch=async()=>({ok:true,json:async()=>({USD:{last:100000}})});');
-    if (specifier === '../constants') return stub('export const EXCHANGE_RATE_API_URL="https://rate.example", SATS_PER_BTC=1e8, SPREAD=0.021, MOMO_WITHDRAWAL_FIXED_FEE=120, RWF_USD_PEG=1400, POLLING_INTERVAL_MS=5000, POLLING_TIMEOUT_MS=120000, MOMO_API_BASE_URL="https://proxy.example";');
+    if (specifier === '../constants') return stub('export const EXCHANGE_RATE_API_URL="https://rate.example", SATS_PER_BTC=1e8, SPREAD=0.021, MOMO_WITHDRAWAL_FIXED_FEE=120, ECASH_LIGHTNING_FEE=10, RWF_USD_PEG=1400, POLLING_INTERVAL_MS=5000, POLLING_TIMEOUT_MS=120000, MOMO_API_BASE_URL="https://proxy.example";');
   }
   if (context.parentURL?.includes('/src/') && specifier.startsWith('.')) return next(new URL(specifier+'.ts',context.parentURL).href,context);
   return next(specifier,context);
@@ -147,4 +147,42 @@ test('a new topup starts with its own ID while an older funded cashout stays sav
   assert.equal(f.store.activeTransaction.id,requestedId);
   assert.equal(f.store.activeTransaction.currentPhase,AppPhase.PENDING_PAYMENT);
   assert.deepEqual(f.store.history.find(tx=>tx.id==='saved-id'),base);
+});
+
+test('an unapproved worse topup rate never starts a provider request or creates a transaction',async()=>{
+  const f=fixture();
+  const {buildMomoReview}=await import('../src/services/momoReview.ts');
+  const approved=buildMomoReview({direction:'RWF_TO_SATS',amount:1000,phone:'0781234567',mint:'https://mint.example',rate:100,spread:0.021,fixedFee:120,networkReserve:10});
+  await assert.rejects(flow.calculateQuote('1000','0781234567','ecash','https://mint.example',approved),/rate changed/i);
+  assert.equal(f.store.activeTransaction,null);
+  assert.deepEqual(f.invocations,[]);
+});
+test('changing a reviewed cashout phone cannot initiate funding',async()=>{
+  const f=fixture();
+  const {buildMomoReview}=await import('../src/services/momoReview.ts');
+  const approved=buildMomoReview({direction:'SATS_TO_RWF',amount:1000,phone:'0781234567',mint:'https://mint.example',rate:1,spread:0.021,fixedFee:120,networkReserve:10});
+  await assert.rejects(flow.calculateSendQuote('1000','0791234567','ecash','https://mint.example',approved),/details changed/i);
+  assert.equal(f.store.activeTransaction,null);
+  assert.deepEqual(f.invocations,[]);
+});
+test('a confirmed topup uses its reviewed quote and creates only one receiving invoice',async()=>{
+  const f=fixture();
+  const {buildMomoReview}=await import('../src/services/momoReview.ts');
+  const approved=buildMomoReview({direction:'RWF_TO_SATS',amount:1000,phone:'0781234567',mint:'https://mint.example',rate:await flow.fetchCurrentRate(),spread:0.021,fixedFee:120,networkReserve:10});
+  await flow.calculateQuote('1000','0781234567','ecash','https://mint.example',approved);
+  assert.equal(f.store.activeTransaction.satsAmount,approved.sats);
+  assert.equal(f.invocations.filter(command=>command==='receive_lightning').length,1);
+});
+test('concurrent confirmations cannot start a second transfer after the rate check',async()=>{
+  const f=fixture();
+  f.init=async()=>({success:true,referenceId:'fixture-reference'});
+  const {buildMomoReview}=await import('../src/services/momoReview.ts');
+  const approved=buildMomoReview({direction:'RWF_TO_SATS',amount:1000,phone:'0781234567',mint:'https://mint.example',rate:await flow.fetchCurrentRate(),spread:0.021,fixedFee:120,networkReserve:10});
+  const results=await Promise.allSettled([
+    flow.calculateQuote('1000','0781234567','ecash','https://mint.example',approved),
+    flow.calculateQuote('1000','0781234567','ecash','https://mint.example',approved),
+  ]);
+  assert.equal(results.filter(result=>result.status==='rejected').length,1);
+  assert.equal(f.invocations.filter(command=>command==='receive_lightning').length,1);
+  assert.equal(f.store.activeTransaction.currentPhase,AppPhase.PENDING_PAYMENT);
 });

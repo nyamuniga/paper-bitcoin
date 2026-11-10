@@ -1,6 +1,6 @@
 # BitNotes / Physical Ecash
 
-**Prepared release: 0.1.17.** A Rust implementation of the [Cashu](https://github.com/cashubtc/nuts) blind-signature protocol for physical bearer notes.
+**Prepared release: 0.1.18.** A Rust implementation of the [Cashu](https://github.com/cashubtc/nuts) blind-signature protocol for physical bearer notes.
 
 ## Overview
 

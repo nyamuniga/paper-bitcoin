@@ -4,6 +4,25 @@ All notable changes to the Bitnotes / Physical Ecash project will be documented 
 
 ## Unreleased
 
+## [0.1.18] - 2026-11-10
+
+### Added
+- Dedicated ecash, Bitcoin, top-up, and cashout pages with fixed headers and responsive amount entry, number pads, and actions.
+- Scanned ecash token previews with QR codes, mint/value details, and a claim-later option available from recent activity and history.
+- Top-up and cashout review screens showing the phone number, amount, and fees before confirmation.
+
+### Changed
+- Updated the Scan page to match the square QR scanner, paste field, and orange action-button style used for Bitcoin sends.
+- Simplified Bitcoin deposit and send reviews, compacted navigation, and improved issue-note and conversion layouts on short screens.
+- Synchronized app, workspace, and website versions and download URLs for 0.1.18.
+
+### Fixed
+- The first tap after swiping a bottom sheet closed is recognized immediately.
+- The wallet mint selector applies a subtle page-wide blur while keeping its button and menu visible.
+- Unavailable Dollar balances show a loading shimmer, and Mobile Money confirmation rejects worse terms than those reviewed.
+
+### Conversion protection
+
 - Conversion estimates refresh from a shared ticker while entering an amount. New reviews fix a minimum received and maximum spent for 60 seconds, with an explicit 3% movement allowance.
 - Fund Bitcoin conversion headroom within the approved budget and enforce the source ceiling at the SDK pre-send boundary. Return unused Bitcoin automatically when the return threshold is met; preserve existing journals and never retry ambiguous sends.
 
