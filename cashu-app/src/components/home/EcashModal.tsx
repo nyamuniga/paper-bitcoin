@@ -790,15 +790,8 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
         badgeLabel={paymentBadgeLabel}
         errorMessage={paymentErrorMessage}
         onDismiss={() => {
-          if (paymentStatus === 'success') {
-            if (activeTab === 'receive') {
-              onClose();
-            } else {
-              setPaymentStatus(null);
-            }
-          } else {
-            setPaymentStatus(null);
-          }
+          setPaymentStatus(null);
+          if (paymentStatus === 'success' && !page) onClose();
         }}
         onRetry={lastAction}
       />

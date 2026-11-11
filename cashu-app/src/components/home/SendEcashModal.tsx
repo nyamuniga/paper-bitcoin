@@ -273,7 +273,10 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
         title="eCash Claimed"
         subtitle="The recipient has claimed your eCash token."
         badgeLabel="Claimed"
-        onDismiss={() => setPaymentStatus(null)}
+        onDismiss={() => {
+          setPaymentStatus(null);
+          if (paymentStatus === 'success') onClose();
+        }}
       />
     </div>
   );

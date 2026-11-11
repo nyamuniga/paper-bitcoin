@@ -1068,11 +1068,8 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
           onViewMempool={onchainTxid ? () => openMempoolTx(onchainTxid) : undefined}
           errorMessage={paymentErrorMessage}
           onDismiss={() => {
-            if (paymentStatus === 'success') {
-              onClose();
-            } else {
-              setPaymentStatus(null);
-            }
+            setPaymentStatus(null);
+            if (paymentStatus === 'success' && !page) onClose();
           }}
           onRetry={lastPayAction}
         />
