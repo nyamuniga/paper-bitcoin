@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { soundFX } from '../../utils/soundEffects';
 
@@ -45,6 +46,7 @@ export interface SovereignStampOverlayProps {
   subtitle?: string;
   errorMessage?: string;
   onRetry?: () => void;
+  /** Result cleanup; the success Done button then returns to the wallet home. */
   onDismiss?: () => void;
   /** If provided, pending state offers "Continue in background". */
   onBackground?: () => void;
@@ -221,6 +223,11 @@ const OverlayBody: React.FC<BodyProps> = ({
   soundEnabled = true,
   hapticEnabled = true,
 }) => {
+  const navigate = useNavigate();
+  const completeSuccess = () => {
+    onDismiss?.();
+    navigate('/', {replace:true});
+  };
   const reduce = useReducedMotion() ?? false;
   const titleId = useId();
   const d = (s: number) => (reduce ? 0 : s);
@@ -828,7 +835,7 @@ const OverlayBody: React.FC<BodyProps> = ({
                 <button
                   type="button"
                   autoFocus
-                  onClick={onDismiss}
+                  onClick={completeSuccess}
                   className="btn-primary w-full rounded-2xl py-4 text-[16px] active:scale-[0.98] cursor-pointer"
                 >
                   {actionLabel}

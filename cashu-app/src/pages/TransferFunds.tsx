@@ -20,7 +20,7 @@ export function TransferFundsPage() {
     cashuBalance={mintBalances[mintUrl] ?? 0}
     stableBalance={stable.balance}
     onClose={() => {if(window.history.state?.idx > 0) navigate(-1); else navigate('/');}}
-    onDone={() => navigate('/')}
+    onDone={() => navigate('/', {replace:true})}
     onChange={stable.refresh}
   />;
 }
