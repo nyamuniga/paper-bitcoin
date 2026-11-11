@@ -72,6 +72,7 @@
      align-items: center;
      justify-content: space-between;
  }
+ 
 
  .brand {
      display: flex;
@@ -447,7 +448,7 @@
      width: 100%;
      max-width: 1200px;
      display: flex;
-     justify-content: space-between;
+     justify-content: center;
      align-items: center;
      padding: 0 2rem;
      z-index: 4;
@@ -558,6 +559,8 @@
  .manifesto-muted {
      color: var(--text-muted);
      font-weight: 400;
+     font-family: var(--font-italic);
+     font-style: italic;
  }
 
  /* ── Pillars Grid with Vertical Dividers ── */
@@ -1047,6 +1050,206 @@
      margin: 0;
      color: #666;
      line-height: 1.7;
+ }
+ .ui-card {
+   position: relative;
+   isolation: isolate;
+   overflow: hidden;
+   border: 1px solid rgba(16, 45, 32, 0.08);
+   border-radius: 28px;
+   background: #fff;
+
+ }
+
+ /* A subtle glow behind the screenshot */
+ .ui-card::before {
+   content: "";
+   position: absolute;
+   z-index: -3;
+   top: -80px;
+   left: -15%;
+   width: 130%;
+   height: 460px;
+   pointer-events: none;
+   /*background: radial-gradient(
+     ellipse at center,
+     rgba(124, 177, 139, 0.28),
+     rgba(169, 199, 163, 0.1) 45%,
+     transparent 70%
+   );*/
+ }
+
+ .ui-card__image {
+   position: relative;
+   z-index: -2;
+   display: block;
+
+   width: calc(100% - 64px);
+   height: auto;
+   max-height: 360px;
+   margin: 16px 0 auto 28px;
+
+   object-fit: contain;
+   object-position: center;
+   border-radius: 20px;
+   transform: rotate(-2deg);
+
+   box-shadow:
+     0 20px 40px -18px rgba(9, 35, 23, 0.45),
+     0 0 0 1px rgba(9, 35, 23, 0.08);
+
+   -webkit-mask-image: none;
+   mask-image: none;
+ }
+
+ .ui-mints-card__image {
+   position: relative;
+   z-index: -2;
+   display: block;
+
+   width:100%;
+   height: auto;
+   max-height: 360px;
+   /*margin: 1px 0 auto 28px;*/
+
+   object-fit: contain;
+   object-position: center;
+   border-radius: 20px; box-shadow:
+     0 20px 40px -18px rgba(9, 35, 23, 0.45),
+     0 0 0 1px rgba(9, 35, 23, 0.08);
+
+   -webkit-mask-image: none;
+   mask-image: none;
+ }
+
+ /* A short, smooth blend at the bottom of the image */
+ .ui-card::after {
+   content: "";
+   position: absolute;
+   z-index: -1;
+   top: 290px;
+   right: 0;
+   left: 0;
+   height: 115px;
+   pointer-events: none;
+
+   /*background: linear-gradient(
+     to bottom,
+     rgba(247, 248, 243, 0),
+     rgba(247, 248, 243, 0.08) 20%,
+     rgba(247, 248, 243, 0.45) 50%,
+     rgba(247, 248, 243, 0.9) 80%,
+     #f7f8f3
+   );*/
+ }
+
+ .ui-card__content {
+   position: relative;
+   padding: 40px  0 0 ;
+ }
+ .ui-mints-card__content {
+   position: relative;
+   padding:  0 0 40px;
+ }
+
+ .ui-card h2 {
+   max-width: 440px;
+   margin: 0 0 16px;
+   color: #142e23;
+   font-size: clamp(28px, 5vw, 38px);
+   font-weight: 700;
+   line-height: 1.12;
+   letter-spacing: -1.3px;
+   text-wrap: balance;
+ }
+
+ .ui-card p {
+   margin: 0;
+   color: #666;
+   line-height: 1.7;
+ }
+
+ .ui-card__link {
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 16px;
+   min-height: 48px;
+   margin-top: 28px;
+   padding: 12px 21px;
+
+   border: 1px solid rgba(255, 255, 255, 0.12);
+   border-radius: 999px;
+   background: #183e2b;
+   color: #fff;
+
+   font-size: 15px;
+   font-weight: 500;
+   text-decoration: none;
+
+   box-shadow: 0 6px 14px -7px rgba(24, 62, 43, 0.5);
+   transition:
+     background 200ms ease,
+     transform 200ms ease,
+     box-shadow 200ms ease;
+ }
+
+ .ui-card__arrow {
+   display: inline-block;
+   transition: transform 200ms ease;
+ }
+
+ .ui-card__link:hover {
+   background: #245439;
+   transform: translateY(-2px);
+   box-shadow: 0 10px 20px -9px rgba(24, 62, 43, 0.5);
+ }
+
+ .ui-card__link:hover .ui-card__arrow {
+   transform: translateX(3px);
+ }
+
+ .ui-card__link:focus-visible {
+   outline: 3px solid #79aa87;
+   outline-offset: 5px;
+ }
+
+ @media (max-width: 540px) {
+   .ui-card {
+     border-radius: 28px;
+   }
+
+   .ui-card__image {
+     width: calc(100% - 40px);
+     max-height: none;
+     margin-top: 26px;
+     border-radius: 14px;
+   }
+
+   .ui-card::after {
+     /* Image stays crisp at smaller sizes */
+     display: none;
+   }
+
+   .ui-card__content {
+     padding: 32px 26px;
+   }
+
+   .ui-card h2 {
+     font-size: 30px;
+     letter-spacing: -1px;
+   }
+
+   .ui-card p {
+     font-size: 16px;
+   }
+ }
+
+ @media (prefers-reduced-motion: reduce) {
+   .ui-card__link,
+   .ui-card__arrow {
+     transition: none;
+   }
  }
  /* ── How It Works Steps ── */
  .how-section {
@@ -1607,6 +1810,7 @@
          width: 100%;
          padding-top:100px;
      }
+
      .btn-pill-primary,
      .btn-pill-secondary {
          width: 100%;
@@ -1856,4 +2060,55 @@
          grid-template-columns: 1fr;
          gap: 1.75rem;
      }
+ }
+ header {
+   position: fixed;
+   top: 0;
+   left: 0;
+   width: 100%;
+   z-index: 1000;
+   isolation: isolate;
+ 
+   background: transparent !important;
+   backdrop-filter: none !important;
+   -webkit-backdrop-filter: none !important;
+   border: none !important;
+   box-shadow: none !important;
+ }
+ 
+ /* Disable the previous animation layer, if present. */
+ header::before,
+ header::after {
+   content: none !important;
+ }
+ 
+ header .header-inner {
+   position: relative;
+   z-index: 1;
+   background: transparent;
+ }
+ 
+ /* JavaScript creates this expanding background. */
+ .nav-expanding-bg {
+   position: absolute;
+   z-index: 0;
+   pointer-events: none;
+   background: #fcfcfa;
+   border: 1px solid rgba(12, 29, 20, 0.08);
+   box-sizing: border-box;
+   transition: none;
+ }
+ 
+ /* The separate layer now supplies the capsule background. */
+ header .nav-capsule {
+   background: transparent !important;
+   border-color: transparent !important;
+   box-shadow: none !important;
+   backdrop-filter: none !important;
+   -webkit-backdrop-filter: none !important;
+ }
+ 
+ header .nav-capsule::before,
+ header .nav-capsule::after {
+   content: none !important;
  }
