@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { Loader2, Zap, QrCode, BookUser } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { useWalletStore } from '../store/wallet';
@@ -34,7 +34,6 @@ interface LnurlParams {
 
 export const Pay = () => {
   const location = useLocation();
-  const navigate = useNavigate();
   const state = location.state as any;
   const mintUrl = state?.mintUrl;
 
@@ -386,10 +385,7 @@ export const Pay = () => {
         amountSats={invoiceAmount || undefined}
         recipient={lnurlParams ? (invoice.includes('@') ? invoice.trim() : lnurlParams.domain) : undefined}
         errorMessage={paymentErrorMessage}
-        onDismiss={() => {
-          if (paymentStatus === 'success') navigate('/');
-          else setPaymentStatus(null);
-        }}
+        onDismiss={() => setPaymentStatus(null)}
         onRetry={handlePay}
       />
       <AddressBookPickerModal

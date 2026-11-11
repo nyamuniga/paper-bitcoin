@@ -270,8 +270,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
     setStampDismissed(false);
   };
 
-  const handleClose = () => {
-    if (confirming.current && phase === AppPhase.IDLE) return;
+  const clearFinishedTransfer = () => {
     if (
       phase === AppPhase.READY_TO_CLAIM ||
       phase === AppPhase.PAYOUT_COMPLETE ||
@@ -282,6 +281,11 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
       setError(null);
       setStampDismissed(false);
     }
+  };
+
+  const handleClose = () => {
+    if (confirming.current && phase === AppPhase.IDLE) return;
+    clearFinishedTransfer();
     if (page) onClose(); else closeWithAnimation();
   };
 
@@ -902,7 +906,8 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
         errorMessage={stampStatus === 'failed' ? (error || activeTransaction?.recoveryMessage || undefined) : undefined}
         onDismiss={() => {
           setStampDismissed(true);
-          handleClose();
+          if (stampStatus === 'success' && page) clearFinishedTransfer();
+          else handleClose();
         }}
         onRetry={stampStatus === 'failed' ? () => {
           setStampDismissed(false);
