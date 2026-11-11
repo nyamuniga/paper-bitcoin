@@ -72,7 +72,7 @@
      align-items: center;
      justify-content: space-between;
  }
- 
+
 
  .brand {
      display: flex;
@@ -1232,7 +1232,7 @@
    }
 
    .ui-card__content {
-     padding: 32px 26px;
+     padding: 32px 0 0;
    }
 
    .ui-card h2 {
@@ -1319,6 +1319,7 @@
      letter-spacing: 0.15em;
      color: var(--text-muted);
      margin-bottom: 1.75rem;
+     margin-top: 1.75rem;
  }
 
  .protocols-pills {
@@ -2068,26 +2069,26 @@
    width: 100%;
    z-index: 1000;
    isolation: isolate;
- 
+
    background: transparent !important;
    backdrop-filter: none !important;
    -webkit-backdrop-filter: none !important;
    border: none !important;
    box-shadow: none !important;
  }
- 
+
  /* Disable the previous animation layer, if present. */
  header::before,
  header::after {
    content: none !important;
  }
- 
+
  header .header-inner {
    position: relative;
    z-index: 1;
    background: transparent;
  }
- 
+
  /* JavaScript creates this expanding background. */
  .nav-expanding-bg {
    position: absolute;
@@ -2098,7 +2099,7 @@
    box-sizing: border-box;
    transition: none;
  }
- 
+
  /* The separate layer now supplies the capsule background. */
  header .nav-capsule {
    background: transparent !important;
@@ -2107,7 +2108,7 @@
    backdrop-filter: none !important;
    -webkit-backdrop-filter: none !important;
  }
- 
+
  header .nav-capsule::before,
  header .nav-capsule::after {
    content: none !important;
