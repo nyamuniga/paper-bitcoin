@@ -1,4 +1,118 @@
 document.addEventListener("DOMContentLoaded", () => {
+  // ── Scroll-driven expanding navbar background ──
+  const animatedHeader = document.querySelector("header");
+  const animatedCapsule = animatedHeader?.querySelector(".nav-capsule");
+  
+  if (animatedHeader && animatedCapsule) {
+      animatedHeader.querySelector(".nav-expanding-bg")?.remove();
+  
+      const expandingBg = document.createElement("div");
+      expandingBg.className = "nav-expanding-bg";
+      expandingBg.setAttribute("aria-hidden", "true");
+      animatedHeader.prepend(expandingBg);
+  
+      const expansionDistance = 180;
+      const motionPreference = window.matchMedia(
+          "(prefers-reduced-motion: reduce)"
+      );
+  
+      let geometry = null;
+      let animationFrame = null;
+  
+      function measureNavbar() {
+          const headerBounds = animatedHeader.getBoundingClientRect();
+          const capsuleBounds = animatedCapsule.getBoundingClientRect();
+  
+          geometry = {
+              x: capsuleBounds.left - headerBounds.left,
+              y: capsuleBounds.top - headerBounds.top,
+              width: capsuleBounds.width,
+              height: capsuleBounds.height,
+              fullWidth: headerBounds.width,
+              fullHeight: headerBounds.height,
+              visible:
+                  animatedCapsule.getClientRects().length > 0 &&
+                  capsuleBounds.width > 0
+          };
+      }
+  
+      function drawNavbar() {
+          animationFrame = null;
+  
+          if (!geometry) measureNavbar();
+  
+          const scrollPosition = Math.max(0, window.scrollY);
+          let progress = Math.min(
+              scrollPosition / expansionDistance,
+              1
+          );
+  
+          if (motionPreference.matches) {
+              progress = scrollPosition > 0 ? 1 : 0;
+          }
+  
+          const g = geometry;
+          const interpolate = (from, to) =>
+              from + (to - from) * progress;
+  
+          // Mobile: show a full background after scrolling.
+          if (!g.visible) {
+              Object.assign(expandingBg.style, {
+                  left: "0px",
+                  top: "0px",
+                  width: `${g.fullWidth}px`,
+                  height: `${g.fullHeight}px`,
+                  borderRadius: "0px",
+                  opacity: String(progress)
+              });
+          } else {
+              Object.assign(expandingBg.style, {
+                  left: `${interpolate(g.x, 0)}px`,
+                  top: `${interpolate(g.y, 0)}px`,
+                  width: `${interpolate(g.width, g.fullWidth)}px`,
+                  height: `${interpolate(g.height, g.fullHeight)}px`,
+                  borderRadius: `${interpolate(g.height / 2, 0)}px`,
+                  opacity: "1"
+              });
+          }
+  
+          expandingBg.style.boxShadow = `
+              0 ${2 + progress * 6}px
+              ${12 + progress * 12}px
+              rgba(12, 29, 20, ${0.04 + progress * 0.04})
+          `;
+      }
+  
+      function queueNavbarDraw() {
+          if (animationFrame === null) {
+              animationFrame = requestAnimationFrame(drawNavbar);
+          }
+      }
+  
+      function refreshNavbar() {
+          measureNavbar();
+          queueNavbarDraw();
+      }
+  
+      window.addEventListener("scroll", queueNavbarDraw, {
+          passive: true
+      });
+  
+      window.addEventListener("resize", refreshNavbar);
+      window.addEventListener("pageshow", refreshNavbar);
+      motionPreference.addEventListener("change", queueNavbarDraw);
+  
+      const navbarResizeObserver = new ResizeObserver(refreshNavbar);
+      navbarResizeObserver.observe(animatedHeader);
+      navbarResizeObserver.observe(animatedCapsule);
+  
+      if (document.fonts) {
+          document.fonts.ready.then(refreshNavbar);
+      }
+  
+      measureNavbar();
+      drawNavbar();
+  }
     if (window.ENV) {
         const apkLink = window.ENV.APK_LINK;
         const macLink = window.ENV.MAC_LINK;
