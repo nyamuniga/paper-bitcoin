@@ -238,7 +238,10 @@ pub async fn create_wallet(
     
     // Attempt to fetch and cache keys for the default mint (non-fatal if it fails)
     if let Ok(keyset) = ecash_wallet::client::MintClient::new(&default_mint).fetch_keyset().await {
-        w_state.cache_mint_keys(&default_mint, keyset.keys);
+        w_state.cache_mint_keys(
+            &default_mint,
+            std::collections::HashMap::from([(keyset.id, keyset.keys)]),
+        );
     }
     
     w_state.save_encrypted(&path, &passphrase)?;

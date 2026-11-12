@@ -41,15 +41,21 @@ pub async fn restore_from_mints_range(
 
         let client = MintClient::new(&mint_url);
         let keyset = match client.fetch_keyset().await {
-            Ok(ks) => {
-                state.trusted_keys.insert(mint_url.clone(), ks.keys.clone());
-                ks
-            }
+            Ok(ks) => ks,
             Err(e) => {
                 println!("Failed to fetch keyset for {}: {}", mint_url, e);
                 continue;
             }
         };
+        if let Ok(all) = client.fetch_all_keysets().await {
+            state.cache_mint_keys(&mint_url, all);
+        } else {
+            // Best-effort fallback: cache only the active keyset.
+            state.cache_mint_keys(
+                &mint_url,
+                std::collections::HashMap::from([(keyset.id.clone(), keyset.keys.clone())]),
+            );
+        }
 
         let mut output_json = Vec::new();
         // Keep track of session info to unblind later.
@@ -286,9 +292,12 @@ pub async fn restore_from_mints_adaptive(
         let client = MintClient::new(&mint_url);
         let keyset = match client.fetch_keyset().await {
             Ok(ks) => {
-                state.trusted_keys.insert(mint_url.clone(), ks.keys.clone());
-                if !state.mints.contains(&mint_url) {
-                    state.mints.push(mint_url.clone());
+                match client.fetch_all_keysets().await {
+                    Ok(all) => state.cache_mint_keys(&mint_url, all),
+                    Err(_) => state.cache_mint_keys(
+                        &mint_url,
+                        std::collections::HashMap::from([(ks.id.clone(), ks.keys.clone())]),
+                    ),
                 }
                 ks
             }
@@ -576,14 +585,14 @@ pub async fn clean_wallet_proofs(
     }
 
     // 2. Fetch and cache keysets for ALL mints so healing and verification succeed
+    let mut refreshed_mints: std::collections::HashSet<String> = std::collections::HashSet::new();
+
     for mint_url in &all_mints {
         let client = MintClient::new(mint_url);
-        match client.fetch_keyset().await {
-            Ok(keyset) => {
-                state.trusted_keys.insert(mint_url.clone(), keyset.keys);
-                if !state.mints.contains(mint_url) {
-                    state.mints.push(mint_url.clone());
-                }
+        match client.fetch_all_keysets().await {
+            Ok(all) => {
+                state.cache_mint_keys(mint_url, all);
+                refreshed_mints.insert(mint_url.clone());   // ← add this
             }
             Err(e) => {
                 if let Some(tx) = &progress_tx {
@@ -592,7 +601,6 @@ pub async fn clean_wallet_proofs(
             }
         }
     }
-
     // 3. Deduplicate and auto-heal corrupt proofs across all mints using deterministic derivation
     for (_, proofs) in state.proofs.iter_mut() {
         let mut seen = std::collections::HashSet::new();
@@ -666,17 +674,28 @@ pub async fn clean_wallet_proofs(
             }
         }
 
-        // 4b. Remove any proofs with unknown keyset IDs on this mint
-        if let Ok(all_keysets) = client.fetch_keysets().await {
-            let active_keyset = client.fetch_keyset().await.ok();
+        
+        // 4b. Remove any proofs with unknown keyset IDs on this mint.
+        //     Only safe if we actually refreshed this mint's keyset list in
+        //     step 2 — otherwise the cache may be stale and "unknown" could
+        //     mean "known to the mint but missing from our cache", which
+        //     would silently destroy real proofs.
+        if !refreshed_mints.contains(&mint_url) {
+            tracing::warn!(
+                "Skipping unknown-keyset purge for {} — keyset cache not refreshed this run",
+                mint_url
+            );
+        } else if let Some(all_keysets) = state.trusted_keys.get(&mint_url).cloned() {
             if let Some(mint_proofs) = state.proofs.get_mut(&mint_url) {
                 let count_before = mint_proofs.len();
                 mint_proofs.retain(|p| {
-                    let known = all_keysets.iter().any(|ks| {
-                        ks.id == p.id
-                            || (p.id.starts_with("01") && ks.id.starts_with(&p.id))
-                            || (ks.id.starts_with("01") && p.id.starts_with(&ks.id))
-                    }) || active_keyset.as_ref().map(|k| k.id == p.id).unwrap_or(false);
+                    let pid = p.id.as_str();
+                    let known = all_keysets.contains_key(pid)
+                        || all_keysets.keys().any(|k| {
+                            let k = k.as_str();
+                            (pid.starts_with("01") && k.starts_with(pid))
+                                || (k.starts_with("01") && pid.starts_with(k))
+                        });
                     if !known {
                         total_removed += p.amount;
                         false
@@ -687,7 +706,11 @@ pub async fn clean_wallet_proofs(
                 let unknown_purged = count_before - mint_proofs.len();
                 if unknown_purged > 0 {
                     if let Some(tx) = &progress_tx {
-                        tx.send(format!("Purged {} fake/unknown keyset proof(s) on {}", unknown_purged, mint_url)).ok();
+                        tx.send(format!(
+                            "Purged {} fake/unknown keyset proof(s) on {}",
+                            unknown_purged, mint_url
+                        ))
+                        .ok();
                     }
                 }
             }

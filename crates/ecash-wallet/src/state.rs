@@ -3,6 +3,18 @@ use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use ecash_core::types::{Proof, Transaction};
 
+// ─── Keyset type aliases ──────────────────────────────────────────────────────
+
+/// One keyset: `amount -> compressed pubkey hex`.
+pub type KeysetKeys = HashMap<u64, String>;
+
+/// All keysets a mint serves: `keyset_id -> KeysetKeys`.
+pub type MintKeysets = HashMap<String, KeysetKeys>;
+
+/// Sentinel keyset ID under which keys migrated from the old flat wallet
+/// format are stored. Never a valid hex keyset ID, so it can't collide
+/// with a real one.
+pub const LEGACY_KEYSET_ID: &str = "__legacy__";
 
 // ─── Wallet State ─────────────────────────────────────────────────────────────
 
@@ -19,10 +31,20 @@ pub struct WalletState {
     pub proofs: HashMap<String, Vec<Proof>>,
     #[serde(default)]
     pub mints: Vec<String>,
-    /// Mint public keys cached from previous sessions, used for offline DLEQ verification.
-    /// Keyed by mint URL → (denomination → compressed pubkey hex).
-    #[serde(default)]
-    pub trusted_keys: HashMap<String, HashMap<u64, String>>,
+    /// Mint public keys cached from previous sessions, used for offline DLEQ
+    /// verification.
+    ///
+    /// Shape: `mint_url -> keyset_id -> (denomination -> compressed pubkey hex)`.
+    ///
+    /// The keyset-ID level is essential: `keysets[0]` from `/v1/keys` is *not*
+    /// guaranteed to be the keyset a given proof was signed under, and a mint
+    /// retains rotated-out keysets in that array. Without the ID, DLEQ
+    /// verification fails whenever the note uses a non-active keyset.
+    ///
+    /// Legacy wallets (pre-keyset-ID) are migrated on load by wrapping the old
+    /// flat map under `LEGACY_KEYSET_ID`.
+    #[serde(default, deserialize_with = "deserialize_trusted_keys")]
+    pub trusted_keys: HashMap<String, MintKeysets>,
     #[serde(default)]
     pub transactions: Vec<Transaction>,
     #[serde(default)]
@@ -124,8 +146,6 @@ impl WalletState {
         Err(anyhow!("Wallet appears to be unencrypted. Run `ecash migrate` to encrypt it."))
     }
 
-
-
     /// Load a legacy plaintext wallet (used only by `ecash migrate`).
     pub fn load_plaintext(path: &PathBuf) -> Result<Self> {
         let data = std::fs::read_to_string(path)
@@ -152,9 +172,13 @@ impl WalletState {
     }
 
     /// Cache public keys for a mint (persisted in wallet.json for offline verification).
-    pub fn cache_mint_keys(&mut self, url: &str, keys: HashMap<u64, String>) {
+    ///
+    /// `keysets` is the full `keyset_id -> (amount -> pk)` map, as returned by
+    /// fetching `/v1/keys`. Do **not** flatten it: the verifier needs the
+    /// per-keyset split to run DLEQ against each proof's own keyset.
+    pub fn cache_mint_keys(&mut self, url: &str, keysets: MintKeysets) {
         let clean_url = normalize_mint_url(url);
-        self.trusted_keys.insert(clean_url.clone(), keys);
+        self.trusted_keys.insert(clean_url.clone(), keysets);
         // Also ensure the mint is in our known mints list
         if !self.mints.contains(&clean_url) {
             self.mints.push(clean_url);
@@ -188,13 +212,14 @@ impl WalletState {
         let mut healed_count = 0;
 
         for (mint, proofs) in self.proofs.iter_mut() {
-            let keys_map = match self.trusted_keys.get(mint) {
+            let keysets = match self.trusted_keys.get(mint) {
                 Some(k) => k,
                 None => continue,
             };
 
             for p in proofs.iter_mut() {
-                let mint_pk_str = match keys_map.get(&p.amount) {
+                // Pick the mint pubkey that matches this proof's keyset ID.
+                let mint_pk_str = match lookup_pubkey(keysets, &p.id, p.amount) {
                     Some(k) => k,
                     None => continue,
                 };
@@ -275,7 +300,7 @@ impl WalletState {
         if balances.get(&mint_url).copied().unwrap_or(0) > 0 {
             return Err(anyhow::anyhow!("Cannot remove a mint with a non-zero balance"));
         }
-        
+
         self.mints.retain(|m| m != &mint_url);
         self.trusted_keys.remove(&mint_url);
         self.proofs.remove(&mint_url);
@@ -293,7 +318,7 @@ impl WalletState {
         }
         self.mints = new_mints;
 
-        // Lowercase trusted_keys
+        // Lowercase trusted_keys (only the outer key changes; inner keysets are untouched)
         let mut new_keys = HashMap::new();
         for (k, v) in self.trusted_keys.drain() {
             new_keys.insert(normalize_mint_url(&k), v);
@@ -307,7 +332,7 @@ impl WalletState {
             new_proofs.entry(key_lower).or_insert_with(Vec::new).extend(v);
         }
         self.proofs = new_proofs;
-        
+
         // Lowercase transactions
         for tx in &mut self.transactions {
             tx.mint_url = normalize_mint_url(&tx.mint_url);
@@ -338,16 +363,121 @@ impl WalletState {
     }
 }
 
+// ─── Keyset pubkey lookup ─────────────────────────────────────────────────────
+
+/// Resolve the mint pubkey that signed a proof.
+///
+/// Prefers the exact keyset named by `keyset_id`. Falls back to the sentinel
+/// `LEGACY_KEYSET_ID` bucket only — never guesses across real keysets, since
+/// that's exactly what caused the `DLEQ proof failed for proof 0` bug.
+fn lookup_pubkey<'a>(
+    keysets: &'a MintKeysets,
+    keyset_id: &str,
+    amount: u64,
+) -> Option<&'a String> {
+    if !keyset_id.is_empty() {
+        if let Some(pk) = keysets.get(keyset_id).and_then(|k| k.get(&amount)) {
+            return Some(pk);
+        }
+        // Keyset rotated out, or wallet migrated from flat shape. Fall back
+        // *only* to the migration sentinel — real keyset collisions stay
+        // unambiguous.
+        return keysets.get(LEGACY_KEYSET_ID).and_then(|k| k.get(&amount));
+    }
+    // Legacy proof with no keyset id: try sentinel first, then any keyset.
+    keysets
+        .get(LEGACY_KEYSET_ID)
+        .and_then(|k| k.get(&amount))
+        .or_else(|| keysets.values().find_map(|k| k.get(&amount)))
+}
+
+// ─── Trusted-keys migration ───────────────────────────────────────────────────
+
+/// Custom deserializer that accepts both the new
+/// `mint -> keyset_id -> (amt -> pk)` shape and the legacy
+/// `mint -> (amt -> pk)` shape.
+///
+/// Legacy maps are wrapped under `LEGACY_KEYSET_ID` so DLEQ verification
+/// can still look them up (via the fallback in `lookup_pubkey`) while keeping
+/// the new shape uniform. Users re-fetching keys from the mint on next verify
+/// replaces the sentinel bucket with real keyset IDs.
+fn deserialize_trusted_keys<'de, D>(
+    deserializer: D,
+) -> Result<HashMap<String, MintKeysets>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde_json::Value;
+
+    // Parse the field as loose JSON first. We can't use `#[serde(untagged)]`
+    // here because serde's untagged machinery buffers into `Content`, and
+    // `Content`'s deserializer refuses to coerce JSON object keys ("1") into
+    // u64 — which breaks both the new and legacy shapes (both contain
+    // HashMap<u64, String>). Parsing to Value sidesteps that: serde_json's
+    // own deserializer happily converts string keys to u64 when asked.
+    let raw: HashMap<String, Value> = match HashMap::deserialize(deserializer) {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!("trusted_keys: outer map failed to parse ({e}); resetting to empty");
+            return Ok(HashMap::new());
+        }
+    };
+
+    let mut out: HashMap<String, MintKeysets> = HashMap::new();
+    for (mint, val) in raw {
+        let Some(obj) = val.as_object() else {
+            tracing::warn!("trusted_keys[{}]: not a JSON object, skipping", mint);
+            continue;
+        };
+        if obj.is_empty() {
+            out.insert(mint, MintKeysets::new());
+            continue;
+        }
+
+        // New shape: { keyset_id: { "1": "pk", "2": "pk", ... } }
+        //   → every value is a JSON object
+        // Legacy shape: { "1": "pk", "2": "pk", ... }
+        //   → every value is a JSON string
+        let all_objects = obj.values().all(|v| v.is_object());
+        let all_strings = obj.values().all(|v| v.is_string());
+
+        if all_objects {
+            match serde_json::from_value::<MintKeysets>(val.clone()) {
+                Ok(ks) => {
+                    out.insert(mint, ks);
+                }
+                Err(e) => {
+                    tracing::warn!("trusted_keys[{}]: bad new-shape keysets ({e}), skipping", mint);
+                }
+            }
+        } else if all_strings {
+            match serde_json::from_value::<KeysetKeys>(val.clone()) {
+                Ok(flat) => {
+                    let mut wrapped = MintKeysets::new();
+                    wrapped.insert(LEGACY_KEYSET_ID.to_string(), flat);
+                    out.insert(mint, wrapped);
+                }
+                Err(e) => {
+                    tracing::warn!("trusted_keys[{}]: bad legacy keys ({e}), skipping", mint);
+                }
+            }
+        } else {
+            tracing::warn!("trusted_keys[{}]: mixed value shapes, skipping", mint);
+        }
+    }
+    Ok(out)
+}
+
 pub fn normalize_mint_url(url_str: &str) -> String {
     let clean = url_str.trim_end_matches('/');
-    
+
     // Automatically prepend https:// if no scheme is provided
     let with_scheme = if !clean.starts_with("http://") && !clean.starts_with("https://") {
         format!("https://{}", clean)
     } else {
         clean.to_string()
     };
-    
+
     if let Ok(parsed) = reqwest::Url::parse(&with_scheme) {
         parsed.to_string().trim_end_matches('/').to_string()
     } else {
@@ -497,5 +627,3 @@ pub fn decrypt_local_secret(nonce_hex: &str, ciphertext_hex: &str, context_key: 
         .map_err(|_| anyhow!("Decryption failed"))?;
     String::from_utf8(plaintext).context("Invalid UTF-8 in secret")
 }
-
-
