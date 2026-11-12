@@ -193,6 +193,34 @@ impl MintClient {
         }
         Ok(summaries)
     }
+    /// Fetch every keyset the mint serves, keyed by keyset ID.
+    
+    pub async fn fetch_all_keysets(&self)
+        -> anyhow::Result<std::collections::HashMap<String, std::collections::HashMap<u64, String>>>
+    {
+        let resp = self.http
+            .get(format!("{}/v1/keys", self.url.trim_end_matches('/')))
+            .send()
+            .await?
+            .error_for_status()?;
+        let v: serde_json::Value = resp.json().await?;
+        let arr = v["keysets"].as_array()
+            .ok_or_else(|| anyhow::anyhow!("mint returned no keysets array"))?;
+    
+        let mut out = std::collections::HashMap::new();
+        for ks in arr {
+            let Some(id) = ks["id"].as_str() else { continue };
+            let Some(keys_obj) = ks["keys"].as_object() else { continue };
+            let mut keys = std::collections::HashMap::new();
+            for (amt_str, pk) in keys_obj {
+                if let (Ok(amt), Some(pk_str)) = (amt_str.parse::<u64>(), pk.as_str()) {
+                    keys.insert(amt, pk_str.to_string());
+                }
+            }
+            out.insert(id.to_string(), keys);
+        }
+        Ok(out)
+    }
 
     pub async fn fetch_keyset_by_id(&self, keyset_id: &str) -> Result<KeysetInfo> {
         let mut actual_id = keyset_id.to_string();

@@ -129,18 +129,20 @@ pub async fn add_mint(mint_url: String, state: State<'_, AppState>) -> CommandRe
 
     // Try to fetch the keys to verify the mint is valid and responsive
     let client = ecash_wallet::client::MintClient::new(&mint_url);
-    let keys = client
+    let keyset = client
         .fetch_keyset()
         .await
-        .map_err(|e| CommandError(format!("Failed to connect to mint or fetch keys: {}", e)))?
-        .keys;
+        .map_err(|e| CommandError(format!("Failed to connect to mint or fetch keys: {}", e)))?;
 
     let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
     let w_state = wallet_guard.as_mut().unwrap();
     if w_state.mints.contains(&mint_url) {
         return Err(CommandError("Mint is already in the wallet".to_string()));
     }
-    w_state.cache_mint_keys(&mint_url, keys);
+    w_state.cache_mint_keys(
+        &mint_url,
+        std::collections::HashMap::from([(keyset.id, keyset.keys)]),
+    );
     w_state.save_encrypted(&path, &passphrase)?;
 
     Ok(())
