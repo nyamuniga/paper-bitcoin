@@ -29,7 +29,7 @@ use ecash_core::{
 #[derive(Default)]
 pub struct OfflineVerifier {
     trusted: HashMap<String, String>, // mint_url → friendly name
-    mint_keys: HashMap<String, HashMap<u64, String>>, // mint_url → (amount → pubkey)
+    mint_keys: HashMap<String, HashMap<String, HashMap<u64, String>>>,// mint_url → (amount → pubkey)
 }
 
 impl OfflineVerifier {
@@ -38,7 +38,7 @@ impl OfflineVerifier {
     }
 
     /// Trust a mint URL and load its public keys (simulating ESP32 factory provisioning).
-    pub fn trust_mint(&mut self, url: impl Into<String>, name: impl Into<String>, keys: HashMap<u64, String>) {
+    pub fn trust_mint(&mut self, url: impl Into<String>, name: impl Into<String>,keys: HashMap<String, HashMap<u64, String>>) {
         let u = url.into();
         self.trusted.insert(u.clone(), name.into());
         self.mint_keys.insert(u, keys);
@@ -46,9 +46,24 @@ impl OfflineVerifier {
 
     /// Load public keys for an untrusted mint so its DLEQ signatures can still be verified
     /// online without marking the mint as trusted.
-    pub fn add_untrusted_mint_keys(&mut self, url: impl Into<String>, keys: HashMap<u64, String>) {
+    pub fn add_untrusted_mint_keys(&mut self, url: impl Into<String>,keys: HashMap<String, HashMap<u64, String>>) {
         let u = url.into();
         self.mint_keys.insert(u, keys);
+    }
+
+    /// Resolve the mint pubkey that signed this proof.
+    ///
+    /// Prefers the proof's own keyset ID (NUT-02); falls back to "any keyset
+    /// that has this amount" for legacy proofs with no keyset ID.
+    fn pubkey_for(&self, mint: &str, keyset_id: &str, amount: u64) -> Option<&String> {
+        let keysets = self.mint_keys.get(mint)?;
+    
+        if !keyset_id.is_empty() {
+            return keysets.get(keyset_id)?.get(&amount);
+        }
+    
+        // Legacy: no keyset id on the proof.
+        keysets.values().find_map(|k| k.get(&amount))
     }
 
     /// Verify from a `PublicNoteData` JSON string (the public QR payload).
@@ -91,10 +106,7 @@ impl OfflineVerifier {
 
             // ── 3. DLEQ Verification (NUT-12) if keys are available ───────────
             if self.trusted.contains_key(&entry.mint) || self.mint_keys.contains_key(&entry.mint) {
-                let mint_key_map = match self.mint_keys.get(&entry.mint) {
-                    Some(m) => m,
-                    None => return VerificationResult::InvalidFormat { reason: format!("Trusted mint {} has no loaded keys", entry.mint) },
-                };
+                
                 for (i, proof) in entry.proofs.iter().enumerate() {
                     let c_prime = match &proof.c_prime {
                         Some(cp_hex) => match point_from_hex(cp_hex) {
@@ -105,9 +117,21 @@ impl OfflineVerifier {
                     };
                     
                     // Get the mint public key for this denomination
-                    let pubkey_hex = match mint_key_map.get(&proof.amount) {
+                    let pubkey_hex = match self.pubkey_for(&entry.mint, &proof.id, proof.amount) {
                         Some(pk) => pk,
-                        None => return VerificationResult::InvalidFormat { reason: format!("No known public key for denomination {}", proof.amount) },
+                        None => return VerificationResult::InvalidFormat {
+                            reason: if proof.id.is_empty() {
+                                format!(
+                                    "No keyset for mint {} has a key for amount {} (proof {})",
+                                    entry.mint, proof.amount, i
+                                )
+                            } else {
+                                format!(
+                                    "Mint {} no longer serves keyset {} (proof {}, amount {})",
+                                    entry.mint, proof.id, i, proof.amount
+                                )
+                            },
+                        },
                     };
                     let mint_pubkey = match point_from_hex(pubkey_hex) {
                         Ok(pk) => pk,
