@@ -167,11 +167,11 @@ impl TrustedMints {
 
 #[derive(Parser)]
 #[command(
-    name = "ecash",
-    version = "0.2.0",
-    about = "Physical Ecash — Chaumian blind-signature bearer notes on paper",
+    name = "bitnotes",
+    version,
+    about = "Bitnotes — Chaumian blind-signature bearer notes on paper",
     long_about = "\
-Physical Ecash implements the Cashu protocol to create tamper-evident paper \
+Bitnotes implements the Cashu protocol to create tamper-evident paper \
 notes that represent Bitcoin value. Notes can be verified offline and redeemed \
 via the Lightning Network.\n\
 \n\

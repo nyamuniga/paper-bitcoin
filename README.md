@@ -150,7 +150,7 @@ cargo run -p ecash-cli -- issue 1000
 | `ecash-wallet` | Multi-mint wallet client + proof management |
 | `ecash-encoder` | Physical note SVG generator (encodes block height + QR) |
 | `ecash-verifier` | Offline integrity & format verifier |
-| `ecash-cli` | End-to-end CLI (`ecash` binary) |
+| `ecash-cli` | End-to-end CLI (`bitnotes` binary) |
 | `cashu-app` | Native Tauri React frontend (Desktop/Mobile) with QR scanning |
 
 ## Security & Architecture Notes
