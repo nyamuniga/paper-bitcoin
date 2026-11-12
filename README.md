@@ -40,6 +40,12 @@ Physical eCash bridges the gap between the abstract Lightning Network and tangib
 
 Dollar holdings use a dollar-linked digital asset, not a bank deposit. Ecash depends on its issuing mint. See [security policy](SECURITY.md) for the trust boundaries and [release guide](RELEASING.md) for publishing prerequisites.
 
+## Installation
+
+**macOS (Homebrew)** — installs the `bitnotes` CLI binary:
+
+```bash
+brew install nyamuniga/tap/bitnotes
 ## Quick Start
 
 Use Node.js 24 (`nvm use`), stable Rust and [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/). The tracked public configuration builds without credentials; optional integrations are configured through the ignored `.env` file. Frontend environment values are visible in app bundles, so privileged credentials must stay on the backend.
