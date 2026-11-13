@@ -242,7 +242,7 @@ export const handleFulfillOrder = async (id?: string) => {
     store.updateTransactionById(currentTx.id, {currentPhase:AppPhase.PAYING_INVOICE});
 
     // A previous app session may already have paid/claimed this exact invoice.
-    const existing = await withDeadline(() => invoke<string>('check_transaction_status', {txId:currentTx!.mintQuoteId}), 10000);
+    const existing = await withDeadline(() => invoke<string>('check_transaction_status', {txId:currentTx!.mintQuoteId}), 20000);
     if (existing !== 'Success') {
       const { success, message } = await payLightningInvoice(currentTx.invoice!);
       if (!success) throw new Error(message || "Gateway failed to pay the Lightning invoice.");
@@ -252,12 +252,17 @@ export const handleFulfillOrder = async (id?: string) => {
 
     let mintSuccess = existing === 'Success';
     let mintErrMessage = "";
-    const mintDeadline = Date.now() + 30000;
+    // Was: 30 s total, 5 s/attempt, 15 attempts.
+    const MINT_MAX_ATTEMPTS = 20;
+    const mintDeadline = Date.now() + 90000;
 
-    for (let i = 0; i < 15 && !mintSuccess && Date.now() < mintDeadline; i++) {
+    for (let i = 0; i < MINT_MAX_ATTEMPTS && !mintSuccess && Date.now() < mintDeadline; i++) {
       try {
         await new Promise(resolve => setTimeout(resolve, 2000));
-        const status = await withDeadline(() => invoke<string>('check_transaction_status', { txId: currentTx!.mintQuoteId }), 5000);
+        const status = await withDeadline(
+          () => invoke<string>('check_transaction_status', { txId: currentTx!.mintQuoteId }),
+          20000 // was 5000
+        );
         if (status === 'Success') {
           mintSuccess = true;
           break;
@@ -345,10 +350,17 @@ export const startPaymentVerification = async (
       handlePollingResult(res.status, res.message);
       return;
     }
+  } catch (e) {
+    if (!isCurrent()) return;
+    // Was: give up → RECOVERY_REQUIRED. Now: fall through to polling —
+    // a single timeout on a bad link is not a real failure.
+    console.warn('Initial payment status check failed; continuing to poll:', e);
+  }
 
-    if (!pollingIntervalRef.current) {
-      const pollMomo = async () => {
-        if (!isCurrent()) return;
+  if (!pollingIntervalRef.current) {
+    const pollMomo = async () => {
+      if (!isCurrent()) return;
+      try {
         const tx = useTransactionStore.getState().activeTransaction;
         if (tx) {
           const { status, message } = await checkMomoPaymentStatus(tx.id);
@@ -358,14 +370,15 @@ export const startPaymentVerification = async (
             return; // stop polling
           }
         }
-        pollingIntervalRef.current = setTimeout(pollMomo, POLLING_INTERVAL_MS);
-      };
+      } catch (pollErr) {
+        // Was: uncaught → loop silently died and POLLING_TIMEOUT_MS
+        // then flagged a false RECOVERY_REQUIRED. Now: log and retry.
+        console.warn('Payment status poll failed; will retry:', pollErr);
+        if (!isCurrent()) return;
+      }
       pollingIntervalRef.current = setTimeout(pollMomo, POLLING_INTERVAL_MS);
-    }
-  } catch (e) {
-    if (!isCurrent()) return;
-    store.updateTransaction({currentPhase:AppPhase.RECOVERY_REQUIRED, recoveryMessage:'The payment status could not be confirmed. Check its status before trying another top-up.'});
-    return;
+    };
+    pollingIntervalRef.current = setTimeout(pollMomo, POLLING_INTERVAL_MS);
   }
 
   pollingTimeoutRef.current = setTimeout(() => {
@@ -578,14 +591,19 @@ export const initiateAndVerifyPayout = async (
     if (!pollingIntervalRef.current) {
       const pollPayout = async () => {
         if (!isCurrent()) return;
-        const tx = useTransactionStore.getState().activeTransaction;
-        if (tx) {
-          const { status, message } = await checkMomoPayoutStatus(tx.id);
-          if (!isCurrent()) return;
-          if (status === "SUCCESSFUL" || status === "FAILED") {
-            handlePollingResult(status, message);
-            return; // stop polling
+        try {
+          const tx = useTransactionStore.getState().activeTransaction;
+          if (tx) {
+            const { status, message } = await checkMomoPayoutStatus(tx.id);
+            if (!isCurrent()) return;
+            if (status === "SUCCESSFUL" || status === "FAILED") {
+              handlePollingResult(status, message);
+              return; // stop polling
+            }
           }
+        } catch (pollErr) {
+          console.warn('Payout status poll failed; will retry:', pollErr);
+          if (!isCurrent()) return;
         }
         pollingIntervalRef.current = setTimeout(pollPayout, POLLING_INTERVAL_MS);
       };
