@@ -690,8 +690,11 @@ pub async fn spark_prepare_mint_from_spark(
     if w_state.stable_operations.iter().any(|o| o.active()) {
         return Err(CommandError("A stable balance conversion is in progress.".into()));
     }
-    w_state.cache_mint_keys(&resolved_mint_url, keyset.keys);
-
+    
+    w_state.cache_mint_keys(
+        &resolved_mint_url,
+        std::collections::HashMap::from([(keyset.id.clone(), keyset.keys)]),
+    );
     let max_proof_idx = w_state
         .proofs
         .values()

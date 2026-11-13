@@ -147,7 +147,7 @@ pub async fn check_bolt11_mint_quote(
 
 pub async fn check_transaction_network(
     tx: &ecash_core::types::Transaction,
-    _trusted_keys: Option<&std::collections::HashMap<u64, String>>
+    _trusted_keys: Option<&std::collections::HashMap<String, std::collections::HashMap<u64, String>>>
 ) -> Result<TransactionDiff> {
     if tx.status != TransactionStatus::Pending {
         return Ok(TransactionDiff::NoChange);

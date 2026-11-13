@@ -56,8 +56,8 @@ export const AppUpdatePrompt: React.FC = () => {
         setUpdateInfo({
           hasUpdate: true,
           currentVersion: APP_VERSION,
-          latestVersion: '0.2.0',
-          releaseName: 'v0.2.0 - Major New Release',
+          latestVersion: '0.1.19',
+          releaseName: 'v0.1.19 - Major New Release',
           releaseNotes: 'New MoMo top up & cash out features, enhanced speed.',
           websiteUrl: 'https://bit-notes.com',
         });

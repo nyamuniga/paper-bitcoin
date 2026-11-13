@@ -1,11 +1,11 @@
 [package]
 name = "ecash-cli"
-version = "0.1.18"
+version = "0.1.20"
 edition = "2021"
 description = "Physical ecash command-line interface"
 
 [[bin]]
-name = "ecash"
+name = "bitnotes"
 path = "src/main.rs"
 
 [dependencies]
