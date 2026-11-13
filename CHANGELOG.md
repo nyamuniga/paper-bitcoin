@@ -2,7 +2,34 @@
 
 All notable changes to the Bitnotes / Physical Ecash project will be documented in this file.
 
-## Unreleased
+## [0.1.19] - 2026-11-13
+
+## Changed
+Raised Mobile Money HTTP timeouts for real-world 2G/3G links: connectTimeout 10s → 30s, whole-request deadline 30s → 60s. Existing receive_lightning, pay_invoice, and MoMo status calls inherit the new default.
+
+Mint confirmation now budgets 20s per status check (up from 5s) and 90s total (up from 30s), so a single slow tick no longer consumes the entire window.
+
+Pre-flight mint status check before invoice payment now uses a 20s deadline (up from 10s).
+
+MoMo polling tolerates transient failures and keeps retrying until the configured POLLING_TIMEOUT_MS budget expires, instead of aborting on the first error.
+
+Mobile Money submissions use a deterministic externalId derived from the transaction id (payment_<txId> / payout_<txId>), making retries idempotent on the backend.
+
+## Added
+
+Shared withRetries helper with exponential backoff and retryable-error classification, for idempotent payment-service reads. Not enabled for submissions pending backend dedupe confirmation.
+
+ProxyRequestError now carries a retryable flag; network resets, timeouts, 5xx, 408, and 429 are flagged retryable, while INVALID_ENCRYPTED_REQUEST and 4xx are permanently non-retryable.
+
+## Fixed
+
+A single status-check timeout during Mobile Money verification no longer surfaces a false "recovery required" state for transfers that already succeeded. The initial status check now falls through to the polling loop on failure, and the poll loops wrap each attempt so a transient exception cannot silently end polling.
+
+Definitive provider rejections from initiateMomoPaymentRequest and initiateMomoPayout (server returned status: 'failed' with a message) are now reported as submission: 'rejected' with retryable: false, instead of being collapsed into submission: 'unknown'. Users can retry immediately without being placed in recovery for what was a clean rejection.
+
+checkStatus now propagates a permanent flag on non-retryable ProxyRequestErrors (e.g. stale app credentials) so poll loops stop early and surface the specific message rather than spinning until POLLING_TIMEOUT_MS.
+
+------------------
 
 ## [0.1.18] - 2026-11-10
 

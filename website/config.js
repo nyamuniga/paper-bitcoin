@@ -1,6 +1,6 @@
 window.ENV = {
     // Update this link whenever there is a new release.
     // The HTML will automatically extract the version number (e.g., v0.1.10) from this URL.
-    APK_LINK: "https://github.com/nyamuniga/paper-bitcoin/releases/download/v0.1.18/bitnotes-android-wallet-v0.1.18.apk",
-    MAC_LINK: "https://github.com/nyamuniga/paper-bitcoin/releases/download/v0.1.18/bitnotes_0.1.18_aarch64.dmg"
+    APK_LINK: "https://github.com/nyamuniga/paper-bitcoin/releases/download/v0.1.19/bitnotes-android-wallet-v0.1.19.apk",
+    MAC_LINK: "https://github.com/nyamuniga/paper-bitcoin/releases/download/v0.1.19/bitnotes_0.1.19_aarch64.dmg"
 };
