@@ -136,7 +136,8 @@ mod ui {
 
 #[derive(Default, Serialize, Deserialize)]
 struct TrustedMints {
-    pub keys: HashMap<String, HashMap<u64, String>>,
+    
+    pub keys: HashMap<String, HashMap<String, HashMap<u64, String>>>,
 }
 
 impl TrustedMints {
@@ -167,11 +168,11 @@ impl TrustedMints {
 
 #[derive(Parser)]
 #[command(
-    name = "ecash",
-    version = "0.2.0",
-    about = "Physical Ecash — Chaumian blind-signature bearer notes on paper",
+    name = "bitnotes",
+    version,
+    about = "Bitnotes — Chaumian blind-signature bearer notes on paper",
     long_about = "\
-Physical Ecash implements the Cashu protocol to create tamper-evident paper \
+Bitnotes implements the Cashu protocol to create tamper-evident paper \
 notes that represent Bitcoin value. Notes can be verified offline and redeemed \
 via the Lightning Network.\n\
 \n\
@@ -534,30 +535,57 @@ async fn cmd_verify(_mint_url: &str, payload: &str) -> Result<()> {
 
     for entry in &pub_data.entries {
         let mint = &entry.mint;
-
-        if let Some(keys) = trusted_mints.keys.get(mint) {
-            verifier.trust_mint(mint, "Mint", keys.clone());
-        } else {
-            println!("Mint {} is not in your trusted list.", mint);
-            let options = vec![
-                "Trust permanently (fetches and saves keys)",
-                "Allow temporarily (fetches keys for this verification only)",
-                "Reject (skip verification for this mint)"
-            ];
-            let choice = Select::new("What would you like to do?", options).prompt();
-
-            if let Ok(choice) = choice {
-                if choice.starts_with("Trust") || choice.starts_with("Allow") {
-                    if let Some(keys) = fetch_mint_keys(mint).await {
-                        verifier.trust_mint(mint, "Mint", keys.clone());
-                        if choice.starts_with("Trust") {
-                            trusted_mints.keys.insert(mint.to_string(), keys);
-                            modified_trusted_mints = true;
+    
+        // The keyset IDs that this note's proofs actually reference.
+        let needed_ids: std::collections::HashSet<&String> =
+            entry.proofs.iter().map(|p| &p.id).collect();
+    
+        // Cache-or-fetch the full keyset map for this mint.
+        let ks_map: Option<HashMap<String, HashMap<u64, String>>> =
+            if let Some(cached) = trusted_mints.keys.get(mint) {
+                Some(cached.clone())
+            } else {
+                println!("Mint {} is not in your trusted list.", mint);
+                let options = vec![
+                    "Trust permanently (fetches and saves keys)",
+                    "Allow temporarily (fetches keys for this verification only)",
+                    "Reject (skip verification for this mint)",
+                ];
+                let choice = Select::new("What would you like to do?", options).prompt();
+    
+                match choice {
+                    Ok(c) if c.starts_with("Trust") || c.starts_with("Allow") => {
+                        match fetch_mint_keys(mint).await {
+                            Some(fetched) => {
+                                if c.starts_with("Trust") {
+                                    trusted_mints.keys.insert(mint.to_string(), fetched.clone());
+                                    modified_trusted_mints = true;
+                                }
+                                Some(fetched)
+                            }
+                            None => {
+                                println!("Could not fetch keys from {}. Mint might be offline.", mint);
+                                None
+                            }
                         }
-                    } else {
-                        println!("Could not fetch keys from {}. Mint might be offline.", mint);
                     }
+                    _ => None,
                 }
+            };
+    
+        if let Some(ks_map) = ks_map {
+            // Warn if the mint no longer serves a keyset the note references.
+            let missing: Vec<&&String> =
+                needed_ids.iter().filter(|id| !ks_map.contains_key(**id)).collect();
+            if !missing.is_empty() {
+                println!(
+                    "Warning: mint {} no longer serves keyset(s) {:?}; some proofs cannot be verified.",
+                    mint, missing
+                );
+            }
+    
+            if !ks_map.is_empty() {
+                verifier.trust_mint(mint.clone(), "Mint", ks_map);
             }
         }
     }
@@ -1142,23 +1170,32 @@ async fn cmd_interactive(wallet_path: &PathBuf, default_mint: &str) -> Result<()
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
-async fn fetch_mint_keys(url: &str) -> Option<std::collections::HashMap<u64, String>> {
+async fn fetch_mint_keys(url: &str)
+    -> Option<std::collections::HashMap<String, std::collections::HashMap<u64, String>>>
+{
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(4))
-        .build()
-        .ok()?;
-    let res = client.get(format!("{}/v1/keys", url.trim_end_matches('/'))).send().await.ok()?;
+        .build().ok()?;
+    let res = client
+        .get(format!("{}/v1/keys", url.trim_end_matches('/')))
+        .send().await.ok()?;
     let v: serde_json::Value = res.json().await.ok()?;
-    let ks = &v["keysets"][0];
-    let mut keys = std::collections::HashMap::new();
-    for (amt_str, pk) in ks["keys"].as_object()? {
-        if let Ok(amt) = amt_str.parse() {
-            keys.insert(amt, pk.as_str()?.to_string());
-        }
-    }
-    Some(keys)
-}
 
+    let arr = v["keysets"].as_array()?;
+    let mut out = std::collections::HashMap::new();
+
+    for ks in arr {
+        let id = ks["id"].as_str()?.to_string();
+        let mut keys = std::collections::HashMap::new();
+        for (amt_str, pk) in ks["keys"].as_object()? {
+            if let (Ok(amt), Some(pk_str)) = (amt_str.parse::<u64>(), pk.as_str()) {
+                keys.insert(amt, pk_str.to_string());
+            }
+        }
+        out.insert(id, keys);
+    }
+    Some(out)
+}
 pub fn decode_qr_payload(payload: &str) -> anyhow::Result<Vec<u8>> {
     use std::io::Read;
     use base64::Engine;

@@ -7,9 +7,11 @@ fn create_valid_note(mint_url: &str) -> (OfflineVerifier, PublicNoteData) {
     let mut verifier = OfflineVerifier::new();
     let mint_key = MintKeypair::generate();
     
-    let mut keys = HashMap::new();
-    keys.insert(64, mint_key.public_key_hex());
-    verifier.trust_mint(mint_url, "Test Mint", keys);
+    let mut keys = std::collections::HashMap::new();
+    keys.insert(64u64, mint_key.public_key_hex());
+    let mut keysets = std::collections::HashMap::new();
+    keysets.insert("<keyset_id>".to_string(), keys);
+    verifier.trust_mint(mint_url, "Test Mint", keysets);
 
     let session = BlindingSession::new("test-secret");
     let (c_prime, dleq) = mint_key.blind_sign_with_dleq(&session.b_prime);
@@ -118,9 +120,12 @@ fn test_verify_untrusted_with_online_keys_and_forged_face_value() {
     };
 
     let mut verifier = OfflineVerifier::new();
-    let mut keys = HashMap::new();
-    keys.insert(64, mint_key.public_key_hex());
-    verifier.add_untrusted_mint_keys(url, keys);
+    let mut keys = std::collections::HashMap::new();
+    keys.insert(64u64, mint_key.public_key_hex());
+    let mut keysets = std::collections::HashMap::new();
+    keysets.insert("<keyset_id>".to_string(), keys);
+    verifier.add_untrusted_mint_keys(url, keysets);
+    
 
     // Untrusted mint with valid DLEQ must still be ValidUntrusted
     match verifier.verify(&note) {

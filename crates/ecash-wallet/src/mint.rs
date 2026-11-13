@@ -79,7 +79,7 @@ pub async fn prepare_issue_multimint_note(
     let (hub_qid, hub_inv) = hub_client.request_mint_quote(total_hub_needed).await?;
 
     let hub_keyset = hub_client.fetch_keyset().await?;
-    state.trusted_keys.insert(hub_mint.to_string(), hub_keyset.keys.clone());
+    
     let (mut note_deriv, note_seed_hex) = TokenDerivation::generate();
 
     let mut hub_denoms = ecash_core::types::split_into_powers_of_2(actual_allocations[0].1);
@@ -119,6 +119,10 @@ pub async fn prepare_issue_multimint_note(
         timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
         mint_url: "Local Wallet".to_string(),
     };
+    state.cache_mint_keys(
+        hub_mint,
+        std::collections::HashMap::from([(hub_keyset.id.clone(), hub_keyset.keys.clone())]),
+    );
     state.transactions.push(pending_tx);
     state.save_encrypted(wallet_path, passphrase)?;
 
@@ -171,6 +175,10 @@ pub async fn resume_issue_note(
     }
 
     let hub_keyset = hub_client.fetch_keyset().await?;
+    state.cache_mint_keys(
+        &issue_data.hub_mint,
+        std::collections::HashMap::from([(hub_keyset.id.clone(), hub_keyset.keys.clone())]),
+    );
     let sigs = match hub_client.mint_tokens(&issue_data.quote_id, issue_data.hub_outputs.clone()).await {
         Ok(s) => s,
         Err(e) => return Err(anyhow!("Mint error on Hub, but your payment is safe. Go to History to retry minting. Error: {}", e)),
@@ -316,7 +324,9 @@ pub async fn resume_issue_note(
                 proof.derivation_index = index;
                 b_proofs.push(proof);
             }
-            Ok::<_, (String, anyhow::Error)>((tx_id_melt, mint_clone, keyset.keys, b_proofs))
+            let final_keysets =
+                std::collections::HashMap::from([(keyset.id.clone(), keyset.keys.clone())]);
+            Ok::<_, (String, anyhow::Error)>((tx_id_melt, mint_clone, final_keysets, b_proofs))
         });
     }
 
@@ -327,12 +337,11 @@ pub async fn resume_issue_note(
         match res {
             Ok((tx_id_melt, mint, keys, b_proofs)) => {
                 if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id_melt) {
-                    tx.status = TransactionStatus::Success;
-                }
-                state.trusted_keys.insert(mint.clone(), keys);
-                state.proofs.entry(mint.clone()).or_default().extend(b_proofs.clone());
-                if !state.mints.contains(&mint) { state.mints.push(mint.clone()); }
-                entries.push(TokenEntry { mint, proofs: b_proofs });
+                        tx.status = TransactionStatus::Success;
+                    }
+                    state.cache_mint_keys(&mint, keys);
+                    state.proofs.entry(mint.clone()).or_default().extend(b_proofs.clone());
+                    entries.push(TokenEntry { mint, proofs: b_proofs });
             }
             Err((_tx_id_melt, e)) => {
                 return Err(anyhow!("Concurrent issuance failed: {}", e));
