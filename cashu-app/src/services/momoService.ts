@@ -2,7 +2,7 @@ import { Encryption } from '../utils/encryption';
 
 import { requestProxyJson, ProxyRequestError } from './proxyRequest';
 
-import { MOMO_API_BASE_URL } from '../constants';
+import { MOMO_API_BASE_URL } from '../constants.local';
 
 export const initiateMomoPaymentRequest = async (
   txId: string,

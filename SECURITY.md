@@ -8,7 +8,7 @@ Use [GitHub private vulnerability reporting](https://github.com/nyamuniga/paper-
 
 ## Source and builds
 
-- `.env`, local constants, signing material, bearer-note outputs and wallet backups must stay outside public version control. `env.example` contains blank credential fields and public defaults only.
+- `.env`, local constants, signing material, bearer-note outputs and wallet backups must stay outside public version control. `constants.example.ts` lists configuration fields without any values.
 - Frontend environment values are visible in distributed JavaScript/native bundles. A proxy transit key does not provide server-side authorization. Keep privileged provider secrets on the backend and apply the provider's client-key restrictions where available.
 - Wallet material is encrypted locally. Development debug logs must not print keys, proofs, authorization headers, full payment responses or phone numbers. CLI commands that explicitly display/export wallet material should only be used in a private terminal.
 - Keep native/web dependencies and their lockfiles current. Run the npm and RustSec audits in the [release guide](RELEASING.md). An unresolved advisory is a release decision requiring documented assessment, not an automatic ignore entry.

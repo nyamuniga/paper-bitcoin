@@ -6,7 +6,7 @@ const stub = source => 'data:text/javascript,' + encodeURIComponent(source);
 registerHooks({resolve(specifier, context, next) {
   if (context.parentURL === url) {
     if (specifier === '@tauri-apps/plugin-http') return {url:stub('export const fetch=(...args)=>globalThis.__currencyFetch(...args);'),shortCircuit:true};
-    if (specifier === '../constants') return {url:stub('export const EXCHANGE_RATE_API_URL="https://ticker.example",SATS_PER_BTC=100000000,SPREAD=0.01,RWF_USD_PEG=1500;'),shortCircuit:true};
+    if (specifier === '../constants.local') return {url:stub('export const EXCHANGE_RATE_API_URL="https://ticker.example",SATS_PER_BTC=100000000,SPREAD=0.01,RWF_USD_PEG=1500;'),shortCircuit:true};
   }
   return next(specifier,context);
 }});

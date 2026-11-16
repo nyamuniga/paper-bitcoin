@@ -8,11 +8,11 @@ Use Node.js 24 and stable Rust, plus the [Tauri platform prerequisites](https://
 
 ```sh
 npm ci
-cp env.example .env
+cp src/constants.example.ts src/constants.local.ts
 npm run tauri dev
 ```
 
-The tracked `src/constants.ts` contains public defaults. A clean clone builds without credentials. Configure optional integrations in the ignored `.env`; `constants.local.ts` is no longer imported. Breez/Spark operations need your own client API key. Mobile Money additionally needs a compatible payment backend and its configured transit key. Missing optional configuration should not be replaced with somebody else's credentials.
+The app imports the ignored `src/constants.local.ts`. Copy `src/constants.example.ts` once during setup, then configure your deployment in the local file. Uncomment and fill its fields locally before building; keep every field blank in the tracked template. Breez/Spark operations need your own client API key. Mobile Money additionally needs a compatible payment backend and its configured transit key. Missing optional configuration should not be replaced with somebody else's credentials.
 
 Frontend environment values, including SDK client keys and transit keys, are extractable from distributed builds. Keep privileged provider credentials and authorization on the backend. See [security policy](../SECURITY.md).
 
@@ -26,7 +26,7 @@ npm run check:release
 npm run build
 ```
 
-From the repository root, also run `cargo test --workspace --locked` and `cargo audit`. CI builds with public defaults and no private `.env`.
+From the repository root, also run `cargo test --workspace --locked` and `cargo audit`. CI generates synthetic values from the blank template for build checks, without deployment credentials.
 
 - [Dollar conversions and recovery](STABLE_BALANCE.md)
 - [QR ecash invoices and persistence](ECASH_PAYMENTS.md)

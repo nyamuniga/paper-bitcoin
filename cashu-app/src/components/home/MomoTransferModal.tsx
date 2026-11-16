@@ -8,7 +8,7 @@ import type { MomoReview } from '../../services/momoReview';
 import './MomoPages.css';
 import { AppPhase } from '../../types/momo';
 import { calculateQuote, calculateSendQuote, fetchCurrentRate, fetchProxyBlinkBalance, checkMomoRecovery } from '../../services/flowServices';
-import { MOMO_WITHDRAWAL_FIXED_FEE, ECASH_LIGHTNING_FEE, SPREAD } from '../../constants';
+import { MOMO_WITHDRAWAL_FIXED_FEE, ECASH_LIGHTNING_FEE, SPREAD } from '../../constants.local';
 import { useWalletStore } from '../../store/wallet';
 import { useTransactionStore } from '../../store/transactionStore';
 import { useAddressBookStore } from '../../store/addressBookStore';
