@@ -126,7 +126,7 @@ export async function getSparkSdk(): Promise<BreezSdk> {
       const resolvedApiKey = (cfg.api_key || BREEZ_API_KEY || '').trim();
       if (!resolvedApiKey) {
         throw new Error(
-          'Missing Breez API key. Please set BREEZE_API_KEY or BREEZ_API_KEY in your .env file.'
+          'Missing Breez API key. Please set BREEZ_API_KEY in constants.local.ts.'
         );
       }
 
