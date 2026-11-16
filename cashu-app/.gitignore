@@ -26,4 +26,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Public setup defaults live in env.example; all .env files stay private.
+# Copy src/constants.example.ts to src/constants.local.ts for local setup.
+/src/constants.ts
+/src/constants.local.ts

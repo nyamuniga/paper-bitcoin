@@ -12,7 +12,7 @@ import {
   deriveKeypairFromPrivateKey,
   fetchNpubCashUser,
 } from '../services/nostrService';
-import { NPUB_DOMAIN } from '../constants';
+import { NPUB_DOMAIN } from '../constants.local';
 import { toast } from 'react-hot-toast';
 
 const CLAIM_INTERVAL_MS = 60_000; // Poll every 60 seconds

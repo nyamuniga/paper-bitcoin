@@ -40,6 +40,15 @@ jobs:
       - name: Install locked dependencies
         working-directory: cashu-app
         run: npm ci
+      - name: Generate synthetic configuration for build checks
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const template = fs.readFileSync('cashu-app/src/constants.example.ts', 'utf8');
+          const fixture = template.replace(/^\/\/ (export const \w+: )(string|number) = ;$/gm,
+            (_, declaration, type) => `${declaration}${type} = ${type === 'number' ? '1' : "''"};`);
+          fs.writeFileSync('cashu-app/src/constants.local.ts', fixture);
+          NODE
       - name: Check public release files and versions
         working-directory: cashu-app
         run: npm run check:release -- --history
@@ -49,7 +58,7 @@ jobs:
       - name: Audit JavaScript dependencies
         working-directory: cashu-app
         run: npm audit --audit-level=high
-      - name: Build without private configuration
+      - name: Build with synthetic configuration
         working-directory: cashu-app
         run: npm run build
 

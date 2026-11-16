@@ -58,3 +58,7 @@ wallet*.bak
 *.bak
 *.orig
 *.rej
+
+# Deployment constants stay local; only constants.example.ts is public.
+/cashu-app/src/constants.ts
+/cashu-app/src/constants.local.ts

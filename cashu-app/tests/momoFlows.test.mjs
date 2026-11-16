@@ -18,7 +18,7 @@ registerHooks({resolve(specifier, context, next) {
     if (specifier === '../store/addressBookStore') return stub('export const useAddressBookStore={getState:()=>({recordSuccessfulUse:()=>{}})};');
     if (specifier === '@tauri-apps/api/core') return stub('export const invoke=(...a)=>globalThis.__momo.invoke(...a);');
     if (specifier === '@tauri-apps/plugin-http') return stub('export const fetch=async()=>({ok:true,json:async()=>({USD:{last:100000}})});');
-    if (specifier === '../constants') return stub('export const EXCHANGE_RATE_API_URL="https://rate.example", SATS_PER_BTC=1e8, SPREAD=0.021, MOMO_WITHDRAWAL_FIXED_FEE=120, ECASH_LIGHTNING_FEE=10, RWF_USD_PEG=1400, POLLING_INTERVAL_MS=5000, POLLING_TIMEOUT_MS=120000, MOMO_API_BASE_URL="https://proxy.example";');
+    if (specifier === '../constants.local') return stub('export const EXCHANGE_RATE_API_URL="https://rate.example", SATS_PER_BTC=1e8, SPREAD=0.021, MOMO_WITHDRAWAL_FIXED_FEE=120, ECASH_LIGHTNING_FEE=10, RWF_USD_PEG=1400, POLLING_INTERVAL_MS=5000, POLLING_TIMEOUT_MS=120000, MOMO_API_BASE_URL="https://proxy.example";');
   }
   if (context.parentURL?.includes('/src/') && specifier.startsWith('.')) return next(new URL(specifier+'.ts',context.parentURL).href,context);
   return next(specifier,context);

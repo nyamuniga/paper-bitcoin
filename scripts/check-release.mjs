@@ -46,7 +46,7 @@ for (const [rust, javascript] of tauriPairs) {
 
 // Check the proposed public tree, including tracked files that someone forced past .gitignore.
 const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], {cwd: root, encoding: 'utf8'}).split('\0').filter(Boolean);
-const prohibited = /(?:^|\/)(?:credentials|keystores?|notes|new-notes|newnotes|demo-notes|node_modules|dist|target)(?:\/|$)|(?:^|\/)\.env(?:\..*)?$|(?:^|\/)wallet[^/]*\.(?:json|bak)$|\.(?:jks|keystore|pem|key|p12|pfx|mobileprovision|apk|aab|dmg|ipa|log|bak|orig|rej)$|(?:^|\/)(?:key|keystore)\.properties$|\.local(?:\.ts)?$/i;
+const prohibited = /(?:^|\/)constants\.ts$|(?:^|\/)(?:credentials|keystores?|notes|new-notes|newnotes|demo-notes|node_modules|dist|target)(?:\/|$)|(?:^|\/)\.env(?:\..*)?$|(?:^|\/)wallet[^/]*\.(?:json|bak)$|\.(?:jks|keystore|pem|key|p12|pfx|mobileprovision|apk|aab|dmg|ipa|log|bak|orig|rej)$|(?:^|\/)(?:key|keystore)\.properties$|\.local(?:\.ts)?$/i;
 const secrets = [
   ['private key', /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/],
   ['GitHub credential', /(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{50,})/],
@@ -54,9 +54,18 @@ const secrets = [
   ['Nostr private key', /nsec1[023456789acdefghjklmnpqrstuvwxyz]{58}/],
 ];
 const localSecrets = new Set();
-for (const file of ['.env', 'cashu-app/.env', 'cashu-app/src-tauri/.env']) {
+for (const file of ['.env', 'cashu-app/.env', 'cashu-app/src-tauri/.env', 'cashu-app/src/constants.local.ts']) {
   if (!fs.existsSync(path.join(root, file))) continue;
-  for (const line of read(file).split('\n')) {
+  const content = read(file);
+  if (file.endsWith('.ts')) {
+    for (const field of content.matchAll(/export\s+const\s+(\w*(?:KEY|PASSWORD|SECRET)\w*)[^=]*=([^;]*);/g)) {
+      for (const literal of field[2].matchAll(/(['"])(.*?)\1/g)) {
+        if (literal[2].length >= 16 && !/^(?:https?:|your_|example)/i.test(literal[2])) localSecrets.add(literal[2]);
+      }
+    }
+    continue;
+  }
+  for (const line of content.split('\n')) {
     const match = /^\s*(?:export\s+)?(\w+)\s*=\s*(.*?)\s*$/.exec(line);
     if (!match || !/(?:KEY|PASSWORD|SECRET)/i.test(match[1])) continue;
     const value = match[2].replace(/^["']|["']$/g, '');
@@ -77,10 +86,16 @@ for (const file of new Set(files)) {
       if (field && /KEY|PASSWORD|SECRET/i.test(field[1])) assert(field[2] === '' || field[2] === '""' || field[2] === "''", `${file}: credential fields in public templates must be blank.`);
     }
   }
+  if (file.endsWith('/constants.example.ts')) {
+    for (const line of text.split('\n')) {
+      if (/\bexport\s+const\b/.test(line)) {
+        assert(/^\/\/ export const \w+: (?:string|number) = ;$/.test(line), `${file}: configuration fields in public templates must be blank.`);
+      }
+    }
+  }
   for (const [name, rule] of secrets) assert(!rule.test(text), `${file}: possible ${name}; value withheld.`);
   for (const secret of localSecrets) assert(!text.includes(secret), `${file}: contains a locally configured credential; value withheld.`);
   if (file.startsWith('cashu-app/src/') && /\.tsx?$/.test(file)) {
-    assert(!/from\s+['"][^'"]*constants\.local['"]/.test(text), `${file}: depends on private local configuration.`);
     assert(!/console\.(?:log|debug)\s*\(/.test(text), `${file}: remove production debug logging.`);
   }
   // The CLI intentionally offers explicit wallet-key display/export commands.
