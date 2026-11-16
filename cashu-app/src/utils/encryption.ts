@@ -1,12 +1,12 @@
 import CryptoJS from 'crypto-js';
 import { ENCRYPTION_KEY } from '../constants.local';
 
-// Get the encryption key from environment variables
+// Read the proxy transit key from the private deployment configuration.
 
 export class Encryption {
   private static getKey(): CryptoJS.lib.WordArray {
     if (!ENCRYPTION_KEY) {
-      throw new Error('VITE_ENCRYPTION_KEY is not configured');
+      throw new Error('ENCRYPTION_KEY is not configured in constants.local.ts');
     }
     return CryptoJS.enc.Base64.parse(ENCRYPTION_KEY);
   }
