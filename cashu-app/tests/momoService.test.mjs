@@ -6,7 +6,7 @@ const stub=code=>({url:'data:text/javascript,'+encodeURIComponent(code),shortCir
 registerHooks({resolve(specifier,context,next){
   if(context.parentURL===source){
     if(specifier==='../utils/encryption')return stub('export const Encryption={encrypt:async()=>({encrypted:"fixture",iv:"fixture",hmac:"fixture",timestamp:1})};');
-    if(specifier==='../constants')return stub('export const MOMO_API_BASE_URL="https://proxy.example";');
+    if(specifier==='../constants.local')return stub('export const MOMO_API_BASE_URL="https://proxy.example";');
     if(specifier==='./proxyRequest')return next(new URL('../src/services/proxyRequest.ts',import.meta.url).href,context);
   }
   if(context.parentURL?.endsWith('/proxyRequest.ts')&&specifier==='@tauri-apps/plugin-http')return stub('export const fetch=(...a)=>globalThis.__momoFetch(...a);');

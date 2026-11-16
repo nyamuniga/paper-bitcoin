@@ -42,7 +42,7 @@ Dollar holdings use a dollar-linked digital asset, not a bank deposit. Ecash dep
 
 ## Quick Start
 
-Use Node.js 24 (`nvm use`), stable Rust and [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/). The tracked public configuration builds without credentials; optional integrations are configured through the ignored `.env` file. Frontend environment values are visible in app bundles, so privileged credentials must stay on the backend.
+Use Node.js 24 (`nvm use`), stable Rust and [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/). Copy the public constants template to the ignored `constants.local.ts` file and configure optional integrations there. Uncomment and fill the template fields locally before building. Frontend environment values are visible in app bundles, so privileged credentials must stay on the backend.
 
 You can run the system purely from the command line, or use the modern Tauri desktop/mobile app.
 
@@ -51,7 +51,7 @@ You can run the system purely from the command line, or use the modern Tauri des
 ```bash
 cd cashu-app
 npm ci
-cp env.example .env
+cp src/constants.example.ts src/constants.local.ts
 npm run tauri dev
 ```
 

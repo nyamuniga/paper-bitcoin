@@ -4,7 +4,7 @@ import {
   SATS_PER_BTC,
   SPREAD,
   RWF_USD_PEG,
-} from '../constants';
+} from '../constants.local';
 
 export interface CurrencyMeta {
   code: string;

@@ -9,12 +9,12 @@ Install stable Rust and [Tauri's platform prerequisites](https://v2.tauri.app/st
 ```sh
 nvm use
 npm --prefix cashu-app ci
-cp cashu-app/env.example cashu-app/.env
+cp cashu-app/src/constants.example.ts cashu-app/src/constants.local.ts
 cd cashu-app
 npm run tauri dev
 ```
 
-The tracked `src/constants.ts` builds with public defaults. Optional integrations can be configured in `.env`; no private constants file or real credentials are required to compile. `npm run dev` previews browser UI, but wallet/storage/payment commands require Tauri or mocks.
+The app imports the ignored `src/constants.local.ts`. Copy the public template once during setup and configure optional integrations in your local file. Uncomment and fill its fields locally before building. `npm run dev` previews browser UI, but wallet/storage/payment commands require Tauri or mocks.
 
 ## Checks
 
@@ -36,3 +36,7 @@ Keep changes focused and preserve existing wallet schemas and journals. Describe
 Do not commit `.env`, keystores, credentials, private keys, wallet files, physical-note output, release binaries or logs. Do not paste these into issues either. The release check validates both tracked and new publishable files, including private paths forced past `.gitignore`. Review the staged diff yourself before pushing.
 
 Versions must agree across npm, Tauri, Rust crates and website links; follow [RELEASING.md](RELEASING.md). Website changes are plain HTML/CSS/JS under `website/`, with download URLs in `website/config.js`.
+
+## After a configuration history cleanup
+
+Use a fresh clone after maintainers publish rewritten history. Preserve your ignored `cashu-app/src/constants.local.ts` and other local work privately before moving to the new clone. Reapply only reviewed source changes; never copy private configuration into a commit. Do not merge or push branches or tags from the old clone, because they can restore the removed history. Fork owners must clean up their own copies too.

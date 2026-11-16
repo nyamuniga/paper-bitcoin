@@ -2,7 +2,7 @@ import { Encryption } from '../utils/encryption';
 
 import { requestProxyJson } from './proxyRequest';
 
-import { LIGHTNING_API_ENDPOINT } from '../constants';
+import { LIGHTNING_API_ENDPOINT } from '../constants.local';
 
 let btcWalletId: string | null = null;
 

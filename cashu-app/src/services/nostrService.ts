@@ -1,7 +1,7 @@
 import { fetch } from '@tauri-apps/plugin-http';
 import { HDKey } from '@scure/bip32';
 import { getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
-import { NPUB_CASH_API_URL, NOSTR_DERIVATION_PATH, NPUB_DOMAIN, NPUB_CASH_BACKEND_URL } from '../constants';
+import { NPUB_CASH_API_URL, NOSTR_DERIVATION_PATH, NPUB_DOMAIN, NPUB_CASH_BACKEND_URL } from '../constants.local';
 
 // Utility for hex
 const hexToBytes = (hex: string): Uint8Array => {

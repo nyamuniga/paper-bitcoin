@@ -6,7 +6,7 @@ import initBreezSDK, {
   type SdkEvent,
   type PrepareSendPaymentResponse,
 } from '@breeztech/breez-sdk-spark/web';
-import { BREEZ_API_KEY } from '../constants';
+import { BREEZ_API_KEY } from '../constants.local';
 import { guardConversionPayments } from './conversionSpendGuard';
 import { withSparkBalanceLock } from './sparkBalanceLock';
 
@@ -128,7 +128,7 @@ export async function getSparkSdk(): Promise<BreezSdk> {
       const resolvedApiKey = (cfg.api_key || BREEZ_API_KEY || '').trim();
       if (!resolvedApiKey) {
         throw new Error(
-          'Missing Breez API key. Please set BREEZE_API_KEY or BREEZ_API_KEY in your .env file.'
+          'Missing Breez API key. Please set BREEZ_API_KEY in constants.local.ts.'
         );
       }
 

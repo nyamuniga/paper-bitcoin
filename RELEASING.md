@@ -4,7 +4,7 @@ The prepared release is **0.1.17**. Read [the current verification report](RELEA
 
 ## Public source boundary
 
-Commit application source, tests, documentation, `cashu-app/env.example`, `cashu-app/src/constants.ts`, both dependency lockfiles, and the maintained Android project sources. Do not commit `.env`, `constants.local.ts`, wallet databases/backups, generated physical notes, signing credentials, keystores, build directories, diagnostic logs, or release binaries. The ignore rules protect these paths; `npm run check:release` also checks tracked files forced past the ignore rules and compares known local credentials without printing them.
+Commit application source, tests, documentation, `cashu-app/src/constants.example.ts`, both dependency lockfiles, and the maintained Android project sources. Do not commit `.env`, `constants.ts`, `constants.local.ts`, wallet databases/backups, generated physical notes, signing credentials, keystores, build directories, diagnostic logs, or release binaries. The ignore rules protect these paths; `npm run check:release` also checks tracked files forced past the ignore rules and compares known local credentials without printing them.
 
 Frontend environment values are extractable from builds. Configure provider client keys for the deployment and keep privileged backend credentials on the backend. Signing credentials belong in a local secret manager or CI secrets, not shell scripts in this repository. The public test vector in `cashu-app/tests/fixtures/cashume-nostr-payment.json` comes from Cashu.me's public interoperability fixture; it is not a real wallet backup.
 
@@ -31,7 +31,7 @@ cargo test --workspace --locked
 cargo audit
 ```
 
-Build once from a clean checkout without `.env` or `constants.local.ts`. Credentials are optional for compilation; live Spark/Mobile Money operations require the appropriate deployment configuration. Never dismiss dependency advisories just to pass a release gate. Review unresolved target-specific and unmaintained dependency warnings explicitly.
+Build once from a clean checkout after copying `cashu-app/src/constants.example.ts` to `cashu-app/src/constants.local.ts`, then filling in the local configuration fields. CI uses synthetic values without deployment credentials; live Spark/Mobile Money operations require the appropriate deployment configuration. Never dismiss dependency advisories just to pass a release gate. Review unresolved target-specific and unmaintained dependency warnings explicitly.
 
 The normal frontend bundle includes a large Spark WASM payload and currently produces Vite's large-chunk advisory. That advisory is not a failed type check; do not raise the threshold to hide it.
 

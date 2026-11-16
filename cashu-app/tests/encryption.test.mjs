@@ -7,7 +7,7 @@ const key = Buffer.from(Array.from({length:32},(_,i)=>i)); // Public test key, n
 globalThis.window = {crypto:webcrypto};
 globalThis.__encryptionFixtureKey = key.toString('base64');
 registerHooks({resolve(specifier, context, next) {
-  if (context.parentURL === source && specifier === '../constants') return {
+  if (context.parentURL === source && specifier === '../constants.local') return {
     url:'data:text/javascript,'+encodeURIComponent('export const ENCRYPTION_KEY=globalThis.__encryptionFixtureKey;'),shortCircuit:true,
   };
   return next(specifier,context);
