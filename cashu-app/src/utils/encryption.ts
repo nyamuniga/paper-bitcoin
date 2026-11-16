@@ -1,7 +1,7 @@
 import CryptoJS from 'crypto-js';
 import { ENCRYPTION_KEY } from '../constants.local';
 
-// Get the encryption key from environment variables
+// Read the proxy transit key from the private deployment configuration.
 
 export class Encryption {
   private static key = CryptoJS.enc.Base64.parse(ENCRYPTION_KEY);
