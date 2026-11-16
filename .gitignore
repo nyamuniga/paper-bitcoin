@@ -36,3 +36,7 @@ wallet.json
 # Local scratch and test files
 scratch*
 test_*
+
+/cashu-app/src/constants.ts
+
+/cashu-app/src/constants.local.ts
