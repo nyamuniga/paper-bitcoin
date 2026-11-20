@@ -35,13 +35,6 @@ export class TransferMinimumError extends Error {
     this.includesFees = includesFees;
   }
 }
-export function providerMinimum(error: unknown): {attempted: bigint; minimum: bigint} | null {
-  const message = error instanceof Error ? error.message : String(error);
-  const match = /Amount in (\d+) is less than minimum required (\d+)\b/i.exec(message);
-  if (!match) return null;
-  const attempted = BigInt(match[1]), minimum = BigInt(match[2]);
-  return attempted > 0n && minimum > attempted && minimum <= BigInt(Number.MAX_SAFE_INTEGER) ? {attempted, minimum} : null;
-}
 
 /** Nominal Dollar holdings expressed at the selected currency's spot cross-rate. */
 export function dollarFiatValue(units: bigint, currency: string, rates: Record<string, number>): number | null {

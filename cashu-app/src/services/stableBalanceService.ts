@@ -4,7 +4,8 @@ import { getSparkSdk } from './sparkService';
 import { TransferPendingError, TransferFailedError, transferErrorDetails } from './transferError';
 import { withConversionSpendGuard, UnsubmittedConversionError } from './conversionSpendGuard';
 import { withSparkBalanceLock } from './sparkBalanceLock';
-import { resizeTransferOutput, TransferMinimumError, providerMinimum } from './transferAmount';
+import { resizeTransferOutput, TransferMinimumError } from './transferAmount';
+import { parseSparkConversionMinimum } from './sparkConversionError';
 import { USDB_TOKEN_ID, USDB_TOKEN_HEX, USD_DECIMALS, SLIPPAGE_BPS, PROTECTION_BPS, protectedCost, conversionCost, encodeQuote, decodeQuote } from './stableBalanceModel';
 import type { StableDirection, StableOperation, StableStage } from './stableBalanceModel';
 
@@ -138,7 +139,7 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
       try {
         prep = await sdk.prepareSendPayment({ paymentRequest: {type: 'input', input: paymentRequest}, amount: outputAmount, tokenIdentifier: direction === 'toUsd' ? USDB_TOKEN_ID : undefined, conversionOptions: options, feePolicy: 'feesExcluded' });
       } catch (error) {
-        const minimum = providerMinimum(error);
+        const minimum = parseSparkConversionMinimum(error);
         if (!minimum || sourceBudget === undefined) throw error;
         limits.minFromAmount = limits.minFromAmount && limits.minFromAmount > minimum.minimum ? limits.minFromAmount : minimum.minimum;
         if (sourceBudget < minimum.minimum) throw new TransferMinimumError(minimum.minimum);

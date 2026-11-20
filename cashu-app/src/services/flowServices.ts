@@ -24,8 +24,7 @@ import {
   ECASH_LIGHTNING_FEE,
   RWF_USD_PEG,
   POLLING_INTERVAL_MS,
-  POLLING_TIMEOUT_MS,
-  MOMO_API_BASE_URL
+  POLLING_TIMEOUT_MS
 } from "../constants.local";
 import { useTransactionStore } from "../store/transactionStore";
 import { useWalletStore } from "../store/wallet";
@@ -83,24 +82,6 @@ export const fetchCurrentRate = async (): Promise<number> => {
     const btcPriceInRwf = btcPriceInUsdRaw * RWF_USD_PEG;
     return SATS_PER_BTC / btcPriceInRwf;
   });
-};
-
-export const fetchProxyBlinkBalance = async (): Promise<number> => {
-  try {
-    return await withDeadline(async signal => {
-      const response = await fetch(`${MOMO_API_BASE_URL}/payment/balance`, {signal});
-      if (!response.ok) return 0;
-      const data = await response.json();
-
-      const wallets = data?.data?.me?.defaultAccount?.wallets || [];
-      const btcWallet = wallets.find((w: any) => w.walletCurrency === 'BTC');
-
-      return btcWallet ? btcWallet.balance : 0;
-    });
-  } catch (error) {
-    console.error("Failed to fetch proxy blink balance", error);
-    return 0;
-  }
 };
 
 async function reviewedMomoRate(approved: MomoReview | undefined, direction: 'RWF_TO_SATS' | 'SATS_TO_RWF', amount: number, phone: string, mint: string) {

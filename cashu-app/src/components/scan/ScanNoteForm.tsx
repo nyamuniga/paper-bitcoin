@@ -6,6 +6,7 @@ import { readClipboardText } from '../../utils/clipboard';
 import { parseBitcoinInput } from '../../utils/bitcoinValidation';
 import { useLnurlValidation } from '../../hooks/useLnurlValidation';
 import { LnurlValidationStatus } from '../shared/LnurlValidationStatus';
+import { IconButton } from '../shared/IconButton';
 import { AddressBookPickerModal } from '../addressBook/AddressBookPickerModal';
 import { AddressBookAutocomplete } from '../addressBook/AddressBookAutocomplete';
 
@@ -35,7 +36,7 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
     <div className="scan-note-form">
       <div className="scan-form-content">
         {showScanner ? (
-          <div className="scan-camera rounded-xl overflow-hidden border-2 border-primary">
+          <div className="relative rounded-xl overflow-hidden border border-outline-variant/30 aspect-square">
             <Scanner
               formats={['qr_code']}
               onScan={(result) => {
@@ -65,10 +66,7 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
                 setShowScanner(false);
                 urDecoder.reset();
               }}
-              className="w-full mt-2 text-on-surface-variant hover:text-on-surface py-2 text-label-caps font-label-caps"
-            >
-              Cancel Scanner
-            </button>
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-highest px-4 py-2 rounded-full text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface">Cancel Scanner</button>
           </div>
         ) : (
           <button
@@ -130,14 +128,15 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
               </div>
 
               <div className="flex items-center gap-1.5">
-                <button
+                <IconButton
                   type="button"
                   onClick={() => setShowAddressBook(true)}
-                  className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
+                  className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all border border-outline-variant/20 shadow-sm"
+                  aria-label="Open Address Book"
                   title="Open Address Book"
                 >
-                  <BookUser size={15} />
-                </button>
+                  <BookUser size={15} aria-hidden="true" />
+                </IconButton>
               </div>
             </div>
 

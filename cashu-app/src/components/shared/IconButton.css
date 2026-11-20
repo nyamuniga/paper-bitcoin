@@ -1,0 +1,19 @@
+/* Icon actions share alignment and interaction states; feature classes own their appearance. */
+@layer components {
+  .icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .icon-button:disabled {
+    opacity: .4;
+    cursor: default;
+  }
+
+  .icon-button:focus-visible {
+    outline: 2px solid var(--color-on-surface);
+    outline-offset: 3px;
+  }
+}

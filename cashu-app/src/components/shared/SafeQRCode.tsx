@@ -14,11 +14,14 @@ interface SafeQRCodeState {
   error?: Error;
 }
 
-class SafeQRCodeBoundary extends React.Component<
-  { children: React.ReactNode; fallback?: React.ReactNode },
-  SafeQRCodeState
-> {
-  constructor(props: { children: React.ReactNode; fallback?: React.ReactNode }) {
+interface SafeQRCodeBoundaryProps {
+  value: string;
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}
+
+class SafeQRCodeBoundary extends React.Component<SafeQRCodeBoundaryProps, SafeQRCodeState> {
+  constructor(props: SafeQRCodeBoundaryProps) {
     super(props);
     this.state = { hasError: false };
   }
@@ -29,6 +32,12 @@ class SafeQRCodeBoundary extends React.Component<
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.warn("SafeQRCode caught rendering error:", error, errorInfo);
+  }
+
+  componentDidUpdate(previousProps: SafeQRCodeBoundaryProps, previousState: SafeQRCodeState) {
+    if (previousState.hasError && previousProps.value !== this.props.value) {
+      this.setState({ hasError: false, error: undefined });
+    }
   }
 
   render() {
@@ -51,8 +60,7 @@ export const SafeQRCode: React.FC<SafeQRCodeProps> = ({
   className,
   fallbackText = "Use the Copy button below to share this token" 
 }) => {
-  // Hard safety check: QR code Version 40 binary maximum is 2,953 bytes (23,648 bits).
-  // Any string exceeding 2,000 bytes will cause a code length overflow error in react-qr-code.
+  // Keep the existing conservative limit in UTF-8 bytes, not JavaScript string length.
   const byteLength = typeof value === 'string' ? new Blob([value]).size : 0;
   
   if (!value || byteLength > 2000) {
@@ -70,6 +78,7 @@ export const SafeQRCode: React.FC<SafeQRCodeProps> = ({
 
   return (
     <SafeQRCodeBoundary
+      value={value}
       fallback={
         <div 
           style={{ width: size, height: size }}

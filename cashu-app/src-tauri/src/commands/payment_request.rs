@@ -1,5 +1,5 @@
 use super::auth::AppState;
-use crate::error::{CommandError, CommandResult};
+use crate::error::{CommandError, CommandResult, SendEcashError, SendEcashErrorCode};
 use ecash_core::types::Proof;
 use ecash_wallet::client::MintClient;
 use serde::Serialize;
@@ -14,47 +14,80 @@ pub struct EcashPaymentQuote {
     pub total: u64,
 }
 
-pub async fn quote(mint_url: &str, net: u64, proofs: &[Proof]) -> anyhow::Result<EcashPaymentQuote> {
+pub async fn quote(
+    mint_url: &str,
+    net: u64,
+    proofs: &[Proof],
+) -> Result<EcashPaymentQuote, SendEcashError> {
     let client = MintClient::new(mint_url);
-    let keysets = client.fetch_keysets().await?;
-    let active = client.fetch_keyset().await?;
+    let unavailable = |error: anyhow::Error| {
+        SendEcashError::new(
+            SendEcashErrorCode::ServiceUnavailable,
+            error.to_string(),
+            None,
+        )
+    };
+    let keysets = client.fetch_keysets().await.map_err(unavailable)?;
+    let active = client.fetch_keyset().await.map_err(unavailable)?;
     let output_keyset = keysets
         .iter()
         .find(|ks| ks.id == active.id && ks.active && ks.unit == "sat")
-        .ok_or_else(|| anyhow::anyhow!("No active sat keyset available"))?;
+        .ok_or_else(|| {
+            SendEcashError::new(
+                SendEcashErrorCode::ServiceUnavailable,
+                "No active sat keyset available",
+                None,
+            )
+        })?;
     if proofs
         .iter()
         .any(|p| !keysets.iter().any(|ks| ks.id == p.id && ks.unit == "sat"))
     {
-        anyhow::bail!("Could not resolve wallet proof fees. Refresh the mint before paying.");
+        return Err(SendEcashError::new(
+            SendEcashErrorCode::ServiceUnavailable,
+            "Could not resolve wallet proof fees. Refresh the mint before paying.",
+            None,
+        ));
     }
-    let token_amount = ecash_wallet::payment_request::recipient_token_amount(net, output_keyset.input_fee_ppk)?;
+    let token_amount =
+        ecash_wallet::payment_request::recipient_token_amount(net, output_keyset.input_fee_ppk)
+            .map_err(|error| {
+                SendEcashError::new(SendEcashErrorCode::InvalidRequest, error.to_string(), None)
+            })?;
     let mut sorted = proofs.to_vec();
     sorted.sort_by_key(|p| p.amount);
     let mut selected = Vec::new();
     let mut available = 0u64;
     let mut sender_fee = 0;
     for proof in sorted {
-        available = available
-            .checked_add(proof.amount)
-            .ok_or_else(|| anyhow::anyhow!("Balance overflow"))?;
+        available = available.checked_add(proof.amount).ok_or_else(|| {
+            SendEcashError::new(SendEcashErrorCode::InternalError, "Balance overflow", None)
+        })?;
         selected.push(proof);
         sender_fee = ecash_wallet::client::calculate_input_fee(&selected, &keysets);
         if available >= token_amount.saturating_add(sender_fee) {
             break;
         }
     }
-    let total = token_amount
-        .checked_add(sender_fee)
-        .ok_or_else(|| anyhow::anyhow!("Payment overflow"))?;
+    let total = token_amount.checked_add(sender_fee).ok_or_else(|| {
+        SendEcashError::new(SendEcashErrorCode::InvalidRequest, "Payment overflow", None)
+    })?;
     if total > 9_007_199_254_740_991 {
-        anyhow::bail!("Payment and fees exceed the supported amount range");
+        return Err(SendEcashError::new(
+            SendEcashErrorCode::InvalidRequest,
+            "Payment and fees exceed the supported amount range",
+            None,
+        ));
     }
     if available < total {
-        anyhow::bail!(
-            "Insufficient balance including mint fees. Need {} sats.",
-            total
-        );
+        return Err(SendEcashError::new(
+            SendEcashErrorCode::InsufficientFunds,
+            format!(
+                "Insufficient balance including mint fees. Need {} sats.",
+                total
+            ),
+            None,
+        ));
     }
     Ok(EcashPaymentQuote {
         token_amount,

@@ -22,8 +22,7 @@
 .ecash-number-pad button { height:100%; min-height:0; padding:0; touch-action:manipulation; cursor:pointer; }
 .ecash-create { flex:none; width:100%; min-height:44px; display:flex; align-items:center; justify-content:center; border-radius:16px; background:#f2a93b; color:#06110c; font-weight:600; cursor:pointer; }
 .ecash-controls button:disabled { opacity:.4; cursor:default; }
-.ecash-send-page :is(button,input):focus-visible { outline:2px solid #f2a93b; outline-offset:3px; }
-.ecash-mint-options { overscroll-behavior:contain; }
+.ecash-send-page button:focus-visible { outline:2px solid #f2a93b; outline-offset:3px; }
 .ecash-receive-actions { flex:none; }
 .ecash-receive-actions button { min-height:44px; }
 .ecash-receive-page .ecash-flow { min-height:0; }

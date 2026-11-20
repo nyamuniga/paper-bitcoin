@@ -1,12 +1,10 @@
 import { Banknote, ArrowDownLeft, ArrowUpRight, Clock, X } from 'lucide-react';
+import type { WalletTransactionSummary } from '../../types/wallet';
 
-export interface Transaction {
-  id: string;
+export interface Transaction extends WalletTransactionSummary {
   tx_type: any;
   amount: number;
   fee: number;
-  status: 'Pending' | 'Success' | 'Failed' | 'FailedMintError';
-  timestamp: number;
   mint_url: string;
   momo_direction?: string;
 }

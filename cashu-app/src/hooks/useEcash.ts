@@ -3,6 +3,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from '../store/wallet';
 import { getGlobalNostrPrivateKey } from './useNostr';
 import { toast } from 'react-hot-toast';
+import { describeSendEcashFailure } from '../services/sendEcashError';
+import type { SendEcashFailure } from '../services/sendEcashError';
+import type { SendEcashResult } from '../types/sendEcash';
 
 export const useEcash = (mintUrl?: string) => {
   const [sending, setSending] = useState(false);
@@ -13,6 +16,7 @@ export const useEcash = (mintUrl?: string) => {
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const isSendingRef = useRef(false);
   const isReceivingRef = useRef(false);
+  const unresolvedSendRef = useRef<SendEcashFailure | null>(null);
 
   React.useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -48,32 +52,47 @@ export const useEcash = (mintUrl?: string) => {
     opts?: { silent?: boolean; onError?: (msg: string) => void }
   ) => {
     if (isSendingRef.current) return null;
+
+    const reportError = (message: string) => {
+      if (!opts?.silent) toast.error(message);
+      opts?.onError?.(message);
+      return null;
+    };
+    if (unresolvedSendRef.current) {
+      return reportError(unresolvedSendRef.current.message);
+    }
     
     const targetMint = overrideMintUrl || mintUrl;
     if (!targetMint) {
-      const err = 'No mint specified for sending';
-      if (!opts?.silent) toast.error(err);
-      opts?.onError?.(err);
-      return null;
+      return reportError('No mint specified for sending');
     }
 
     isSendingRef.current = true;
     setSending(true);
     setIsClaimed(false);
+    setCurrentTxId(null);
     try {
-      const result: { token: string; token_v3?: string; token_v4?: string; tx_id: string } = await invoke('send_ecash', { 
-        mintUrl: targetMint, 
-        amount,
-        pubkey 
-      });
+      let result: SendEcashResult;
+      try {
+        result = await invoke<SendEcashResult>('send_ecash_v2', {
+          mintUrl: targetMint,
+          amount,
+          pubkey,
+        });
+      } catch (error: unknown) {
+        const failure = describeSendEcashFailure(error);
+        if (failure.requiresReconciliation) unresolvedSendRef.current = failure;
+        return reportError(failure.message);
+      }
+
       setCurrentTxId(result.tx_id);
-      await refreshWallet();
+      try {
+        await refreshWallet();
+      } catch {
+        // The token is already confirmed; balance refresh cannot change its outcome.
+        if (!opts?.silent) toast.error('Token created, but the balance could not be refreshed. Check History.');
+      }
       return result;
-    } catch (e: any) {
-      const err = String(e?.message ?? e);
-      if (!opts?.silent) toast.error(`Send failed: ${err}`);
-      opts?.onError?.(err);
-      return null;
     } finally {
       setSending(false);
       isSendingRef.current = false;

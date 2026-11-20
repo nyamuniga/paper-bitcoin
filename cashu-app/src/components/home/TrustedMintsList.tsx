@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronRight, Zap, Coins, Info, Plus } from 'lucide-react';
 import { AddMintModal } from '../navigation/AddMintModal';
 import { EcashModal } from './EcashModal';
-import { BitcoinModal } from './BitcoinModal';
+import { BitcoinModal } from '../../features/bitcoin/BitcoinModal';
 
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';

@@ -1,4 +1,7 @@
-.momo-page { width:100%; max-width:480px; height:100%; min-height:0; margin:0 auto; overflow:hidden; padding:clamp(8px,2dvh,24px) var(--spacing-container-padding,24px) max(8px,env(safe-area-inset-bottom,0px)); }
+/* Empty-state and standalone form shells have not migrated to PaymentPageLayout. */
+.momo-page:not(.payment-page-layout) { width:100%; max-width:480px; height:100%; min-height:0; margin:0 auto; overflow:hidden; padding:clamp(8px,2dvh,24px) var(--spacing-container-padding,24px) max(8px,env(safe-area-inset-bottom,0px)); }
+/* The form reserves keypad/actions; review and progress retain their scroll regions. */
+.momo-page .momo-page-body { display:flex; flex-direction:column; overflow:hidden; }
 .momo-page .momo-sheet { height:100%; min-height:0; display:flex; flex-direction:column; position:relative; }
 .momo-page .momo-sheet > div:nth-child(2) { display:none; }
 .momo-page .momo-page-header { flex:none; margin:0 0 clamp(8px,2dvh,16px); }
@@ -18,9 +21,10 @@
 .momo-page-keypad > div { height:100%; min-height:0; margin:0; gap:6px; grid-template-rows:repeat(4,minmax(0,1fr)); }
 .momo-page-keypad button { height:100%; min-height:0; padding:0; touch-action:manipulation; }
 .momo-page-actions { flex:none; }
-.momo-primary { width:100%; min-height:44px; border-radius:16px; background:#f2a93b; color:#06110c; font-size:15px; font-weight:600; cursor:pointer; padding:10px 16px; }
-.momo-primary:disabled { opacity:.4; cursor:default; }
+.momo-primary { padding:10px 16px; }
 .momo-page :is(button,input,summary,a):focus-visible { outline:2px solid #f2a93b; outline-offset:3px; }
+/* Keep the phone focus stroke inside the clipped page body. */
+.momo-page .momo-phone-field input:focus-visible { outline-offset:-2px; }
 .momo-review-content { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:8px 0; }
 .momo-review-amount { text-align:center; margin-bottom:clamp(12px,3dvh,24px); }
 .momo-review-amount p { font-size:13px; color:#a3b5aa; }
@@ -35,7 +39,7 @@
 .momo-saved-transfers summary { cursor:pointer; padding:6px 0; }
 .momo-saved-transfers > div { max-height:120px; overflow:auto; }
 .momo-saved-transfers button { display:flex; justify-content:space-between; gap:12px; padding:8px 0; width:100%; cursor:pointer; }
-@media(min-width:768px) { .momo-page { max-width:600px; padding-left:40px; padding-right:40px; } }
+@media(min-width:768px) { .momo-page:not(.payment-page-layout) { max-width:600px; padding-left:40px; padding-right:40px; } }
 @media(max-height:650px) { .momo-page .momo-page-header p { display:none; } }
 @media(max-height:520px) {
   .momo-payment-form:not(.is-review) { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto; gap:6px 12px; }

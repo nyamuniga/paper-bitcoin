@@ -10,7 +10,7 @@
 .scan-primary { flex:none; margin-top:auto; min-height:44px; padding:12px 16px; border-radius:16px; background:#f2a93b; color:#06110c; font-size:15px; font-weight:600; }
 .scan-primary:hover:not(:disabled) { background:#ffc564; }
 .scan-security-note { flex:none; font-size:11px; line-height:1.5; color:#8b9e94; }
-.scan-page :is(button,input,textarea):focus-visible { outline:2px solid #f2a93b; outline-offset:3px; }
+.scan-page :is(button,input):focus-visible { outline:2px solid #f2a93b; outline-offset:3px; }
 @media(min-width:768px) { .scan-page { max-width:600px; padding-left:40px; padding-right:40px; } }
 @media(max-height:650px) { .scan-page-header p { display:none; } }
 @media(max-height:520px) {

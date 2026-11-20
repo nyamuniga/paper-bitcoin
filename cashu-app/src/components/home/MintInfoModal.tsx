@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import { formatMintUrl } from '../../utils/format';
 import { writeClipboardText } from '../../utils/clipboard';
 import { MintIcon } from '../shared/MintIcon';
+import { IconButton } from '../shared/IconButton';
 import { useMintInfo } from '../../hooks/useMintInfo';
 import { useWalletStore } from '../../store/wallet';
 import { useMints } from '../../hooks/useMints';
@@ -203,13 +204,15 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
               <span className="text-[10px] font-semibold tracking-wider text-on-surface-variant uppercase">Mint URL</span>
               <span className="font-mono text-xs text-on-surface truncate">{mintUrl}</span>
             </div>
-            <button
+            <IconButton
+              type="button"
               onClick={handleCopy}
-              className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
+              className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 border border-outline-variant/20"
+              aria-label="Copy Mint URL"
               title="Copy Mint URL"
             >
-              {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-            </button>
+              {copied ? <Check size={14} className="text-emerald-400" aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+            </IconButton>
           </div>
 
           {/* About */}

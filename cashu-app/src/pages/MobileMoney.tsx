@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MomoTransferModal } from '../components/home/MomoTransferModal';
+import { MomoTransferScreen } from '../features/momo/MomoTransferScreen';
 import { PageHeader } from '../components/shared/PageHeader';
 import { useWalletStore } from '../store/wallet';
 
@@ -18,7 +18,7 @@ function MobileMoneyPage({ cashout }: { cashout: boolean }) {
       <Link to="/mints" className="min-h-11 px-6 py-3 rounded-2xl bg-primary text-on-primary font-semibold">Manage mints</Link>
     </div>
   </main>;
-  return <MomoTransferModal key={cashout ? 'cashout' : 'topup'} page mintUrl={mint} initialTab={cashout ? 'send' : 'receive'} onClose={back} />;
+  return <MomoTransferScreen key={cashout ? 'cashout' : 'topup'} mintUrl={mint} initialTab={cashout ? 'send' : 'receive'} onClose={back} />;
 }
 export function TopUpPage() { return <MobileMoneyPage cashout={false} />; }
 export function CashOutPage() { return <MobileMoneyPage cashout />; }

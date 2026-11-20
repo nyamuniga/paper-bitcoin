@@ -175,3 +175,85 @@ pub async fn clean_wallet(
 
     Ok(res)
 }
+
+#[cfg(test)]
+mod contract_tests {
+    use super::WalletInfo;
+    use ecash_core::types::{
+        MintTransactionData, Transaction, TransactionStatus, TransactionType,
+    };
+    use serde_json::Value;
+    use std::collections::HashMap;
+
+    fn fixture() -> Value {
+        serde_json::from_str(include_str!(
+            "../../../tests/fixtures/native-wallet-responses.json"
+        ))
+        .expect("native wallet response fixture must be valid JSON")
+    }
+
+    #[test]
+    fn wallet_info_serialization_matches_frontend_fixture() {
+        let responses = [
+            WalletInfo {
+                is_initialized: false,
+                balance_sats: 0,
+                mnemonic: None,
+                mint_balances: HashMap::new(),
+            },
+            WalletInfo {
+                is_initialized: true,
+                balance_sats: 42_000,
+                mnemonic: None,
+                mint_balances: HashMap::from([
+                    ("https://mint.example".to_string(), 42_000),
+                    ("https://empty-mint.example".to_string(), 0),
+                ]),
+            },
+        ];
+
+        assert_eq!(
+            serde_json::to_value(responses).expect("wallet info must serialize"),
+            fixture()["wallet_info"]
+        );
+    }
+
+    #[test]
+    fn transaction_serialization_matches_frontend_fixture() {
+        let transactions: Vec<_> = [
+            TransactionStatus::Pending,
+            TransactionStatus::Success,
+            TransactionStatus::Failed,
+            TransactionStatus::FailedMintError,
+        ]
+        .into_iter()
+        .map(|status| {
+            // New native statuses must also be represented in the shared fixture.
+            let index = match &status {
+                TransactionStatus::Pending => 0,
+                TransactionStatus::Success => 1,
+                TransactionStatus::Failed => 2,
+                TransactionStatus::FailedMintError => 3,
+            };
+            Transaction {
+                id: format!("tx-{index}"),
+                tx_type: TransactionType::Mint(MintTransactionData {
+                    quote_id: "fixture-quote".to_string(),
+                    outputs: Vec::new(),
+                    blinding_sessions_hex: Vec::new(),
+                }),
+                amount: 100,
+                fee: 1,
+                status,
+                timestamp: 1_700_000_000 + index,
+                mint_url: "https://mint.example".to_string(),
+            }
+        })
+        .collect();
+
+        assert_eq!(
+            serde_json::to_value(transactions).expect("transactions must serialize"),
+            fixture()["transactions"]
+        );
+    }
+}

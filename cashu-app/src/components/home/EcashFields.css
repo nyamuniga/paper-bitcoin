@@ -1,0 +1,38 @@
+.ecash-field {
+  --ecash-field-focus: var(--color-primary);
+  background: var(--color-surface-container);
+  border: 1px solid var(--color-outline-variant);
+  color: var(--color-on-surface);
+  caret-color: var(--color-on-surface);
+  outline: none;
+}
+
+.ecash-field::placeholder,
+.ecash-field textarea::placeholder {
+  color: var(--color-on-surface-muted);
+  opacity: 1;
+}
+
+/* One inset stroke stays inside clipped page and sheet containers. */
+.ecash-field:focus-within {
+  outline: 2px solid var(--ecash-field-focus);
+  outline-offset: -2px;
+}
+
+[data-theme="light"] .ecash-field,
+.light .ecash-field {
+  --ecash-field-focus: var(--color-outline);
+}
+
+/* The token field's wrapper owns its border and focus, including the toolbar. */
+.ecash-field textarea {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  caret-color: inherit;
+  outline: none;
+}
+
+.ecash-field-toolbar {
+  border-top: 1px solid var(--color-outline-variant);
+}

@@ -14,6 +14,17 @@ export class ProxyRequestError extends Error {
   }
 }
 
+export class ProxyRequestTimeoutError extends ProxyRequestError {
+  constructor() {
+    super(
+      'The request timed out. Check the transfer status before trying again.',
+      'unknown',
+      true // Timeouts remain transient for idempotent reads.
+    );
+    this.name = 'ProxyRequestTimeoutError';
+  }
+}
+
 // Generous defaults: MoMo on a bad 2G/3G link can take 20-30 s just to open
 // a TLS connection, and another 20-30 s for the response body.
 const DEFAULT_DEADLINE_MS = 60000;
@@ -32,13 +43,7 @@ export async function withDeadline<T>(
       run(controller.signal),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
-          reject(
-            new ProxyRequestError(
-              'The request timed out. Check the transfer status before trying again.',
-              'unknown',
-              true // timeouts are transient — safe to retry for reads
-            )
-          );
+          reject(new ProxyRequestTimeoutError());
           controller.abort();
         }, timeoutMs);
       }),

@@ -1,0 +1,62 @@
+[
+  {
+    "name": "minimum input amount",
+    "message": "Amount in 723 is less than minimum required 800",
+    "expected": { "attempted": "723", "minimum": "800" }
+  },
+  {
+    "name": "wrapped provider diagnostic",
+    "message": "Generic: Amount in 723 is less than minimum required 800 for asset btc",
+    "expected": { "attempted": "723", "minimum": "800" }
+  },
+  {
+    "name": "case-insensitive diagnostic",
+    "message": "AMOUNT IN 999999 IS LESS THAN MINIMUM REQUIRED 1000000 for asset usdb",
+    "expected": { "attempted": "999999", "minimum": "1000000" }
+  },
+  {
+    "name": "largest safe minimum",
+    "message": "Amount in 9007199254740990 is less than minimum required 9007199254740991",
+    "expected": { "attempted": "9007199254740990", "minimum": "9007199254740991" }
+  },
+  {
+    "name": "unrecognized wording",
+    "message": "Conversion input 723 is below the minimum of 800",
+    "expected": null
+  },
+  {
+    "name": "missing numeric minimum",
+    "message": "Amount in 723 is less than minimum required",
+    "expected": null
+  },
+  {
+    "name": "zero attempted amount",
+    "message": "Amount in 0 is less than minimum required 800",
+    "expected": null
+  },
+  {
+    "name": "equal amounts",
+    "message": "Amount in 800 is less than minimum required 800",
+    "expected": null
+  },
+  {
+    "name": "minimum below attempted amount",
+    "message": "Amount in 900 is less than minimum required 800",
+    "expected": null
+  },
+  {
+    "name": "negative attempted amount",
+    "message": "Amount in -1 is less than minimum required 800",
+    "expected": null
+  },
+  {
+    "name": "negative minimum",
+    "message": "Amount in 1 is less than minimum required -800",
+    "expected": null
+  },
+  {
+    "name": "minimum beyond safe number conversion",
+    "message": "Amount in 1 is less than minimum required 9007199254740992",
+    "expected": null
+  }
+]

@@ -1,11 +1,11 @@
-use crate::error::CommandResult;
+use crate::error::{CommandResult, SendEcashError, SendEcashErrorCode};
 use ecash_core::types::{
-    split_into_powers_of_2, Proof, SendTransactionData, Transaction,
-    TransactionStatus, TransactionType,
+    split_into_powers_of_2, Proof, SendTransactionData, Transaction, TransactionStatus,
+    TransactionType,
 };
 use ecash_wallet::swap::swap_proofs;
 
-use crate::commands::auth::AppState;
+use crate::commands::auth::{AppState, WalletAccessError};
 use tauri::State;
 
 fn select_exact_proofs(proofs: &[Proof], target_amount: u64) -> Option<Vec<Proof>> {
@@ -34,6 +34,17 @@ pub struct SendEcashResult {
     pub tx_id: String,
 }
 
+fn ensure_approved_total(total: u64, cap: u64) -> Result<(), SendEcashError> {
+    if total > cap {
+        return Err(SendEcashError::new(
+            SendEcashErrorCode::ReviewRequired,
+            "Mint fees changed. Review the payment again.",
+            None,
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn send_ecash(
     mint_url: String,
@@ -43,38 +54,110 @@ pub async fn send_ecash(
     payment_max_total: Option<u64>,
     state: State<'_, AppState>,
 ) -> CommandResult<SendEcashResult> {
-    let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
+    send_ecash_operation(
+        mint_url,
+        amount,
+        pubkey,
+        payment_request,
+        payment_max_total,
+        &state,
+    )
+    .await
+    .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn send_ecash_v2(
+    mint_url: String,
+    amount: u64,
+    pubkey: Option<String>,
+    payment_request: Option<String>,
+    payment_max_total: Option<u64>,
+    state: State<'_, AppState>,
+) -> Result<SendEcashResult, SendEcashError> {
+    send_ecash_operation(
+        mint_url,
+        amount,
+        pubkey,
+        payment_request,
+        payment_max_total,
+        &state,
+    )
+    .await
+}
+
+async fn send_ecash_operation(
+    mint_url: String,
+    amount: u64,
+    pubkey: Option<String>,
+    payment_request: Option<String>,
+    payment_max_total: Option<u64>,
+    state: &AppState,
+) -> Result<SendEcashResult, SendEcashError> {
+    let (mut wallet_guard, path, passphrase) =
+        state
+            .lock_and_get_wallet_typed()
+            .await
+            .map_err(|error| match error {
+                WalletAccessError::Locked(error) => {
+                    SendEcashError::new(SendEcashErrorCode::WalletLocked, error.0, None)
+                }
+                WalletAccessError::Load(error) => {
+                    SendEcashError::new(SendEcashErrorCode::InternalError, error.0, None)
+                }
+            })?;
     let w_state = wallet_guard.as_mut().unwrap();
 
     let mut proofs = w_state
         .proofs
         .get(&mint_url)
-        .ok_or_else(|| anyhow::anyhow!("No proofs found for mint {}", mint_url))?
+        .ok_or_else(|| {
+            SendEcashError::new(
+                SendEcashErrorCode::InsufficientFunds,
+                format!("No proofs found for mint {}", mint_url),
+                None,
+            )
+        })?
         .clone();
 
     if proofs.is_empty() {
-        return Err(crate::error::CommandError(
-            "No proofs available for this mint".to_string(),
+        return Err(SendEcashError::new(
+            SendEcashErrorCode::InsufficientFunds,
+            "No proofs available for this mint",
+            None,
         ));
     }
 
     if payment_request.is_some() != payment_max_total.is_some() {
-        return Err(crate::error::CommandError("Ecash payments require a request and approved total".into()));
+        return Err(SendEcashError::new(
+            SendEcashErrorCode::InvalidRequest,
+            "Ecash payments require a request and approved total",
+            None,
+        ));
     }
     if let Some(ref request) = payment_request {
         if request.len() > 28671 {
-            return Err(crate::error::CommandError("Ecash request too large".into()));
+            return Err(SendEcashError::new(
+                SendEcashErrorCode::InvalidRequest,
+                "Ecash request too large",
+                None,
+            ));
         }
-        if w_state.transactions.iter().any(|tx| matches!(&tx.tx_type, TransactionType::Send(data) if data.payment_request.as_ref() == Some(request))) {
-            return Err(crate::error::CommandError("A payment already exists for this request. Resume it instead of creating another.".into()));
+        if let Some(tx) = w_state.transactions.iter().find(|tx| match &tx.tx_type {
+            TransactionType::Send(data) => data.payment_request.as_ref() == Some(request),
+            _ => false,
+        }) {
+            return Err(SendEcashError::new(
+                SendEcashErrorCode::InvalidRequest,
+                "A payment already exists for this request. Resume it instead of creating another.",
+                Some(tx.id.clone()),
+            ));
         }
     }
     let force_swap = payment_request.is_some();
     let amount = if let Some(cap) = payment_max_total {
         let quote = super::payment_request::quote(&mint_url, amount, &proofs).await?;
-        if quote.total > cap {
-            return Err(crate::error::CommandError("Mint fees changed. Review the payment again.".into()));
-        }
+        ensure_approved_total(quote.total, cap)?;
         quote.token_amount
     } else {
         amount
@@ -114,7 +197,15 @@ pub async fn send_ecash(
                 if let Some(mint_proofs) = w_state.proofs.get_mut(&mint_url) {
                     mint_proofs.retain(|p| !spent_secrets.contains(&p.secret));
                 }
-                w_state.save_encrypted(&path, &passphrase)?;
+                w_state
+                    .save_encrypted(&path, &passphrase)
+                    .map_err(|error| {
+                        SendEcashError::new(
+                            SendEcashErrorCode::OutcomeUnknown,
+                            error.to_string(),
+                            None,
+                        )
+                    })?;
                 proofs.retain(|p| !spent_secrets.contains(&p.secret));
                 exact_match = select_exact_proofs(&proofs, amount);
             }
@@ -139,7 +230,13 @@ pub async fn send_ecash(
     } else {
         // 2. We need to split proofs via swap
         let all_keysets = if force_swap {
-            client.fetch_keysets().await?
+            client.fetch_keysets().await.map_err(|error| {
+                SendEcashError::new(
+                    SendEcashErrorCode::ServiceUnavailable,
+                    error.to_string(),
+                    None,
+                )
+            })?
         } else {
             client.fetch_keysets().await.unwrap_or_default()
         };
@@ -154,7 +251,8 @@ pub async fn send_ecash(
         for proof in &sorted_proofs {
             selected_for_swap.push(proof.clone());
             swap_total += proof.amount;
-            let swap_fee = ecash_wallet::client::calculate_input_fee(&selected_for_swap, &all_keysets);
+            let swap_fee =
+                ecash_wallet::client::calculate_input_fee(&selected_for_swap, &all_keysets);
             if swap_total >= amount + swap_fee {
                 break;
             }
@@ -162,16 +260,20 @@ pub async fn send_ecash(
 
         let swap_fee = ecash_wallet::client::calculate_input_fee(&selected_for_swap, &all_keysets);
         if swap_total < amount + swap_fee {
-            return Err(crate::error::CommandError(format!(
-                "Insufficient balance. Have {} sats, need {} sats (including {} sats mint fee)",
-                swap_total, amount + swap_fee, swap_fee
-            )));
+            return Err(SendEcashError::new(
+                SendEcashErrorCode::InsufficientFunds,
+                format!(
+                    "Insufficient balance. Have {} sats, need {} sats (including {} sats mint fee)",
+                    swap_total,
+                    amount + swap_fee,
+                    swap_fee
+                ),
+                None,
+            ));
         }
 
         if let Some(cap) = payment_max_total {
-            if amount.saturating_add(swap_fee) > cap {
-                return Err(crate::error::CommandError("Mint fees changed. Review the payment again.".into()));
-            }
+            ensure_approved_total(amount.saturating_add(swap_fee), cap)?;
         }
         // Record pending transaction before swap
         let tx_id = format!(
@@ -200,7 +302,11 @@ pub async fn send_ecash(
             mint_url: mint_url.clone(),
         };
         w_state.transactions.push(pending_tx);
-        w_state.save_encrypted(&path, &passphrase)?;
+        w_state
+            .save_encrypted(&path, &passphrase)
+            .map_err(|error| {
+                SendEcashError::new(SendEcashErrorCode::InternalError, error.to_string(), None)
+            })?;
 
         let change_amount = swap_total.saturating_sub(amount).saturating_sub(swap_fee);
         let desired_denoms = split_into_powers_of_2(amount);
@@ -222,27 +328,39 @@ pub async fn send_ecash(
         final_send_proofs = match swap_result {
             Ok(proofs) => proofs,
             Err(e) => {
-                // Update to failed if the swap fails with a network error
+                // A swap error does not prove that the mint left the input proofs unspent.
+                // Keep the recorded send pending so History can query their spend state
+                // instead of treating the error as a confirmed failure.
                 if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
-                    // Keep it pending if we are unsure, but if we fail here it's safer to leave pending
-                    // Actually, if we get here, the swap failed. But we leave it as Pending because
-                    // the proofs might be SPENT on the mint. The user will use "Check Status" to verify.
                     tx.status = TransactionStatus::Pending;
                 }
                 w_state.save_encrypted(&path, &passphrase).ok();
-                return Err(crate::error::CommandError(format!(
-                    "Failed to split tokens: {}",
-                    e
-                )));
+                return Err(SendEcashError::new(
+                    SendEcashErrorCode::OutcomeUnknown,
+                    format!("Failed to split tokens: {}", e),
+                    Some(tx_id),
+                ));
             }
         };
     }
 
     let token_v3 = ecash_wallet::encode_token_v3(&mint_url, &final_send_proofs, Some("sat"))
-        .map_err(|e| crate::error::CommandError(format!("Failed to encode token v3: {}", e)))?;
+        .map_err(|e| {
+            SendEcashError::new(
+                SendEcashErrorCode::OutcomeUnknown,
+                format!("Failed to encode token v3: {}", e),
+                pending_tx_id.clone(),
+            )
+        })?;
 
     let token_v4 = ecash_wallet::encode_token_v4(&mint_url, &final_send_proofs, Some("sat"))
-        .map_err(|e| crate::error::CommandError(format!("Failed to encode token v4: {}", e)))?;
+        .map_err(|e| {
+            SendEcashError::new(
+                SendEcashErrorCode::OutcomeUnknown,
+                format!("Failed to encode token v4: {}", e),
+                pending_tx_id.clone(),
+            )
+        })?;
 
     // Use token_v3 (cashuA) as the primary/default token string as it is supported universally
     let encoded = token_v3.clone();
@@ -287,7 +405,15 @@ pub async fn send_ecash(
     };
 
     // Save wallet state
-    w_state.save_encrypted(&path, &passphrase)?;
+    w_state
+        .save_encrypted(&path, &passphrase)
+        .map_err(|error| {
+            SendEcashError::new(
+                SendEcashErrorCode::OutcomeUnknown,
+                error.to_string(),
+                pending_tx_id.clone(),
+            )
+        })?;
 
     Ok(SendEcashResult {
         token: encoded,
@@ -511,3 +637,7 @@ pub async fn save_ecash_for_later(token_string: String, state: State<'_, AppStat
     wallet.save_encrypted(&path, &passphrase)?;
     Ok(id)
 }
+
+#[cfg(test)]
+#[path = "send_tests.rs"]
+mod structured_send_tests;

@@ -68,12 +68,12 @@ export function SlidingSegmentedControl<T extends string>({
       ref={containerRef}
       role={tabListId ? 'tablist' : 'group'}
       aria-label={ariaLabel}
-      className={`flex items-center rounded-xl bg-[#0c1b14] border border-[#142d20] relative shadow-sm select-none ${compact ? 'p-0.5 overflow-visible' : 'p-1 overflow-hidden'} ${className}`}
+      className={`flex items-center rounded-xl bg-surface-container border border-outline-variant relative shadow-sm select-none ${compact ? 'p-0.5 overflow-visible' : 'p-1 overflow-hidden'} ${className}`}
     >
       {/* Animated Sliding Indicator Pill (matching TopNav and AddressBook) */}
       <div
         data-segment-indicator
-        className={`absolute top-0 left-0 rounded-lg pointer-events-none bg-[#183626] border border-[#2b563e] shadow-sm ${
+        className={`absolute top-0 left-0 rounded-lg pointer-events-none bg-selection-container border border-selection-outline shadow-sm ${
           isInitialMount
             ? ''
             : 'transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none'
@@ -86,7 +86,7 @@ export function SlidingSegmentedControl<T extends string>({
         }}
       >
         {/* Botanical amber highlight along top border */}
-        <div className="absolute inset-x-2 top-0 h-[1px] bg-gradient-to-r from-transparent via-[#f2a93b]/40 to-transparent rounded-full pointer-events-none" />
+        <div className="absolute inset-x-2 top-0 h-[1px] bg-gradient-to-r from-transparent via-primary/40 to-transparent rounded-full pointer-events-none" />
       </div>
 
       {options.map((opt) => {
@@ -113,14 +113,14 @@ export function SlidingSegmentedControl<T extends string>({
               onChange(next); buttonRefs.current[next]?.focus();
             }}
             onClick={() => onChange(opt.id)}
-            className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-3 rounded-lg font-display-hero font-bold transition-colors duration-200 select-none cursor-pointer focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 ${compact ? "py-1 min-w-14 text-xs after:content-[''] after:absolute after:inset-x-0 after:-inset-y-2.5" : 'py-2 text-[13px] sm:text-[14px]'} ${
+            className={`relative z-10 flex-1 flex items-center justify-center gap-2 px-3 rounded-lg font-display-hero font-bold transition-colors duration-200 select-none cursor-pointer focus-visible:outline-2 focus-visible:outline-on-surface focus-visible:outline-offset-2 ${compact ? "py-1 min-w-14 text-xs after:content-[''] after:absolute after:inset-x-0 after:-inset-y-2.5" : 'py-2 text-[13px] sm:text-[14px]'} ${
               isActive
-                ? 'text-primary font-bold'
-                : 'text-[#8b9e94] hover:text-[#f7f4eb]'
+                ? 'text-on-selection-container font-bold'
+                : 'text-on-surface-muted hover:text-on-surface'
             } ${buttonClassName}`}
           >
             {opt.icon && (
-              <span className={`transition-colors duration-200 ${isActive ? 'text-primary' : 'text-[#8b9e94]'}`}>
+              <span className={`transition-colors duration-200 ${isActive ? 'text-on-selection-container' : 'text-on-surface-muted'}`}>
                 {opt.icon}
               </span>
             )}

@@ -1,0 +1,24 @@
+/* Common declarations from .momo-primary and .transfer-primary.
+   Existing unlayered feature rules retain their spacing, hover and responsive behavior. */
+@layer components {
+  .primary-action-button {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 16px;
+    background: #f2a93b;
+    color: #06110c;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .primary-action-button:disabled {
+    opacity: .4;
+    cursor: default;
+  }
+
+  .primary-action-button:focus-visible {
+    outline: 2px solid var(--color-on-surface);
+    outline-offset: 3px;
+  }
+}

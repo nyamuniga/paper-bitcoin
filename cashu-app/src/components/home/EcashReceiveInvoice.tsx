@@ -6,6 +6,7 @@ import { AmountDisplay } from '../shared/AmountDisplay';
 import { NumberPad } from '../shared/NumberPad';
 import { SafeQRCode } from '../shared/SafeQRCode';
 import { writeClipboardText } from '../../utils/clipboard';
+import './EcashFields.css';
 
 const button = 'min-h-11 px-4 py-2 rounded-xl border border-outline-variant/30 text-primary font-semibold disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-primary';
 
@@ -30,7 +31,7 @@ export function EcashReceiveInvoice({ mintUrl, onPaid, invoiceId, embedded = fal
   return <section className={`flex flex-col gap-4 ${!state.invoice ? 'ecash-invoice-entry' : ''}`} aria-label="Ecash receive invoice">
     {state.loading && !state.invoice ? <p role="status" className="text-sm text-on-surface-variant flex items-center gap-2"><Loader2 className="animate-spin" size={18}/>{invoiceId ? 'Loading saved request…' : 'Saving request…'}</p> : !state.invoice && invoiceId ? <button type="button" className={button} onClick={state.checkStatus}>Retry loading request</button> : !state.invoice ? <form className="flex flex-col gap-2.5 sm:gap-3" onSubmit={event => { event.preventDefault(); if (!canCreate) return; void state.create(invoiceAmount, description); setCopied(false); }}>
       <label className="flex flex-col gap-1 mt-0.5"><span className="text-[11px] font-label-caps text-on-surface-variant ml-1">Description (optional)</span>
-        <input maxLength={160} value={description} onChange={event => setDescription(event.target.value)} className="w-full bg-[#0c1b14] py-2.5 px-3 rounded-xl border border-[#142d20] text-[13px] text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary transition-colors" placeholder="What is the payment for?" />
+        <input maxLength={160} value={description} onChange={event => setDescription(event.target.value)} className="ecash-field w-full py-2.5 px-3 rounded-xl text-[13px] transition-colors" placeholder="What is the payment for?" />
       </label>
       <div role="status" aria-live="polite" aria-label="Requested amount in sats"><AmountDisplay amount={amount} compact /></div>
       <div role="group" aria-label="Invoice amount keypad"><NumberPad value={amount} onChange={setAmount} compact /></div>

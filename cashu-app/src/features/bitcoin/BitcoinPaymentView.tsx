@@ -1,38 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MintBalancePicker } from '../shared/MintBalancePicker';
-import { PageHeader } from '../shared/PageHeader';
+import { MintBalancePicker } from '../../components/shared/MintBalancePicker';
+import { PageHeader } from '../../components/shared/PageHeader';
+import { PaymentPageLayout } from '../../components/shared/PaymentPageLayout';
+import { IconButton } from '../../components/shared/IconButton';
+import { FormField } from '../../components/shared/FormField';
 import './BitcoinPages.css';
-import { X, Copy, Check, Loader2, Zap, Bitcoin, ArrowUp, ArrowDown, QrCode, ChevronDown, BookUser } from 'lucide-react';
+import { X, Copy, Check, Loader2, Zap, Bitcoin, ArrowUp, ArrowDown, QrCode, BookUser } from 'lucide-react';
 import { OnchainSendEstimate, OnchainLimits, getOnchainSendLimits } from '../../services/sparkService';
 import { useAddressBookStore } from '../../store/addressBookStore';
-import { AddressBookPickerModal } from '../addressBook/AddressBookPickerModal';
-import { AddressBookAutocomplete } from '../addressBook/AddressBookAutocomplete';
+import { AddressBookPickerModal } from '../../components/addressBook/AddressBookPickerModal';
+import { AddressBookAutocomplete } from '../../components/addressBook/AddressBookAutocomplete';
 
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 import { useBitcoin } from '../../hooks/useBitcoin';
 import { useHistory } from '../../hooks/useHistory';
 
-import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
-import { FullScreenLoader } from '../shared/FullScreenLoader';
-import { MintIcon } from '../shared/MintIcon';
-import { MintName } from '../shared/MintName';
+import { SovereignStampOverlay, StampPaymentStatus } from '../../components/shared/SovereignStampOverlay';
+import { FullScreenLoader } from '../../components/shared/FullScreenLoader';
+import { MintIcon } from '../../components/shared/MintIcon';
+import { MintName } from '../../components/shared/MintName';
 import { createPortal } from 'react-dom';
-import { AmountDisplay } from '../shared/AmountDisplay';
-import { NumberPad } from '../shared/NumberPad';
+import { AmountDisplay } from '../../components/shared/AmountDisplay';
+import { NumberPad } from '../../components/shared/NumberPad';
 import QRCode from 'react-qr-code';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { parseBitcoinInput } from '../../utils/bitcoinValidation';
 import { readClipboardText, writeClipboardText } from '../../utils/clipboard';
 import { fetchLnurlPayInvoice } from '../../services/lnurlService';
 import { useLnurlValidation, validateLnurlPay } from '../../hooks/useLnurlValidation';
-import { LnurlValidationStatus } from '../shared/LnurlValidationStatus';
+import { LnurlValidationStatus } from '../../components/shared/LnurlValidationStatus';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { openMempoolTx, openMempoolAddress } from '../../utils/mempool';
-import { SlidingSegmentedControl } from '../shared/SlidingSegmentedControl';
+import { SlidingSegmentedControl } from '../../components/shared/SlidingSegmentedControl';
 
-interface BitcoinModalProps {
+export interface BitcoinPaymentViewProps {
   page?: boolean;
   mintUrl: string;
   initialTab?: 'send' | 'receive';
@@ -45,7 +48,7 @@ type Tab = 'send' | 'receive';
 type SendStep = 'input' | 'amount' | 'confirm';
 type ReceiveMode = 'lightning' | 'onchain';
 
-export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialInvoice = '', initialAmountSats, onClose, page = false }) => {
+export const BitcoinPaymentView: React.FC<BitcoinPaymentViewProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialInvoice = '', initialAmountSats, onClose, page = false }) => {
   const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose, modal: !page });
   const navigate = useNavigate();
   useEffect(() => {
@@ -58,25 +61,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
   }, [page, initialTab, initialMintUrl, initialInvoice, initialAmountSats, navigate, onClose]);
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [mintUrl, setMintUrl] = useState(initialMintUrl);
-  const [showMintDropdown, setShowMintDropdown] = useState(false);
-  const [isClosingMintDropdown, setIsClosingMintDropdown] = useState(false);
-
-  const closeMintDropdown = () => {
-    setIsClosingMintDropdown(true);
-    setTimeout(() => {
-      setShowMintDropdown(false);
-      setIsClosingMintDropdown(false);
-    }, 160);
-  };
-
-  const toggleMintDropdown = () => {
-    if (showMintDropdown) {
-      closeMintDropdown();
-    } else {
-      setShowMintDropdown(true);
-    }
-  };
-
   // Send state
   const initialParsed = parseBitcoinInput(initialInvoice);
   const [destinationInput, setDestinationInput] = useState(
@@ -116,7 +100,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
 
 
   const mintBalances = useWalletStore((s) => s.mintBalances);
-  const mintUrls = Object.keys(mintBalances || {});
   const availableBalance = mintBalances[mintUrl] || 0;
 
   const { transactions } = useHistory();
@@ -392,15 +375,40 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
     if (activeTab === 'send' && sendStep !== 'input') setSendStep(sendStep === 'confirm' ? 'amount' : 'input');
     else onClose();
   };
-  const renderContent = (content: React.ReactNode) => page ? content : createPortal(content, document.body);
+  const renderContent = (content: React.ReactNode) => page ? (
+    <PaymentPageLayout
+      className={`bitcoin-page ${receiveEntry ? "bitcoin-receive-entry" : amountEntry ? "bitcoin-send-amount" : activeTab === 'send' && sendStep === 'input' ? "bitcoin-send-input" : ""}`}
+      bodyClassName="bitcoin-page-content"
+      bodyLabel="Bitcoin payment"
+      footer={activeTab === 'send' && sendStep === 'confirm' && onchainEstimate
+        ? <div className="bitcoin-actions">{confirmAction}</div>
+        : undefined}
+      header={
+        <PageHeader
+          title={activeTab === 'send' ? sendStep === 'confirm' ? 'Review Bitcoin send' : 'Send Bitcoin' : 'Receive Bitcoin'}
+          subtitle={activeTab === 'send' ? sendStep === 'confirm' ? 'Check the destination, amount and fees' : 'Pay a Lightning invoice or Bitcoin address' : 'Create a Lightning invoice or Bitcoin deposit'}
+          sticky={false}
+          onBack={back}
+          backDisabled={paying || requesting || isFetchingLnurl}
+          className="bitcoin-page-header"
+        />
+      }
+    >
+      {content}
+    </PaymentPageLayout>
+  ) : createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
+      style={backdropStyle}
+      onClick={closeWithAnimation}
+    >
+      {content}
+    </div>,
+    document.body,
+  );
   return (
     <>
       {renderContent(
-        <div
-          className={page ? `bitcoin-page ${receiveEntry ? "bitcoin-receive-entry" : amountEntry ? "bitcoin-send-amount" : activeTab === 'send' && sendStep === 'input' ? "bitcoin-send-input" : ""}` : "fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"}
-          style={page ? undefined : backdropStyle}
-          onClick={page ? undefined : closeWithAnimation}
-        >
       <div
         onClick={e => e.stopPropagation()}
         style={page ? undefined : sheetStyle}
@@ -417,7 +425,7 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
         </div>
 
         {/* Header */}
-        {page ? <PageHeader title={activeTab === 'send' ? sendStep === 'confirm' ? 'Review Bitcoin send' : 'Send Bitcoin' : 'Receive Bitcoin'} subtitle={activeTab === 'send' ? sendStep === 'confirm' ? 'Check the destination, amount and fees' : 'Pay a Lightning invoice or Bitcoin address' : 'Create a Lightning invoice or Bitcoin deposit'} sticky={false} onBack={back} backDisabled={paying || requesting || isFetchingLnurl} className="bitcoin-page-header" /> : <div
+        {!page && <div
           {...dragHandleProps}
           className="flex justify-between items-center px-5 sm:px-6 py-3 sm:py-4 border-b border-outline-variant/10 relative z-10 cursor-grab active:cursor-grabbing"
         >
@@ -478,55 +486,16 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                 ? 'Pay from:'
                 : (receiveSuccess ? 'Lightning received to:' : receiveInvoice ? 'Waiting for payment to:' : 'Receive lightning to:')}
             </p>
-            <div className="relative">
-              {showMintDropdown && (
-                <div className="fixed inset-0 z-40" onClick={closeMintDropdown}></div>
-              )}
-              <button
-                onClick={toggleMintDropdown}
-                className="w-full flex items-center justify-between bg-surface-container-highest p-2.5 sm:p-3 rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-colors relative z-50 cursor-pointer"
-              >
-                <div className="flex items-center gap-2 min-w-0 pr-4">
-                  <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
-                  <MintName mintUrl={mintUrl} className="text-body-md font-body-md text-on-surface font-medium truncate" />
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap">
-                  <span className="text-body-md font-body-md font-semibold text-on-surface">₿{availableBalance.toLocaleString()}</span>
-                  <ChevronDown
-                    size={16}
-                    className={`flex-shrink-0 transition-transform duration-300 ease-out ${showMintDropdown && !isClosingMintDropdown ? 'rotate-180 text-primary' : 'text-on-surface-variant'
-                      }`}
-                  />
-                </div>
-              </button>
-
-              {showMintDropdown && (
-                <div className={`absolute top-full left-0 right-0 mt-2 bg-surface-container-highest rounded-2xl shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] border border-outline-variant/20 overflow-hidden flex flex-col z-50 max-h-[250px] overflow-y-auto ${isClosingMintDropdown ? 'animate-dropdown-collapse' : 'animate-dropdown-expand'
-                  }`}>
-                  {mintUrls.map((m, index) => (
-                    <button
-                      key={m}
-                      style={{ animationDelay: `${index * 30}ms` }}
-                      onClick={async () => {
-                        setMintUrl(m);
-                        closeMintDropdown();
-                        if (activeTab === 'receive' && receiveMode === 'onchain' && boardingAddress) {
-                          await receiveOnChain(parsedReceiveAmount || 10000, m);
-                        }
-                      }}
-                      className="flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left w-full border-b border-outline-variant/10 last:border-b-0 animate-dropdown-item cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 pr-2">
-                        <MintIcon mintUrl={m} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
-                        <MintName mintUrl={m} className="text-body-sm font-body-sm text-on-surface truncate" />
-                        {mintUrl === m && <Check size={14} className="text-primary flex-shrink-0" />}
-                      </div>
-                      <span className="text-body-sm font-body-sm font-bold text-on-surface flex-shrink-0">₿{(mintBalances![m] || 0).toLocaleString()}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <MintBalancePicker
+              mintUrl={mintUrl}
+              balances={mintBalances}
+              onSelect={async mint => {
+                setMintUrl(mint);
+                if (activeTab === 'receive' && receiveMode === 'onchain' && boardingAddress) {
+                  await receiveOnChain(parsedReceiveAmount || 10000, mint);
+                }
+              }}
+            />
           </div>
           </>}
 
@@ -571,83 +540,92 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
                           </div>
                           <span className="text-label-caps font-label-caps">Tap to Scan QR Code</span>
                         </button>}
-                        <p className="text-body-md font-body-md text-on-surface-variant">Pay to:</p>
-                        <div className={`relative glow-effect transition-all duration-300 rounded-xl bg-[#0c1b14] border overflow-hidden ${
-                          isInsufficient || lnurlValidation.status === 'invalid'
-                            ? 'border-error/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
-                            : lnurlValidation.status === 'valid'
-                            ? 'border-emerald-500/40'
-                            : 'border-[#142d20] focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/40'
-                        }`}>
-                          <textarea
-                            value={destinationInput}
-                            onChange={(e) => setDestinationInput(e.target.value)}
-                            className="w-full bg-transparent text-on-surface font-label-caps text-label-caps p-3.5 pb-2 border-none focus:outline-none resize-none placeholder:text-on-surface-variant/50 min-h-[76px]"
-                            placeholder="Lightning, LNURL, or On-Chain..."
-                            rows={3}
-                            spellCheck={false}
-                          />
+                        <FormField
+                          label="Pay to:"
+                          className="bitcoin-destination-field gap-1.5"
+                          labelClassName="text-body-md font-body-md text-on-surface-variant"
+                        >
+                          {control => (
+                            <div className={`relative glow-effect transition-all duration-300 rounded-xl bg-[#0c1b14] border overflow-hidden ${
+                              isInsufficient || lnurlValidation.status === 'invalid'
+                                ? 'border-error/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                                : lnurlValidation.status === 'valid'
+                                ? 'border-emerald-500/40'
+                                : 'border-[#142d20] focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/40'
+                            }`}>
+                              <textarea
+                                {...control}
+                                value={destinationInput}
+                                onChange={(e) => setDestinationInput(e.target.value)}
+                                className="w-full bg-transparent text-on-surface font-label-caps text-label-caps p-3.5 pb-2 border-none focus:outline-none resize-none placeholder:text-on-surface-variant/50 min-h-[76px]"
+                                placeholder="Lightning, LNURL, or On-Chain..."
+                                rows={3}
+                                spellCheck={false}
+                              />
 
-                          {/* Action Toolbar */}
-                          <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-[#142d20]">
-                            <div>
-                              {destinationInput ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setDestinationInput('')}
-                                  className="text-[12px] font-bold text-on-surface-variant hover:text-error transition-colors cursor-pointer"
-                                >
-                                  Clear
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    try {
-                                      const text = await readClipboardText();
-                                      if (text) setDestinationInput(text.trim());
-                                    } catch (e) {
-                                      console.warn('Clipboard read failed', e);
-                                    }
-                                  }}
-                                  className="text-[12px] font-bold text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-                                >
-                                  Paste
-                                </button>
-                              )}
+                              {/* Action Toolbar */}
+                              <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-[#142d20]">
+                                <div>
+                                  {destinationInput ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setDestinationInput('')}
+                                      className="text-[12px] font-bold text-on-surface-variant hover:text-error transition-colors cursor-pointer"
+                                    >
+                                      Clear
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        try {
+                                          const text = await readClipboardText();
+                                          if (text) setDestinationInput(text.trim());
+                                        } catch (e) {
+                                          console.warn('Clipboard read failed', e);
+                                        }
+                                      }}
+                                      className="text-[12px] font-bold text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+                                    >
+                                      Paste
+                                    </button>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  <IconButton
+                                    type="button"
+                                    onClick={() => setShowAddressBook(true)}
+                                    className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all border border-outline-variant/20 shadow-sm"
+                                    aria-label="Open Address Book"
+                                    title="Open Address Book"
+                                  >
+                                    <BookUser size={15} aria-hidden="true" />
+                                  </IconButton>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowScanner(true)}
+                                    className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
+                                    title="Scan QR Code"
+                                    hidden={page}
+                                  >
+                                    <QrCode size={15} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <AddressBookAutocomplete
+                                type="bitcoin"
+                                query={destinationInput}
+                                visible={destinationInput.length >= 2 && !destinationInput.startsWith('lnbc')}
+                                onSelect={(c) => {
+                                  setDestinationInput(c.value);
+                                }}
+                                onClose={() => {}}
+                              />
                             </div>
-
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setShowAddressBook(true)}
-                                className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
-                                title="Open Address Book"
-                              >
-                                <BookUser size={15} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setShowScanner(true)}
-                                className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
-                                title="Scan QR Code"
-                                hidden={page}
-                              >
-                                <QrCode size={15} />
-                              </button>
-                            </div>
-                          </div>
-
-                          <AddressBookAutocomplete
-                            type="bitcoin"
-                            query={destinationInput}
-                            visible={destinationInput.length >= 2 && !destinationInput.startsWith('lnbc')}
-                            onSelect={(c) => {
-                              setDestinationInput(c.value);
-                            }}
-                            onClose={() => {}}
-                          />
-                        </div>
+                          )}
+                        </FormField>
                       </div>
                     )}
                     {parsedInput.type === 'lightning' && parsedInput.amountSats !== null && !showScanner && (
@@ -1049,7 +1027,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
             )}
           </div>
         </div>
-        {page && activeTab === 'send' && sendStep === 'confirm' && onchainEstimate && <div className="bitcoin-actions">{confirmAction}</div>}
         {isFetchingLnurl && (
           <FullScreenLoader title="Generating Invoice..." message="Resolving address and fetching Lightning invoice..." />
         )}
@@ -1074,7 +1051,6 @@ export const BitcoinModal: React.FC<BitcoinModalProps> = ({ mintUrl: initialMint
           onRetry={lastPayAction}
         />
           </div>
-        </div>
       )}
 
       <AddressBookPickerModal

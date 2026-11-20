@@ -1,0 +1,37 @@
+[
+  {
+    "code": "INVALID_REQUEST",
+    "message": "diagnostic-0",
+    "tx_id": null
+  },
+  {
+    "code": "WALLET_LOCKED",
+    "message": "diagnostic-1",
+    "tx_id": null
+  },
+  {
+    "code": "INSUFFICIENT_FUNDS",
+    "message": "diagnostic-2",
+    "tx_id": null
+  },
+  {
+    "code": "REVIEW_REQUIRED",
+    "message": "diagnostic-3",
+    "tx_id": null
+  },
+  {
+    "code": "SERVICE_UNAVAILABLE",
+    "message": "diagnostic-4",
+    "tx_id": null
+  },
+  {
+    "code": "OUTCOME_UNKNOWN",
+    "message": "diagnostic-5",
+    "tx_id": "saved-send"
+  },
+  {
+    "code": "INTERNAL_ERROR",
+    "message": "diagnostic-6",
+    "tx_id": null
+  }
+]

@@ -1,0 +1,44 @@
+.payment-page-layout {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin-inline: auto;
+  overflow: hidden;
+  padding-top: clamp(8px, 2dvh, 24px);
+  padding-right: max(var(--spacing-container-padding, 24px), env(safe-area-inset-right, 0px));
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(var(--spacing-container-padding, 24px), env(safe-area-inset-left, 0px));
+}
+
+.payment-page-layout__header,
+.payment-page-layout__footer {
+  flex: none;
+  min-width: 0;
+}
+
+.payment-page-layout__body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.payment-page-layout__body:focus-visible {
+  outline: 2px solid var(--color-on-surface);
+  outline-offset: -2px;
+}
+
+@media (min-width: 768px) {
+  .payment-page-layout {
+    max-width: 600px;
+    padding-right: max(40px, env(safe-area-inset-right, 0px));
+    padding-left: max(40px, env(safe-area-inset-left, 0px));
+  }
+}

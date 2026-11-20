@@ -3,7 +3,7 @@ use crate::error::{CommandError, CommandResult};
 use ecash_core::types::TransactionStatus;
 use ecash_wallet::{
     client::{calculate_input_fee, MintClient},
-    stable::StableOperation,
+    stable::{StableOperation, StableStage},
 };
 use std::sync::atomic::Ordering;
 use tauri::State;
@@ -62,7 +62,7 @@ fn validate_review_quote(
     operation: &StableOperation,
 ) -> CommandResult<()> {
     let valid = matches!(operation.protection_bps, 0 | 300)
-        && operation.stage == "quoted"
+        && operation.stage == StableStage::Quoted
         && matches!(operation.direction.as_str(), "toUsd" | "toSats")
         && operation.id.len() == 36
         && operation.quote_json.len() <= 131072
@@ -186,7 +186,7 @@ pub async fn stable_fund(id: String, state: State<'_, AppState>) -> CommandResul
         .position(|o| o.id == id)
         .ok_or_else(|| CommandError("Conversion not found".into()))?;
     let op = wallet.stable_operations[pos].clone();
-    if op.stage != "quoted" || op.direction != "toUsd" || op.expires_at <= now() {
+    if op.stage != StableStage::Quoted || op.direction != "toUsd" || op.expires_at <= now() {
         return Err(CommandError(
             "Funding cannot be repeated. Check the saved conversion status.".into(),
         ));
@@ -196,7 +196,7 @@ pub async fn stable_fund(id: String, state: State<'_, AppState>) -> CommandResul
         wallet.transactions.len(),
         wallet.balance_by_mint(),
     );
-    wallet.stable_operations[pos].stage = "funding".into();
+    wallet.stable_operations[pos].stage = StableStage::Funding;
     wallet.save_encrypted(&path, &passphrase)?;
     let result = ecash_wallet::pay_invoice_capped(
         wallet,
@@ -221,16 +221,16 @@ pub async fn stable_fund(id: String, state: State<'_, AppState>) -> CommandResul
             wallet.balance_by_mint(),
         );
         if before_spend == after_spend {
-            wallet.stable_operations[pos].stage = "quoted".into();
+            wallet.stable_operations[pos].stage = StableStage::Quoted;
             if wallet.save_encrypted(&path, &passphrase).is_err() {
-                wallet.stable_operations[pos].stage = "funding".into();
+                wallet.stable_operations[pos].stage = StableStage::Funding;
             }
         }
         return Err(error.into());
     }
-    wallet.stable_operations[pos].stage = "funded".into();
+    wallet.stable_operations[pos].stage = StableStage::Funded;
     if let Err(error) = wallet.save_encrypted(&path, &passphrase) {
-        wallet.stable_operations[pos].stage = "funding".into();
+        wallet.stable_operations[pos].stage = StableStage::Funding;
         return Err(error.into());
     }
     Ok(wallet.stable_operations[pos].clone())
@@ -239,8 +239,8 @@ pub async fn stable_fund(id: String, state: State<'_, AppState>) -> CommandResul
 #[tauri::command]
 pub async fn stable_advance(
     id: String,
-    expected_stage: String,
-    next_stage: String,
+    expected_stage: StableStage,
+    next_stage: StableStage,
     payment_id: Option<String>,
     state: State<'_, AppState>,
 ) -> CommandResult<StableOperation> {
@@ -252,13 +252,13 @@ pub async fn stable_advance(
         .position(|o| o.id == id)
         .ok_or_else(|| CommandError("Conversion not found".into()))?;
     let op = &wallet.stable_operations[pos];
-    let funding_recovered = op.stage == "funding"
-        && next_stage == "funded"
+    let funding_recovered = op.stage == StableStage::Funding
+        && next_stage == StableStage::Funded
         && wallet.transactions.iter().any(|t| {
             t.id == format!("stable-fund-{}", id) && t.status == TransactionStatus::Success
         });
     if op.stage != expected_stage
-        || (!op.can_transition(&next_stage)
+        || (!op.can_transition(next_stage)
             && !funding_recovered
             && !(op.stage == next_stage && payment_id.is_some() && op.payment_id.is_none()))
     {
@@ -266,24 +266,26 @@ pub async fn stable_advance(
             "Conversion state changed. Reload its status.".into(),
         ));
     }
-    if op.stage == "quoted"
-        && next_stage == "converting"
+    if op.stage == StableStage::Quoted
+        && next_stage == StableStage::Converting
         && (op.direction != "toSats" || op.expires_at <= now())
     {
         return Err(CommandError("Request a fresh conversion quote.".into()));
     }
-    if op.stage == "quoted" && next_stage == "converting" && op.direction == "toSats"
+    if op.stage == StableStage::Quoted
+        && next_stage == StableStage::Converting
+        && op.direction == "toSats"
         && !wallet.transactions.iter().any(|tx| tx.id == op.mint_quote_id
             && tx.mint_url == op.mint_url && tx.amount.to_string() == op.output_amount
             && tx.status == TransactionStatus::Pending
             && matches!(tx.tx_type, ecash_core::types::TransactionType::ReceiveLightning(_))) {
         return Err(CommandError("Prepare the selected receive invoice before conversion".into()));
     }
-    if next_stage == "complete"
-        && (op.direction == "toSats" || op.stage == "returning")
+    if next_stage == StableStage::Complete
+        && (op.direction == "toSats" || op.stage == StableStage::Returning)
         && !wallet.transactions.iter().any(|t| {
             &t.id
-                == if op.stage == "returning" {
+                == if op.stage == StableStage::Returning {
                     &op.return_quote_id
                 } else {
                     &op.mint_quote_id
@@ -295,9 +297,9 @@ pub async fn stable_advance(
             "The mint has not issued the ecash yet. Check again shortly.".into(),
         ));
     }
-    if next_stage == "complete"
+    if next_stage == StableStage::Complete
         && op.direction == "toUsd"
-        && op.stage != "returning"
+        && op.stage != StableStage::Returning
         && payment_id.as_ref().or(op.payment_id.as_ref()).is_none()
     {
         return Err(CommandError(
@@ -305,12 +307,12 @@ pub async fn stable_advance(
         ));
     }
     let previous = wallet.stable_operations[pos].clone();
-    if previous.stage == "returnQuoted" && next_stage == "funded" {
+    if previous.stage == StableStage::ReturnQuoted && next_stage == StableStage::Funded {
         wallet.stable_operations[pos].return_quote_id.clear();
         wallet.stable_operations[pos].return_quote_json.clear();
         wallet.stable_operations[pos].return_amount = 0;
     }
-    if previous.stage != "converting" && next_stage == "converting" {
+    if previous.stage != StableStage::Converting && next_stage == StableStage::Converting {
         // Persist the SDK call shape before sending, so ambiguous new calls cannot be reset as legacy.
         wallet.stable_operations[pos].conversion_request_version = 1;
     }
@@ -344,7 +346,7 @@ pub async fn stable_prepare_return(
         .position(|o| o.id == id)
         .ok_or_else(|| CommandError("Conversion not found".into()))?;
     let op = &wallet.stable_operations[pos];
-    if op.stage != "funded"
+    if op.stage != StableStage::Funded
         || amount == 0
         || amount > op.funding_sats
         || quote_json.len() > 131072
@@ -357,7 +359,7 @@ pub async fn stable_prepare_return(
             "Cannot prepare a refund for this operation.".into(),
         ));
     }
-    wallet.stable_operations[pos].stage = "returnQuoted".into();
+    wallet.stable_operations[pos].stage = StableStage::ReturnQuoted;
     wallet.stable_operations[pos].return_quote_id = quote_id;
     wallet.stable_operations[pos].return_quote_json = quote_json;
     wallet.stable_operations[pos].return_amount = amount;
@@ -447,7 +449,7 @@ pub async fn stable_accept_mint_quote(
         guard.as_ref().unwrap().stable_operations.iter().find(|op| op.id == id).cloned()
             .ok_or_else(|| CommandError("Conversion not found".into()))?
     };
-    if op.stage != "quoted" || op.direction != "toSats" || op.expires_at <= now() {
+    if op.stage != StableStage::Quoted || op.direction != "toSats" || op.expires_at <= now() {
         return Err(CommandError("Receive preparation requires a fresh unconfirmed conversion".into()));
     }
     let invoice = reviewed_receive_invoice(&op)?;
@@ -476,7 +478,9 @@ mod receive_review_tests {
     }
     fn operation(invoice: String) -> StableOperation {
         StableOperation {
-            id:"00000000-0000-4000-8000-000000000001".into(), direction:"toSats".into(), stage:"quoted".into(),
+            id: "00000000-0000-4000-8000-000000000001".into(),
+            direction: "toSats".into(),
+            stage: StableStage::Quoted,
             mint_url:"https://mint.example".into(), created_at:now(), expires_at:now()+60,
             output_amount:"900".into(), protection_bps:0, max_debit:"1000000".into(), funding_invoice:String::new(), funding_sats:0,
             mint_quote_id:"quote-one".into(), quote_json:serde_json::json!({"paymentMethod":{"type":"bolt11Invoice","invoiceDetails":{"invoice":{"bolt11":invoice}}}}).to_string(),

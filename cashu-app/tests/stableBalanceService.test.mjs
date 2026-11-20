@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
+const stageContract = JSON.parse(readFileSync(
+  new URL('../../crates/ecash-wallet/tests/fixtures/stable-stages.json', import.meta.url),
+  'utf8',
+));
 const serviceUrl = new URL('../src/services/stableBalanceService.ts', import.meta.url).href;
 const stub = source => 'data:text/javascript,' + encodeURIComponent(source);
 registerHooks({resolve(specifier, context, next) {
@@ -60,14 +65,93 @@ function fixture() {
       assert.equal(op.stage, 'converting'); assert.equal(op.conversion_request_version ?? 0, 0); assert.equal(op.payment_id, null);
       op.stage = op.direction === 'toUsd' ? 'funded' : 'quoted'; op.conversion_request_version = 1; return structuredClone(op);
     }
-    if(cmd === 'stable_advance') {assert.equal(op.stage, args.expectedStage); if(op.stage !== 'converting' && args.nextStage === 'converting') op.conversion_request_version = 1; op.stage = args.nextStage; if(args.paymentId) op.payment_id = args.paymentId; return structuredClone(op);}
-    if(cmd === 'stable_prepare_return') {op.stage = 'returnQuoted'; op.return_quote_id = args.quoteId; op.return_quote_json = args.quoteJson; op.return_amount = args.amount; return structuredClone(op);}
+    if (cmd === 'stable_advance') {
+      assert.equal(op.stage, args.expectedStage);
+      const from = stageContract.find(row => row.stage === op.stage);
+      assert.ok(from, `unknown source stage: ${op.stage}`);
+      assert.ok(stageContract.some(row => row.stage === args.nextStage), `unknown destination: ${args.nextStage}`);
+      // These native command exceptions are not ordinary journal transitions.
+      // Receipt availability is represented by paidMint in this mock.
+      const reconcilesFunding = op.stage === 'funding' && args.nextStage === 'funded' && f.paidMint;
+      const recordsPayment = op.stage === args.nextStage && args.paymentId != null && op.payment_id == null;
+      assert.ok(from.next.includes(args.nextStage) || reconcilesFunding || recordsPayment,
+        `unsupported transition: ${op.stage} -> ${args.nextStage}`);
+      if (op.stage !== 'converting' && args.nextStage === 'converting') op.conversion_request_version = 1;
+      op.stage = args.nextStage;
+      if (args.paymentId) op.payment_id = args.paymentId;
+      return structuredClone(op);
+    }
+    if (cmd === 'stable_prepare_return') {
+      assert.ok(stageContract.find(row => row.stage === op.stage)?.next.includes('returnQuoted'));
+      op.stage = 'returnQuoted';
+      op.return_quote_id = args.quoteId;
+      op.return_quote_json = args.quoteJson;
+      op.return_amount = args.amount;
+      return structuredClone(op);
+    }
     if(cmd === 'check_transaction_status') { if(!f.paidMint) throw Error('mint unavailable'); return 'Success'; }
     throw Error('Unexpected command ' + cmd);
   };
   globalThis.__stableTest = f;
   return f;
 }
+
+test('frontend active-conversion classification agrees with every shared stage', async () => {
+  for (const { stage, active } of stageContract) {
+    const f = fixture();
+    const operation = { id: 'classification-fixture', stage };
+    f.operations = [operation];
+    assert.deepEqual(await service.getActiveConversion(), active ? operation : null, stage);
+  }
+});
+
+test('frontend workflows exercise every ordinary transition in the shared contract', async () => {
+  const observed = new Set();
+  function scenario() {
+    const f = fixture();
+    const invoke = f.invoke;
+    f.invoke = async (command, args) => {
+      const from = f.operations.find(operation => operation.id === args?.id)?.stage;
+      const result = await invoke(command, args);
+      if (['stable_advance', 'stable_prepare_return'].includes(command) && from !== result.stage) {
+        observed.add(`${from} -> ${result.stage}`);
+      }
+      return result;
+    };
+    return f;
+  }
+
+  for (const direction of ['toUsd', 'toSats']) {
+    scenario();
+    const output = direction === 'toUsd' ? 1000000n : 500n;
+    const operation = await service.quoteStableConversion(direction, output, 'https://mint.example', 2000);
+    assert.equal((await service.executeStableConversion(operation.id)).stage, 'complete');
+  }
+
+  scenario();
+  const review = await service.quoteStableConversion('toUsd', 1000000n, 'https://mint.example', 2000);
+  await service.cancelConversion(review);
+
+  const funded = scenario();
+  const funding = await service.quoteStableConversion('toUsd', 1000000n, 'https://mint.example', 2000);
+  funded.operations[0].stage = 'funded'; // Resume a saved, already-funded operation.
+  const returnQuote = await service.quoteFundingReturn(funding.id);
+  await service.cancelConversion(returnQuote);
+  await service.quoteFundingReturn(funding.id);
+  assert.equal((await service.executeFundingReturn(funding.id)).stage, 'complete');
+
+  const refunded = scenario();
+  const pending = await service.quoteStableConversion('toUsd', 1000000n, 'https://mint.example', 2000);
+  refunded.timeout = true;
+  await assert.rejects(service.executeStableConversion(pending.id));
+  refunded.payments = [{ ...complete, conversionDetails: { status: 'refunded' } }];
+  assert.equal((await service.checkStableConversion(pending.id)).stage, 'refunded');
+  assert.equal(refunded.sends, 1);
+
+  const expected = stageContract.flatMap(row => row.next.map(next => `${row.stage} -> ${next}`));
+  assert.deepEqual([...observed].sort(), expected.sort());
+});
+
 test('quotes without moving money, confirms ecash funding once, and completes USDB conversion', async () => {
   const f = fixture();
   const op = await service.quoteStableConversion('toUsd', 1000000n, 'https://mint.example', 2000);
@@ -294,6 +378,45 @@ test('corrects the reported 723 versus 800 minimum mismatch without increasing s
   assert.ok(BigInt(op.max_debit)<=1000n); assert.ok(op.funding_sats>=800);
   assert.equal(f.operations.length,0); assert.equal(f.funding,0); assert.equal(f.sends,0);
 });
+
+test('unrecognized quote errors propagate without retrying or moving funds', async () => {
+  const f = fixture();
+  const providerError = new Error('Conversion input 723 is below the minimum of 800');
+  let quoteCalls = 0;
+  f.sdk.prepareSendPayment = async () => {
+    quoteCalls++;
+    throw providerError;
+  };
+
+  await assert.rejects(
+    service.previewStableTransfer('toUsd', 750000n, 'https://mint.example', 2000, 1000n),
+    error => error === providerError,
+  );
+  assert.equal(quoteCalls, 1);
+  assert.equal(f.operations.length, 0);
+  assert.equal(f.funding, 0);
+  assert.equal(f.sends, 0);
+});
+
+test('provider minimum errors propagate without resizing when no source budget was supplied', async () => {
+  const f = fixture();
+  const providerError = new Error('Amount in 723 is less than minimum required 800');
+  let quoteCalls = 0;
+  f.sdk.prepareSendPayment = async () => {
+    quoteCalls++;
+    throw providerError;
+  };
+
+  await assert.rejects(
+    service.quoteStableConversion('toUsd', 750000n, 'https://mint.example', 2000),
+    error => error === providerError,
+  );
+  assert.equal(quoteCalls, 1);
+  assert.equal(f.operations.length, 0);
+  assert.equal(f.funding, 0);
+  assert.equal(f.sends, 0);
+});
+
 test('live previews do not create history or save an operation in either direction', async () => {
   for(const direction of ['toUsd','toSats']) {
     const f=fixture();

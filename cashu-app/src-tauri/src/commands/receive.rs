@@ -5,6 +5,7 @@ use ecash_core::types::{
     TransactionType,
 };
 use ecash_wallet::client::MintClient;
+use ecash_wallet::stable::StableStage;
 use serde::{Deserialize, Serialize};
 
 use crate::commands::auth::AppState;
@@ -61,7 +62,8 @@ pub(crate) async fn persist_receive_quote(
         let current = w_state.stable_operations.iter().find(|op| op.id == id)
             .ok_or_else(|| crate::error::CommandError("Conversion wallet changed".into()))?;
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
-        if current.stage != "quoted" || current.direction != "toSats" || current.quote_json != expected_quote
+        if current.stage != StableStage::Quoted
+            || current.direction != "toSats" || current.quote_json != expected_quote
             || current.mint_url != mint_url || current.mint_quote_id != quote_id
             || current.output_amount != amount.to_string() || current.expires_at <= now {
             return Err(crate::error::CommandError("The reviewed conversion changed during receive preparation".into()));

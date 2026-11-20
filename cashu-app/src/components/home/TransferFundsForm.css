@@ -29,10 +29,10 @@
 .transfer-keypad { margin-bottom:12px; }
 .transfer-keypad > div { gap:6px; margin-bottom:0; }
 .transfer-keypad button { padding:0; height:clamp(32px,5.8dvh,48px); }
-.transfer-primary, .transfer-secondary { width:100%; min-height:52px; border-radius:26px; display:flex; gap:8px; align-items:center; justify-content:center; padding:14px 18px; font-size:15px; font-weight:600; }
-.transfer-primary { min-height:44px; padding:12px 18px; border-radius:16px; background:#f2a93b; color:#06110c; }
+.transfer-primary, .transfer-secondary { display:flex; gap:8px; align-items:center; justify-content:center; }
+.transfer-primary { padding:12px 18px; }
 .transfer-primary:hover:not(:disabled) { background:#ffc564; }
-.transfer-secondary { margin-top:8px; color:#d0e0d5; }
+.transfer-secondary { width:100%; min-height:52px; border-radius:26px; padding:14px 18px; font-size:15px; font-weight:600; margin-top:8px; color:#d0e0d5; }
 .transfer-secondary:hover { background:#222c28; }
 .transfer-text-button { min-height:44px; width:100%; color:#ffc564; font-size:13px; margin-bottom:8px; }
 .transfer-receipt { padding:16px 0 28px; text-align:center; }

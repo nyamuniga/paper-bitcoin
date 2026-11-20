@@ -8,10 +8,17 @@ registerHooks({resolve(specifier,context,next) {
   };
   return next(specifier,context);
 }});
-const { requestProxyJson, withDeadline } = await import(source);
+const { requestProxyJson, withDeadline, ProxyRequestError, ProxyRequestTimeoutError } = await import(source);
 test('a request that never returns is bounded and aborted', async () => {
   let signal;
-  await assert.rejects(withDeadline(s => {signal=s;return new Promise(()=>{});}, 5), /timed out/i);
+  await assert.rejects(withDeadline(s => {signal=s;return new Promise(()=>{});}, 5), error => {
+    assert.ok(error instanceof ProxyRequestTimeoutError);
+    assert.ok(error instanceof ProxyRequestError);
+    assert.match(error.message, /timed out/i);
+    assert.equal(error.submission, 'unknown');
+    assert.equal(error.retryable, true);
+    return true;
+  });
   assert.equal(signal.aborted,true);
 });
 test('slow response bodies also time out without claiming rejection', async () => {

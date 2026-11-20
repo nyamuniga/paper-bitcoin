@@ -59,6 +59,20 @@ fn clear_saved_passphrase(app: &tauri::AppHandle) {
     }
 }
 
+#[derive(Debug)]
+pub enum WalletAccessError {
+    Locked(CommandError),
+    Load(CommandError),
+}
+
+impl From<WalletAccessError> for CommandError {
+    fn from(error: WalletAccessError) -> Self {
+        match error {
+            WalletAccessError::Locked(error) | WalletAccessError::Load(error) => error,
+        }
+    }
+}
+
 pub struct AppState {
     pub passphrase: Mutex<Option<String>>,
     pub wallet_path: std::path::PathBuf,
@@ -87,12 +101,27 @@ impl AppState {
         ),
         CommandError,
     > {
-        let _ = self.get_passphrase()?;
+        self.lock_and_get_wallet_typed().await.map_err(Into::into)
+    }
+
+    /// Preserve the distinction between locked access and a local load failure.
+    pub async fn lock_and_get_wallet_typed(
+        &self,
+    ) -> Result<
+        (
+            tokio::sync::MutexGuard<'_, Option<WalletState>>,
+            std::path::PathBuf,
+            String,
+        ),
+        WalletAccessError,
+    > {
+        let _ = self.get_passphrase().map_err(WalletAccessError::Locked)?;
         let mut guard = self.wallet.lock().await;
-        let passphrase = self.get_passphrase()?;
+        let passphrase = self.get_passphrase().map_err(WalletAccessError::Locked)?;
         let path = self.wallet_path.clone();
         if guard.is_none() {
-            let loaded = WalletState::load_encrypted(&path, &passphrase)?;
+            let loaded = WalletState::load_encrypted(&path, &passphrase)
+                .map_err(|error| WalletAccessError::Load(error.into()))?;
             *guard = Some(loaded);
         }
         Ok((guard, path, passphrase))

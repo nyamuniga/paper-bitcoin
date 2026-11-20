@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Loader2, Copy, Check, ArrowLeft } from 'lucide-react';
 import { PageHeader } from '../shared/PageHeader';
-import QRCode from 'react-qr-code';
+import { SafeQRCode } from '../shared/SafeQRCode';
 import { toast } from 'react-hot-toast';
 import { writeClipboardText } from '../../utils/clipboard';
 
@@ -48,8 +48,12 @@ export const InvoicePaymentPending: React.FC<InvoicePaymentPendingProps> = ({
             Pay this invoice from an external wallet (Phoenix, Strike, CashApp, etc.) to fund the note
           </p>
 
-          <div className="bg-white p-4 rounded-2xl inline-block shadow-2xl border border-primary/20 relative group">
-            <QRCode value={invoicePayload.invoice} size={200} />
+          <div className="bg-white p-4 rounded-2xl inline-block shadow-2xl border border-primary/20 relative group [&>div]:bg-surface-container-lowest [&>div>p]:text-on-surface">
+            <SafeQRCode
+              value={invoicePayload.invoice}
+              size={200}
+              fallbackText="Use Copy Lightning Invoice below to copy the invoice."
+            />
           </div>
 
           <div className="flex flex-col items-center gap-1">

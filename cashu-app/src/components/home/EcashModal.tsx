@@ -1,7 +1,7 @@
-import React, { useState, useRef, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useNavigate } from 'react-router-dom';
-import { X, Loader2, Copy, Check, Coins, ArrowUp, ArrowDown, QrCode, ChevronDown } from 'lucide-react';
+import { X, Loader2, Copy, Check, Coins, ArrowUp, ArrowDown, QrCode } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
@@ -14,6 +14,7 @@ import { AmountDisplay } from '../shared/AmountDisplay';
 import { NumberPad } from '../shared/NumberPad';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
+import { MintBalancePicker } from '../shared/MintBalancePicker';
 import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../shared/FullScreenLoader';
 import { parseReceivedTokenPreview } from '../../services/receivedTokenPreview';
@@ -24,6 +25,7 @@ import { SlidingSegmentedControl } from '../shared/SlidingSegmentedControl';
 import { EcashReceiveInvoice } from './EcashReceiveInvoice';
 import { EcashRequestPayment } from './EcashRequestPayment';
 import './SendEcashPage.css';
+import './EcashFields.css';
 import { PageHeader } from '../shared/PageHeader';
 import { isCashuRequest } from '../../services/cashuRequests';
 
@@ -49,58 +51,6 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
   }, [page, initialTab, initialMintUrl, initialRequest, initialToken, navigate, onClose]);
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [mintUrl, setMintUrl] = useState(initialMintUrl);
-  const [showMintDropdown, setShowMintDropdown] = useState(false);
-  const mintButtonRef = useRef<HTMLButtonElement>(null);
-  const [mintMenuStyle, setMintMenuStyle] = useState<React.CSSProperties>({visibility:'hidden'});
-  useLayoutEffect(() => {
-    if (!page || !showMintDropdown) return;
-    const position = () => {
-      const anchor = mintButtonRef.current?.getBoundingClientRect();
-      if (!anchor) return;
-      const viewport = window.visualViewport;
-      const top = (viewport?.offsetTop ?? 0) + 8;
-      const bottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight) - 8;
-      const below = bottom - anchor.bottom - 8;
-      const above = anchor.top - top - 8;
-      const openAbove = above > below;
-      const height = Math.max(0, Math.min(250, openAbove ? above : below));
-      setMintMenuStyle({position:'fixed', left:anchor.left, right:'auto', width:anchor.width,
-        top:openAbove ? 'auto' : anchor.bottom + 8,
-        bottom:openAbove ? window.innerHeight - anchor.top + 8 : 'auto',
-        maxHeight:height, margin:0, zIndex:111});
-    };
-    const dismiss = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setShowMintDropdown(false); mintButtonRef.current?.focus(); }
-    };
-    position();
-    window.addEventListener('resize', position);
-    window.addEventListener('scroll', position, true);
-    window.visualViewport?.addEventListener('resize', position);
-    document.addEventListener('keydown', dismiss);
-    return () => {
-      window.removeEventListener('resize', position);
-      window.removeEventListener('scroll', position, true);
-      window.visualViewport?.removeEventListener('resize', position);
-      document.removeEventListener('keydown', dismiss);
-    };
-  }, [page, showMintDropdown]);
-  const [isClosingMintDropdown, setIsClosingMintDropdown] = useState(false);
-
-  const closeMintDropdown = () => {
-    setIsClosingMintDropdown(true);
-    setTimeout(() => {
-      setShowMintDropdown(false);
-      setIsClosingMintDropdown(false);
-    }, 160);
-  };
-
-  const toggleMintDropdown = () => {
-    if (showMintDropdown) {
-      closeMintDropdown();
-    } else {
-      setShowMintDropdown(true);
-    }
-  };
 
   // Send state
   const [amount, setAmount] = useState('');
@@ -338,7 +288,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                           setPubkey(val);
                         }}
                         placeholder="npub1... or hex pubkey"
-                        className="w-full bg-[#0c1b14] py-2.5 px-3 rounded-xl border border-[#142d20] text-[13px] text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary transition-colors"
+                        className="ecash-field w-full py-2.5 px-3 rounded-xl text-[13px] transition-colors"
                       />
                     </div>
   );
@@ -352,28 +302,6 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                   >
                     {receiving ? <Loader2 className="animate-spin w-6 h-6" /> : 'Receive Ecash'}
                   </button>
-  );
-
-  const mintOptions = (
-                <div id="ecash-mint-options" style={page ? mintMenuStyle : undefined} className={`ecash-mint-options absolute top-full left-0 right-0 mt-2 bg-surface-container-highest rounded-2xl shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] border border-outline-variant/20 overflow-hidden flex flex-col z-50 max-h-[250px] overflow-y-auto ${
-                  page ? '' : isClosingMintDropdown ? 'animate-dropdown-collapse' : 'animate-dropdown-expand'
-                }`}>
-                  {mintUrls.map((m, index) => (
-                    <button
-                      key={m}
-                      style={{ animationDelay: `${index * 30}ms` }}
-                      onClick={() => { setMintUrl(m); closeMintDropdown(); }}
-                      className="shrink-0 flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left w-full border-b border-outline-variant/10 last:border-b-0 animate-dropdown-item cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 pr-2">
-                        <MintIcon mintUrl={m} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
-                        <MintName mintUrl={m} className="text-body-sm font-body-sm text-on-surface truncate" />
-                        {mintUrl === m && <Check size={14} className="text-primary flex-shrink-0" />}
-                      </div>
-                      <span className="text-body-sm font-body-sm font-bold text-on-surface flex-shrink-0">₿{(mintBalances![m] || 0).toLocaleString()}</span>
-                    </button>
-                  ))}
-                </div>
   );
 
   const content = (
@@ -454,38 +382,8 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
           {!(activeTab === 'send' && (requestBusy || token)) && !(activeTab === 'receive' && receivePreview && !showScanner) && <div className="flex flex-col gap-1.5 sm:gap-2">
 
             <div className="flex items-stretch gap-2">
-            <div className="relative flex-1 min-w-0">
-              {showMintDropdown && !page && (
-                <div className="fixed inset-0 z-40" onClick={closeMintDropdown}></div>
-              )}
-              <button
-                ref={mintButtonRef}
-                onClick={toggleMintDropdown}
-                aria-expanded={showMintDropdown}
-                aria-controls="ecash-mint-options"
-                className="w-full flex items-center justify-between bg-surface-container-highest p-2.5 sm:p-3 rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-colors relative z-50 cursor-pointer"
-              >
-                <div className="flex items-center gap-2 min-w-0 pr-4">
-                  <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
-                  <MintName mintUrl={mintUrl} className="text-body-md font-body-md text-on-surface font-medium truncate" />
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap">
-                  <span className="text-body-md font-body-md font-semibold text-on-surface">₿{availableBalance.toLocaleString()}</span>
-                  <ChevronDown
-                    size={16}
-                    className={`flex-shrink-0 transition-transform duration-300 ease-out ${
-                      showMintDropdown && !isClosingMintDropdown ? 'rotate-180 text-primary' : 'text-on-surface-variant'
-                    }`}
-                  />
-                </div>
-              </button>
-
-              {showMintDropdown && (
-                page ? createPortal(<>
-                  <div className="fixed inset-0 z-[110]" onClick={closeMintDropdown} />
-                  {mintOptions}
-                </>, document.body) : mintOptions
-              )}
+            <div className="flex-1 min-w-0">
+              <MintBalancePicker mintUrl={mintUrl} balances={mintBalances} onSelect={setMintUrl} />
             </div>
             {activeTab === 'receive' && receivedAmount === null && <button
               type="button"
@@ -704,18 +602,18 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                       </button>
                     </div>
                   ) : (
-                    <div className="relative rounded-xl bg-[#0c1b14] border border-[#142d20] focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/40 transition-all overflow-hidden flex flex-col">
+                    <div className="ecash-field relative rounded-xl transition-all overflow-hidden flex flex-col">
                       <textarea
                         value={receiveToken}
                         onChange={(e) => handleTokenInput(e.target.value)}
-                        className="w-full bg-transparent text-on-surface font-label-caps text-label-caps p-3.5 pb-2 border-none focus:outline-none resize-none placeholder:text-on-surface-variant/50 min-h-[76px]"
+                        className="w-full font-label-caps text-label-caps p-3.5 pb-2 resize-none min-h-[76px]"
                         placeholder="Paste cashu token here to receive..."
                         rows={3}
                         spellCheck={false}
                       />
 
                       {/* Action Toolbar */}
-                      <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-[#142d20]">
+                      <div className="ecash-field-toolbar flex items-center justify-between px-3 pb-2.5 pt-1">
                         <div>
                           {receiveToken ? (
                             <button

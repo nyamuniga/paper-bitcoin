@@ -1,0 +1,19 @@
+/* Stack labels, caller-owned controls and messages without changing feature spacing or type. */
+@layer components {
+  .form-field {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-field-label {
+    display: block;
+  }
+
+  .form-field-hint {
+    color: var(--color-on-surface-muted);
+  }
+
+  .form-field-error {
+    color: var(--color-error);
+  }
+}

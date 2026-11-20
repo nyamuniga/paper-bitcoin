@@ -9,6 +9,7 @@ import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { EcashReceiveInvoice } from '../home/EcashReceiveInvoice';
 import { MintName } from '../shared/MintName';
 import { MintIcon } from '../shared/MintIcon';
+import { IconButton } from '../shared/IconButton';
 import { openMempoolTx, openMempoolAddress } from '../../utils/mempool';
 import { writeClipboardText } from '../../utils/clipboard';
 
@@ -374,13 +375,15 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 <span className="text-[10px] font-semibold tracking-wider text-on-surface-variant uppercase">{isRequest ? 'Request ID' : 'Transaction ID'}</span>
                 <span className="font-mono text-xs text-on-surface truncate">{isRequest ? tx.tx_type.EcashRequest.id : tx.id}</span>
               </div>
-              <button
+              <IconButton
+                type="button"
                 onClick={() => copyToClipboard(isRequest ? tx.tx_type.EcashRequest.id : tx.id, isRequest ? 'Request ID copied' : 'Transaction ID copied')}
-                className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
+                className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 border border-outline-variant/20"
+                aria-label={isRequest ? 'Copy Request ID' : 'Copy Transaction ID'}
                 title={isRequest ? 'Copy Request ID' : 'Copy Transaction ID'}
               >
-                <Copy size={14} />
-              </button>
+                <Copy size={14} aria-hidden="true" />
+              </IconButton>
             </div>
 
             {/* Token (single-line, same box style as txid, right below it) */}
@@ -392,13 +395,15 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                     {tokenString.length > 28 ? `${tokenString.slice(0, 14)}...${tokenString.slice(-10)}` : tokenString}
                   </span>
                 </div>
-                <button
+                <IconButton
+                  type="button"
                   onClick={handleCopyToken}
-                  className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
+                  className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 border border-outline-variant/20"
+                  aria-label="Copy Token"
                   title="Copy Token"
                 >
-                  {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                </button>
+                  {copied ? <Check size={14} className="text-emerald-400" aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                </IconButton>
               </div>
             )}
 
@@ -410,13 +415,15 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                   </span>
                   <span className="font-mono text-xs text-on-surface truncate">{quoteId}</span>
                 </div>
-                <button
+                <IconButton
+                  type="button"
                   onClick={() => copyToClipboard(quoteId, quoteId.startsWith('lnbc') || quoteId.startsWith('lntb') ? 'Invoice copied' : 'Quote ID copied')}
-                  className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
+                  className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 border border-outline-variant/20"
+                  aria-label={quoteId.startsWith('lnbc') || quoteId.startsWith('lntb') ? 'Copy Invoice' : 'Copy Quote ID'}
                   title="Copy"
                 >
-                  <Copy size={14} />
-                </button>
+                  <Copy size={14} aria-hidden="true" />
+                </IconButton>
               </div>
             )}
 
@@ -434,13 +441,15 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                   >
                     <ExternalLink size={14} />
                   </button>
-                  <button
+                  <IconButton
+                    type="button"
                     onClick={() => copyToClipboard(onchainTxid, 'TxID copied')}
-                    className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
+                    className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 border border-outline-variant/20"
+                    aria-label="Copy TxID"
                     title="Copy TxID"
                   >
-                    <Copy size={14} />
-                  </button>
+                    <Copy size={14} aria-hidden="true" />
+                  </IconButton>
                 </div>
               </div>
             )}
@@ -461,13 +470,15 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                   >
                     <ExternalLink size={14} />
                   </button>
-                  <button
+                  <IconButton
+                    type="button"
                     onClick={() => copyToClipboard(onchainAddress, 'Address copied')}
-                    className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 cursor-pointer border border-outline-variant/20"
+                    className="p-2 rounded-xl bg-surface-container-high/80 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0 border border-outline-variant/20"
+                    aria-label="Copy Address"
                     title="Copy Address"
                   >
-                    <Copy size={14} />
-                  </button>
+                    <Copy size={14} aria-hidden="true" />
+                  </IconButton>
                 </div>
               </div>
             )}

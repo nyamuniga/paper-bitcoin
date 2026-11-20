@@ -1,0 +1,38 @@
+@layer components {
+  .bottom-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  .bottom-sheet-panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 480px;
+    max-height: 92dvh;
+    min-height: 0;
+    background: var(--color-surface-container-high);
+    color: var(--color-on-surface);
+    border-radius: 28px 28px 0 0;
+  }
+
+  .bottom-sheet-panel:focus-visible {
+    outline: 2px solid var(--color-on-surface);
+    outline-offset: -2px;
+  }
+
+  @media (min-width: 640px) {
+    .bottom-sheet-backdrop { align-items: center; padding: 16px; }
+    .bottom-sheet-panel { border-radius: 24px; }
+  }
+}
+
+/* The existing hook owns inline transitions; reduced motion removes visual movement. */
+@media (prefers-reduced-motion: reduce) {
+  .bottom-sheet-backdrop,
+  .bottom-sheet-panel { transition: none !important; }
+}

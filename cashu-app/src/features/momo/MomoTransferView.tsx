@@ -1,34 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Phone, PhoneOutgoing, PhoneIncoming, ChevronDown, Check, BookUser } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { PageHeader } from '../shared/PageHeader';
+import { PageHeader } from '../../components/shared/PageHeader';
+import { PaymentPageLayout } from '../../components/shared/PaymentPageLayout';
 import { MomoPaymentForm } from './MomoPaymentForm';
 import { buildMomoReview, MomoReviewChangedError } from '../../services/momoReview';
 import type { MomoReview } from '../../services/momoReview';
 import './MomoPages.css';
 import { AppPhase } from '../../types/momo';
-import { calculateQuote, calculateSendQuote, fetchCurrentRate, fetchProxyBlinkBalance, checkMomoRecovery } from '../../services/flowServices';
+import { calculateQuote, calculateSendQuote, fetchCurrentRate, checkMomoRecovery } from '../../services/flowServices';
+import { fetchProxyBlinkBalance } from '../../services/proxyBalanceService';
+import type { ProxyBlinkBalanceResult } from '../../services/proxyBalanceService';
 import { MOMO_WITHDRAWAL_FIXED_FEE, ECASH_LIGHTNING_FEE, SPREAD } from '../../constants.local';
 import { useWalletStore } from '../../store/wallet';
 import { useTransactionStore } from '../../store/transactionStore';
 import { useAddressBookStore } from '../../store/addressBookStore';
-import { AddressBookPickerModal } from '../addressBook/AddressBookPickerModal';
-import { AddressBookAutocomplete } from '../addressBook/AddressBookAutocomplete';
-import { MintIcon } from '../shared/MintIcon';
-import { MintName } from '../shared/MintName';
-import { SovereignStampOverlay, StampPaymentStatus } from '../shared/SovereignStampOverlay';
+import { AddressBookPickerModal } from '../../components/addressBook/AddressBookPickerModal';
+import { AddressBookAutocomplete } from '../../components/addressBook/AddressBookAutocomplete';
+import { MintIcon } from '../../components/shared/MintIcon';
+import { MintName } from '../../components/shared/MintName';
+import { SovereignStampOverlay, StampPaymentStatus } from '../../components/shared/SovereignStampOverlay';
 import { createPortal } from 'react-dom';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { canSaveMomoTransaction } from '../../services/momoRecovery';
 
-interface MomoTransferModalProps {
+export interface MomoTransferViewProps {
   page?: boolean;
   initialTab?: 'send' | 'receive';
   onClose: () => void;
   mintUrl?: string;
 }
 
-export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
+export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
   initialTab = 'receive',
   onClose,
   mintUrl: initialMintUrl = '',
@@ -124,7 +127,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
   }, [mintUrl, mintUrls]);
 
   const [currentRate, setCurrentRate] = useState<number | null>(null);
-  const [proxyBalance, setProxyBalance] = useState<number | null>(null);
+  const [proxyBalance, setProxyBalance] = useState<ProxyBlinkBalanceResult | null>(null);
   const [isFetchingRate, setIsFetchingRate] = useState(false);
 
   useEffect(() => {
@@ -184,9 +187,9 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
       if (estimatedSats > availableBalance) {
         amountError = 'INSUFFICIENT_BALANCE';
       }
-    } else if (activeTab === 'receive' && currentRate && proxyBalance !== null) {
+    } else if (activeTab === 'receive' && currentRate && proxyBalance?.status === 'available') {
       const estimatedSats = Math.floor(amountNum * (1 - SPREAD) * currentRate);
-      if (estimatedSats > proxyBalance) {
+      if (estimatedSats > proxyBalance.balanceSats) {
         amountError = `Gateway has insufficient liquidity to process this amount right now. Please try a smaller amount.`;
       }
     }
@@ -299,15 +302,43 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleClose]);
 
-  const renderContent = (content: React.ReactNode) => page ? content : createPortal(content, document.body);
+  const renderContent = (content: React.ReactNode) => {
+    if (page) {
+      return (
+        <PaymentPageLayout
+          className="momo-page"
+          bodyClassName="momo-page-body"
+          bodyLabel="Mobile Money transfer"
+          header={
+            <PageHeader
+              title={review ? activeTab === 'send' ? 'Review cashout' : 'Review top-up' : activeTab === 'send' ? 'Cash out' : 'Top up'}
+              subtitle={review ? 'Check your phone number, amount and fees' : activeTab === 'send' ? 'Send RWF to a Mobile Money account' : 'Add funds using Mobile Money'}
+              sticky={false}
+              className="momo-page-header"
+              backDisabled={submittingReview}
+              onBack={() => { if (review) {setReview(null);setError(null);} else handleClose(); }}
+            />
+          }
+        >
+          {content}
+        </PaymentPageLayout>
+      );
+    }
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
+        style={backdropStyle}
+        onClick={handleClose}
+      >
+        {content}
+      </div>,
+      document.body,
+    );
+  };
   return (
     <>
       {renderContent(
-        <div
-          className={page ? "momo-page" : "fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"}
-          style={page ? undefined : backdropStyle}
-          onClick={page ? undefined : handleClose}
-        >
+        <>
       <div
         onClick={e => e.stopPropagation()}
         style={page ? undefined : sheetStyle}
@@ -325,10 +356,6 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
 
-        {page && <PageHeader title={review ? activeTab === 'send' ? 'Review cashout' : 'Review top-up' : activeTab === 'send' ? 'Cash out' : 'Top up'}
-          subtitle={review ? 'Check your phone number, amount and fees' : activeTab === 'send' ? 'Send RWF to a Mobile Money account' : 'Add funds using Mobile Money'}
-          sticky={false} className="momo-page-header" backDisabled={submittingReview}
-          onBack={() => { if (review) {setReview(null);setError(null);} else handleClose(); }} />}
         {!page && phase === AppPhase.IDLE && (
           <>
             <div
@@ -915,7 +942,7 @@ export const MomoTransferModal: React.FC<MomoTransferModalProps> = ({
           setError(null);
         } : undefined}
       />
-          </div>
+          </>
         )}
 
         <AddressBookPickerModal

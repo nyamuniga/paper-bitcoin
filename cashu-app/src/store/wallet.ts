@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import type { WalletInfoResponse, WalletTransactionSummary } from '../types/wallet';
 
 interface WalletState {
   isInitialized: boolean;
@@ -83,7 +84,7 @@ export const useWalletStore = create<WalletState>()((set, get) => ({
     const seq = currentRefreshSeq;
     set((state) => ({ isLoading: state.lastUpdate === 0 }));
     try {
-      const res: any = await invoke('wallet_info');
+      const res = await invoke<WalletInfoResponse>('wallet_info');
       
       let pendingCount = 0;
       let hasUnread = false;
@@ -91,8 +92,8 @@ export const useWalletStore = create<WalletState>()((set, get) => ({
 
       if (res.is_initialized) {
         try {
-          const txs: any[] = await invoke('get_transactions');
-          pendingCount = txs.filter((t: any) => t.status === 'Pending').length;
+          const txs = await invoke<WalletTransactionSummary[]>('get_transactions');
+          pendingCount = txs.filter((t) => t.status === 'Pending').length;
 
           const { id: lastSeenId, time: lastSeenTime } = getLastSeenTxInfo();
           const isFirstRun = localStorage.getItem(LAST_SEEN_TX_TIME_KEY) === null;

@@ -4,8 +4,13 @@ import { registerHooks } from 'node:module';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 const source = new URL('../src/services/flowServices.ts', import.meta.url).href;
+const balanceSource = new URL('../src/services/proxyBalanceService.ts', import.meta.url).href;
 const stub = code => ({url:'data:text/javascript,'+encodeURIComponent(code), shortCircuit:true});
 registerHooks({resolve(specifier, context, next) {
+  if (context.parentURL === balanceSource) {
+    if (specifier === '@tauri-apps/plugin-http') return stub('export const fetch=(...args)=>globalThis.__momo.fetch(...args);');
+    if (specifier === '../constants.local') return stub('export const MOMO_API_BASE_URL="https://proxy.example";');
+  }
   if (context.parentURL === source) {
     if (specifier === './momoService') return stub(`
       export const initiateMomoPaymentRequest=(...a)=>globalThis.__momo.init(...a);
@@ -17,7 +22,7 @@ registerHooks({resolve(specifier, context, next) {
     if (specifier === '../store/wallet') return stub('export const useWalletStore={getState:()=>({refreshWallet:async()=>{}})};');
     if (specifier === '../store/addressBookStore') return stub('export const useAddressBookStore={getState:()=>({recordSuccessfulUse:()=>{}})};');
     if (specifier === '@tauri-apps/api/core') return stub('export const invoke=(...a)=>globalThis.__momo.invoke(...a);');
-    if (specifier === '@tauri-apps/plugin-http') return stub('export const fetch=async()=>({ok:true,json:async()=>({USD:{last:100000}})});');
+    if (specifier === '@tauri-apps/plugin-http') return stub('export const fetch=(...args)=>globalThis.__momo.fetch(...args);');
     if (specifier === '../constants.local') return stub('export const EXCHANGE_RATE_API_URL="https://rate.example", SATS_PER_BTC=1e8, SPREAD=0.021, MOMO_WITHDRAWAL_FIXED_FEE=120, ECASH_LIGHTNING_FEE=10, RWF_USD_PEG=1400, POLLING_INTERVAL_MS=5000, POLLING_TIMEOUT_MS=120000, MOMO_API_BASE_URL="https://proxy.example";');
   }
   if (context.parentURL?.includes('/src/') && specifier.startsWith('.')) return next(new URL(specifier+'.ts',context.parentURL).href,context);
@@ -27,6 +32,7 @@ registerHooks({resolve(specifier, context, next) {
   return next(url,context);
 }});
 const flow = await import(source);
+const { fetchProxyBlinkBalance } = await import(balanceSource);
 const {AppPhase} = await import('../src/types/momo.ts');
 const base={id:'saved-id',direction:'SATS_TO_RWF',rwfAmount:1000,satsAmount:800,invoice:'same-invoice',mintQuoteId:'same-quote',status:'PENDING',invoicePaid:true,currentPhase:AppPhase.RECOVERY_REQUIRED};
 function fixture(tx=null) {
@@ -47,11 +53,96 @@ function fixture(tx=null) {
   f.init=async()=>({success:false,submission:'rejected',message:'Update required'});
   f.payout=async()=>{f.posts++;return {success:false,submission:'rejected',message:'Update required'}};
   f.status=async()=>({status:'UNKNOWN',message:'No confirmation available'});
+  f.fetch=async()=>({ok:true,json:async()=>({USD:{last:100000}})});
   f.invoke=async(cmd,args)=>{f.invocations.push(cmd);f.callArgs.push(args);return cmd==='receive_lightning'?{invoice:'invoice',quote_id:'quote'}:'Success'};
   // The real store exposes stable closures rather than methods bound to `this`.
   for(const key of ['setActiveTransaction','updateTransaction','updateTransactionById','updateTransactionPhase','setError','moveToHistory']) f.store[key]=f.store[key].bind(f.store);
   globalThis.__momo=f;return f;
 }
+
+// Synthetic balance responses; no provider or funded wallet is contacted.
+const balancePayload = balance => ({
+  data: { me: { defaultAccount: { wallets: [{ walletCurrency: 'BTC', balance }] } } },
+});
+
+test('proxy balance preserves a confirmed zero instead of marking it unavailable', async () => {
+  const f = fixture();
+  f.fetch = async (url, options) => {
+    assert.equal(url, 'https://proxy.example/payment/balance');
+    assert.ok(options.signal instanceof AbortSignal);
+    return { ok: true, json: async () => balancePayload(0) };
+  };
+  assert.deepEqual(await fetchProxyBlinkBalance(), { status: 'available', balanceSats: 0 });
+});
+
+test('proxy balance reads BTC sats and ignores wallets in other currencies', async () => {
+  const f = fixture();
+  const payload = balancePayload(12345);
+  payload.data.me.defaultAccount.wallets.unshift({ walletCurrency: 'USD', balance: 50 });
+  f.fetch = async () => ({ ok: true, json: async () => payload });
+  assert.deepEqual(await fetchProxyBlinkBalance(), { status: 'available', balanceSats: 12345 });
+});
+
+test('proxy HTTP failures are unavailable with their status, never a zero balance', async () => {
+  const f = fixture();
+  for (const status of [401, 503]) {
+    f.fetch = async () => ({ ok: false, status, json: async () => assert.fail('do not parse a failed response') });
+    assert.deepEqual(await fetchProxyBlinkBalance(), { status: 'unavailable', reason: 'http', statusCode: status });
+  }
+});
+
+test('proxy connection failures are unavailable rather than a zero balance', async () => {
+  const f = fixture();
+  f.fetch = async () => { throw new TypeError('synthetic connection failure'); };
+  assert.deepEqual(await fetchProxyBlinkBalance(), { status: 'unavailable', reason: 'network' });
+});
+
+test('a proxy balance request that never settles times out and aborts', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture();
+  let signal;
+  f.fetch = async (_url, options) => {
+    signal = options.signal;
+    return new Promise(() => {});
+  };
+  const pending = fetchProxyBlinkBalance();
+  t.mock.timers.tick(60000);
+  assert.deepEqual(await pending, { status: 'unavailable', reason: 'timeout' });
+  assert.equal(signal.aborted, true);
+});
+
+test('the proxy balance deadline includes reading the response body', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture();
+  let startBody;
+  const bodyStarted = new Promise(resolve => { startBody = resolve; });
+  f.fetch = async () => ({ ok: true, json: () => {
+    startBody();
+    return new Promise(() => {});
+  } });
+  const pending = fetchProxyBlinkBalance();
+  await bodyStarted;
+  t.mock.timers.tick(60000);
+  assert.deepEqual(await pending, { status: 'unavailable', reason: 'timeout' });
+});
+
+test('missing, invalid and partial proxy wallet data never invents a zero balance', async () => {
+  const f = fixture();
+  const invalidPayloads = [null, {}, { data: { me: { defaultAccount: { wallets: [] } } } },
+    { ...balancePayload(0), errors: [{ message: 'synthetic provider failure' }] },
+    ...['0', null, -1, 0.5, Number.MAX_SAFE_INTEGER + 1].map(balancePayload)];
+  for (const payload of invalidPayloads) {
+    f.fetch = async () => ({ ok: true, json: async () => payload });
+    assert.deepEqual(await fetchProxyBlinkBalance(), { status: 'unavailable', reason: 'invalid-response' });
+  }
+});
+
+test('malformed proxy JSON is unavailable rather than a zero balance', async () => {
+  const f = fixture();
+  f.fetch = async () => ({ ok: true, json: async () => { throw new SyntaxError('synthetic malformed JSON'); } });
+  assert.deepEqual(await fetchProxyBlinkBalance(), { status: 'unavailable', reason: 'invalid-response' });
+});
+
 test('a rejected topup leaves a dismissible failure, not a persisted initiating spinner',async()=>{
   const f=fixture();await flow.calculateQuote('1000','0781234567','ecash','https://mint.example');
   assert.equal(f.store.activeTransaction.currentPhase,AppPhase.PAYMENT_FAILED);

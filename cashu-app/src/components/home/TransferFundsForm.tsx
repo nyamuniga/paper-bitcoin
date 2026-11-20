@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUpDown, Bitcoin, Check, ChevronRight, DollarSign, Loade
 import { SovereignStampOverlay } from '../shared/SovereignStampOverlay';
 import { NumberPad } from '../shared/NumberPad';
 import { PageHeader } from '../shared/PageHeader';
+import { PrimaryActionButton } from '../shared/PrimaryActionButton';
 import { useWalletStore } from '../../store/wallet';
 import { useCurrencyStore } from '../../store/currencyStore';
 import { useTransferAvailability } from '../../hooks/useTransferAvailability';
@@ -170,6 +171,9 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
     if (!canReview || estimate === null) throw new Error('Enter an amount within your available balance.');
     return quoteStableConversion(direction, conservativeOutput(estimate), mintUrl, cashuBalance, sourceAmount, {protected:true});
   });
+  const entryActionLabel = busy ? 'Getting rate and fees…' : quoteRetrySeconds > 0 ? `Try again in ${quoteRetrySeconds}s` : 'Review transfer';
+  const confirmationActionLabel = busy ? 'Transferring…' : reviewRefresh.refreshing ? 'Updating rate…' : expired ? 'Review expired' : isReturn ? 'Confirm return' : 'Confirm transfer';
+  const progressActionLabel = busy || checkingProgress ? 'Checking…' : operation?.stage === 'funded' ? 'Continue transfer' : 'Check progress';
 
   return (
     <main className={`transfer-screen ${!operation ? 'is-entry' : ''} flex-grow w-full max-w-[480px] md:max-w-[600px] mx-auto px-container-padding md:px-10`}>
@@ -206,7 +210,14 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
               </div>
               {sourceBalance === null && <button className="transfer-text-button" disabled={busy} onClick={onChange}>Refresh balance</button>}
               {!usdRate && <button className="transfer-text-button" disabled={busy} onClick={() => void fetchRates()}>Refresh exchange rate</button>}
-              <button className="transfer-primary" disabled={busy || !mintUrl || !canReview || quoteRetrySeconds > 0} onClick={review}>{busy ? <><Loader2 className="animate-spin" size={19}/>Getting rate and fees…</> : quoteRetrySeconds > 0 ? `Try again in ${quoteRetrySeconds}s` : <>Review transfer<ChevronRight size={19}/></>}</button>
+              <PrimaryActionButton
+                type="button" className="transfer-primary" aria-label={entryActionLabel}
+                loading={busy} disabled={!mintUrl || !canReview || quoteRetrySeconds > 0} onClick={review}
+              >
+                {busy && <Loader2 className="animate-spin" size={19}/>}
+                {entryActionLabel}
+                {!busy && quoteRetrySeconds === 0 && <ChevronRight size={19}/>}
+              </PrimaryActionButton>
             </div>
           </>}
           {operation && <>
@@ -227,17 +238,34 @@ export function TransferFundsForm({initialDirection = 'toUsd', mintUrl, cashuBal
               {!isReturn && reviewRefresh.error && <details className="transfer-details"><summary>Connection details</summary><p>{transferErrorDetails(reviewRefresh.error)}</p></details>}
               <p className="transfer-hint">{protectedReview ? toDollars ? 'A 3% movement allowance is included in your maximum. Unused sats remain yours and return automatically when at least 100 sats are available.' : 'Your maximum includes a 3% movement allowance. Any unused dollars stay in your Dollar balance.' : isReturn ? 'Return your Bitcoin without completing the transfer. A small amount may remain to cover fees.' : toDollars ? 'Only this amount moves. The rest of your Bitcoin stays in your balance.' : 'The rate may move slightly before the transfer completes.'}</p>
               {!isReturn && <details className="transfer-details"><summary>About this transfer</summary><p>{protectedReview ? `Minimum received: ${exactOutput}. We recheck the provider price within your approved spending limit. If it no longer fits, we stop safely rather than spend more. Network or provider failures can still delay a transfer.` : `Exact amount: ${exactOutput}. Provider slippage is limited to 0.1%.`} Your Dollar balance is held as a dollar-linked digital asset, rather than a bank deposit. Its value depends on it maintaining its link to the dollar.</p></details>}
-              <div className="transfer-actions"><button className="transfer-primary" disabled={busy || reviewRefresh.refreshing || !!expired || (!isReturn && !!reviewRefresh.error)} onClick={() => void run(() => isReturn ? executeFundingReturn(operation.id) : executeStableConversion(operation.id))}>{busy ? <><Loader2 className="animate-spin" size={19}/>Transferring…</> : reviewRefresh.refreshing ? <><Loader2 className="animate-spin" size={19}/>Updating rate…</> : expired ? 'Review expired' : isReturn ? 'Confirm return' : 'Confirm transfer'}</button>{!isReturn && (reviewRefresh.error || expired) && <button className="transfer-secondary" disabled={busy || reviewRefresh.refreshing || reviewRetrySeconds > 0} onClick={protectedReview ? edit : reviewRefresh.retry}>{reviewRetrySeconds > 0 ? `Try again in ${reviewRetrySeconds}s` : protectedReview ? 'Edit and get new quote' : 'Update quote'}</button>}{!(protectedReview && expired) && <button className="transfer-secondary" disabled={busy || reviewRefresh.refreshing} onClick={edit}>{isReturn ? 'Back to transfer' : 'Edit amount'}</button>}</div>
+              <div className="transfer-actions">
+                <PrimaryActionButton
+                  type="button" className="transfer-primary" aria-label={confirmationActionLabel}
+                  loading={busy || reviewRefresh.refreshing} disabled={!!expired || (!isReturn && !!reviewRefresh.error)}
+                  onClick={() => void run(() => isReturn ? executeFundingReturn(operation.id) : executeStableConversion(operation.id))}
+                >
+                  {(busy || reviewRefresh.refreshing) && <Loader2 className="animate-spin" size={19}/>}
+                  {confirmationActionLabel}
+                </PrimaryActionButton>
+                {!isReturn && (reviewRefresh.error || expired) && <button className="transfer-secondary" disabled={busy || reviewRefresh.refreshing || reviewRetrySeconds > 0} onClick={protectedReview ? edit : reviewRefresh.retry}>{reviewRetrySeconds > 0 ? `Try again in ${reviewRetrySeconds}s` : protectedReview ? 'Edit and get new quote' : 'Update quote'}</button>}{!(protectedReview && expired) && <button className="transfer-secondary" disabled={busy || reviewRefresh.refreshing} onClick={edit}>{isReturn ? 'Back to transfer' : 'Edit amount'}</button>}</div>
             </>}
             {!isReview && !done && <>
               <p className="transfer-progress" role="status">{stages[operation.stage] ?? 'Your transfer is saved'}. {!error && ['funding', 'converting', 'settling', 'returning'].includes(operation.stage) ? 'We’ll check progress automatically. ' : ''}You can leave this screen and return later.</p>
               {progressDetails && <details className="transfer-details"><summary>Transfer details</summary><p>{progressDetails}</p></details>}
-              <div className="transfer-actions"><button className="transfer-primary" disabled={busy || checkingProgress} onClick={() => void run(() => operation.stage === 'funded' ? executeStableConversion(operation.id) : checkStableConversion(operation.id))}>{busy || checkingProgress ? <><Loader2 className="animate-spin" size={19}/>Checking…</> : operation.stage === 'funded' ? 'Continue transfer' : 'Check progress'}</button>
+              <div className="transfer-actions">
+                <PrimaryActionButton
+                  type="button" className="transfer-primary" aria-label={progressActionLabel}
+                  loading={busy || checkingProgress}
+                  onClick={() => void run(() => operation.stage === 'funded' ? executeStableConversion(operation.id) : checkStableConversion(operation.id))}
+                >
+                  {(busy || checkingProgress) && <Loader2 className="animate-spin" size={19}/>}
+                  {progressActionLabel}
+                </PrimaryActionButton>
               {operation.stage === 'funded' && <button className="transfer-secondary" disabled={busy || checkingProgress} onClick={() => void run(() => quoteFundingReturn(operation.id))}>Return to Bitcoin balance</button>}
               {operation.stage === 'converting' && <button className="transfer-secondary" disabled={busy || checkingProgress} onClick={() => void run(() => recoverPendingConversion(operation.id))}>Recover transfer</button>}</div>
               <button className="transfer-secondary" onClick={onClose}>Back to wallet</button>
             </>}
-            {done && <div className="transfer-actions"><button className="transfer-primary" onClick={onDone}>Back to wallet</button></div>}
+            {done && <div className="transfer-actions"><PrimaryActionButton type="button" className="transfer-primary" onClick={onDone}>Back to wallet</PrimaryActionButton></div>}
           </>}
           {error && <div className="transfer-error" role="alert"><p>{errorMessage}</p><details><summary>Technical details</summary><p>{error}</p></details></div>}
         </div>

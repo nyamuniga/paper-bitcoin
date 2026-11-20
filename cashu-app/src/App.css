@@ -1,5 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
+@import "./components/shared/PrimaryActionButton.css";
+@import "./components/shared/IconButton.css";
+@import "./components/shared/FormField.css";
+@import "./components/shared/PaymentPageLayout.css";
+@import "./components/shared/BottomSheet.css";
 
 @theme {
   --color-surface-tint: var(--color-surface-tint);
@@ -28,6 +33,7 @@
   --color-on-background: var(--color-on-background);
   --color-primary-fixed-dim: var(--color-primary-fixed-dim);
   --color-outline-variant: var(--color-outline-variant);
+  --color-outline-subtle: var(--color-outline-subtle);
   --color-secondary-fixed-dim: var(--color-secondary-fixed-dim);
   --color-surface-container-lowest: var(--color-surface-container-lowest);
   --color-tertiary-container: var(--color-tertiary-container);
@@ -46,9 +52,13 @@
   --color-tertiary-fixed: var(--color-tertiary-fixed);
   --color-surface-container: var(--color-surface-container);
   --color-on-surface-variant: var(--color-on-surface-variant);
+  --color-on-surface-muted: var(--color-on-surface-muted);
   --color-on-tertiary-fixed: var(--color-on-tertiary-fixed);
   --color-on-primary-container: var(--color-on-primary-container);
   --color-on-secondary: var(--color-on-secondary);
+  --color-selection-container: var(--color-selection-container);
+  --color-on-selection-container: var(--color-on-selection-container);
+  --color-selection-outline: var(--color-selection-outline);
 
   --spacing-gutter: 16px;
   --spacing-container-padding: 24px;
@@ -154,10 +164,12 @@
   --color-surface-container-highest: #1a3528;
   --color-on-surface: #f7f4eb;
   --color-on-surface-variant: #627d70;
+  --color-on-surface-muted: #8b9e94;
   --color-inverse-surface: #dae5de;
   --color-inverse-on-surface: #28332e;
   --color-outline: #1f4231;
   --color-outline-variant: #142d20;
+  --color-outline-subtle: #1e3c2e;
   --color-surface-tint: #f2a93b;
   --color-primary: #f2a93b;
   --color-on-primary: #06110c;
@@ -168,6 +180,9 @@
   --color-on-secondary: #06110c;
   --color-secondary-container: #0e291d;
   --color-on-secondary-container: #34d399;
+  --color-selection-container: #183626;
+  --color-on-selection-container: var(--color-primary);
+  --color-selection-outline: #2b563e;
   --color-tertiary: #f7f4eb;
   --color-on-tertiary: #31312b;
   --color-tertiary-container: #b5b3ab;
@@ -207,10 +222,12 @@
   --color-surface-container-highest: #ded7c8;
   --color-on-surface: #0b1511;
   --color-on-surface-variant: #4a5c53;
+  --color-on-surface-muted: var(--color-on-surface-variant);
   --color-inverse-surface: #0b1511;
   --color-inverse-on-surface: #f7f4eb;
   --color-outline: #7a7061;
   --color-outline-variant: rgba(14, 46, 32, 0.12);
+  --color-outline-subtle: var(--color-outline-variant);
   --color-surface-tint: #d89b2b;
   --color-primary: #d89b2b;
   --color-on-primary: #0d1713;
@@ -220,6 +237,9 @@
   --color-on-secondary: #ffffff;
   --color-secondary-container: #c7ebd5;
   --color-on-secondary-container: #012114;
+  --color-selection-container: var(--color-secondary-container);
+  --color-on-selection-container: var(--color-on-secondary-container);
+  --color-selection-outline: var(--color-outline);
   --color-tertiary: #504535;
   --color-on-tertiary: #ffffff;
   --color-error: #ba1a1a;
@@ -889,4 +909,9 @@ section,
 /* Wallet currency transitions follow the app's tab motion and system preference. */
 @media (prefers-reduced-motion: reduce) {
   .wallet-balance-panel { animation: none; will-change: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-mint-picker-menu],
+  [data-mint-picker-menu] .animate-dropdown-item { animation: none; will-change: auto; }
 }

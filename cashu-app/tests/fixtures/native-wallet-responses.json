@@ -1,0 +1,81 @@
+{
+  "wallet_info": [
+    {
+      "is_initialized": false,
+      "balance_sats": 0,
+      "mnemonic": null,
+      "mint_balances": {}
+    },
+    {
+      "is_initialized": true,
+      "balance_sats": 42000,
+      "mnemonic": null,
+      "mint_balances": {
+        "https://mint.example": 42000,
+        "https://empty-mint.example": 0
+      }
+    }
+  ],
+  "transactions": [
+    {
+      "id": "tx-0",
+      "tx_type": {
+        "Mint": {
+          "quote_id": "fixture-quote",
+          "outputs": [],
+          "blinding_sessions_hex": []
+        }
+      },
+      "amount": 100,
+      "fee": 1,
+      "status": "Pending",
+      "timestamp": 1700000000,
+      "mint_url": "https://mint.example"
+    },
+    {
+      "id": "tx-1",
+      "tx_type": {
+        "Mint": {
+          "quote_id": "fixture-quote",
+          "outputs": [],
+          "blinding_sessions_hex": []
+        }
+      },
+      "amount": 100,
+      "fee": 1,
+      "status": "Success",
+      "timestamp": 1700000001,
+      "mint_url": "https://mint.example"
+    },
+    {
+      "id": "tx-2",
+      "tx_type": {
+        "Mint": {
+          "quote_id": "fixture-quote",
+          "outputs": [],
+          "blinding_sessions_hex": []
+        }
+      },
+      "amount": 100,
+      "fee": 1,
+      "status": "Failed",
+      "timestamp": 1700000002,
+      "mint_url": "https://mint.example"
+    },
+    {
+      "id": "tx-3",
+      "tx_type": {
+        "Mint": {
+          "quote_id": "fixture-quote",
+          "outputs": [],
+          "blinding_sessions_hex": []
+        }
+      },
+      "amount": 100,
+      "fee": 1,
+      "status": "FailedMintError",
+      "timestamp": 1700000003,
+      "mint_url": "https://mint.example"
+    }
+  ]
+}
