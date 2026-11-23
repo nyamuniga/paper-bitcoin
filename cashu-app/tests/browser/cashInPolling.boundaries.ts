@@ -4,6 +4,9 @@ export const timeoutScheduler = clock.scheduler;
 type Status = 'PENDING' | 'SUCCESSFUL' | 'FAILED' | 'UNKNOWN';
 export const pollingFixture = {
   requests: [] as { id: string; resolve: (status: Status) => void; reject: () => void }[],
+  controlFulfillment: false,
+  mintChecks: [] as {resolve: (status: string) => void; reject: () => void}[],
+  payments: [] as {invoice: string; resolve: (result: {success: boolean; message?: string}) => void; reject: () => void}[],
   native: [] as { command: string; args: unknown }[], refreshes: 0, subscriptions: 0, unsubscriptions: 0,
 };
 export const checkMomoPaymentStatus = (id: string) => new Promise<{status:Status}>((resolve,reject) => {
@@ -13,13 +16,21 @@ const forbidden = async () => { throw new Error('Payment submission is outside t
 export const initiateMomoPaymentRequest = forbidden;
 export const initiateMomoPayout = forbidden;
 export const checkMomoPayoutStatus = forbidden;
-export const payLightningInvoice = forbidden;
+export const payLightningInvoice = (invoice: string) => {
+  if (!pollingFixture.controlFulfillment) return forbidden();
+  return new Promise<{success: boolean; message?: string}>((resolve,reject) => {
+    pollingFixture.payments.push({invoice,resolve,reject:()=>reject(new Error('Synthetic payment outcome unknown'))});
+  });
+};
 export const createLightningInvoice = forbidden;
 export const fetch = forbidden;
 export const invoke = async (command: string, args?: unknown) => {
   pollingFixture.native.push({command,args});
   if (command === 'get_transactions') return [];
-  if (command === 'check_transaction_status') return 'Success';
+  if (command === 'check_transaction_status') {
+    if (!pollingFixture.controlFulfillment) return 'Success';
+    return new Promise<string>((resolve,reject)=>pollingFixture.mintChecks.push({resolve,reject:()=>reject(new Error('Synthetic mint-status failure'))}));
+  }
   throw new Error('Native payment submission is outside this fixture');
 };
 const wallet = { refreshWallet: async () => { pollingFixture.refreshes++; } };

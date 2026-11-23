@@ -19,6 +19,7 @@ interface TransactionState {
   moveToHistory: (tx: TransactionDetails) => void;
   clearHistory: () => void;
   setError: (err: string | null) => void;
+  setErrorForTransaction: (id: string, error: string | null) => void;
   reset: () => void;
 }
 
@@ -91,6 +92,9 @@ export const useTransactionStore = create<TransactionState>()(
         })),
       clearHistory: () => set({ history: [] }),
       setError: (err) => set({ error: err }),
+      setErrorForTransaction: (id, error) => set(state =>
+        state.activeTransaction?.id === id ? { error } : state
+      ),
       reset: () => set({ activeTransaction: null, history: [], error: null }),
     }),
     {

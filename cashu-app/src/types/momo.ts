@@ -76,3 +76,22 @@ export interface TransactionDetails {
   vUtxoId?: string;
   aspTxId?: string;
 }
+
+
+/** Scoped access never promotes a saved transfer into the foreground. */
+export interface MomoTransactionAccess {
+  findById(id: string): Readonly<TransactionDetails> | undefined;
+  /** Persist synchronously before returning; throw when the write cannot be saved. */
+  updateById(id: string, updates: Partial<Omit<TransactionDetails, 'id'>>): void;
+  setErrorFor(id: string, error: string | null): void;
+}
+
+/** Normalized provider status; UNKNOWN is not a confirmed payment failure. */
+export interface MomoPaymentStatusResult {
+  status: 'SUCCESSFUL' | 'FAILED' | 'PENDING' | 'UNKNOWN';
+  message?: string;
+}
+
+export type MomoPayoutSubmissionResult =
+  | { success: true; referenceId: string; message?: string }
+  | { success: false; submission: 'rejected' | 'unknown'; message?: string };

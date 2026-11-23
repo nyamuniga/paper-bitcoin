@@ -251,12 +251,12 @@ Perform these after comparing the existing call sites. Validate shared behavior 
 | [x] | F1 | Reuse the review calculation for cash-in execution quotes. | Existing rounding and minimum/maximum tests pass. |
 | [x] | F2 | Reuse it for cash-out execution quotes. | Fees, reserve, and displayed approval bounds remain consistent. |
 | [x] | F3 | Give cash-in polling an injected scheduler. | Tests control time without React refs. |
-| [ ] | F4 | Give that flow transaction access by ID. | A stale callback cannot update another transaction. |
-| [ ] | F5 | Inject cash-in provider status access. | Tests use ordinary fakes instead of module-loader interception. |
-| [ ] | F6 | Give payout polling the same explicit dependencies. | Unknown outcomes remain unresolved without resubmission. |
-| [ ] | F7 | Extract payout initiation from the polling loop. | Submission intent is persisted before dispatch and only dispatched once. |
-| [ ] | F8 | Inject fulfillment payment and mint-status operations. | Recovery tests can simulate failure between each external step. |
-| [ ] | F9 | Reduce the React processor to lifecycle wiring for migrated flows. | Mount/unmount starts/cancels work without owning payment decisions. |
+| [x] | F4 | Give that flow transaction access by ID. | A stale callback cannot update another transaction. |
+| [x] | F5 | Inject cash-in provider status access. | Tests use ordinary fakes instead of module-loader interception. |
+| [x] | F6 | Give payout polling the same explicit dependencies. | Unknown outcomes remain unresolved without resubmission. |
+| [x] | F7 | Extract payout initiation from the polling loop. | Submission intent is persisted before dispatch and only dispatched once. |
+| [x] | F8 | Inject fulfillment payment and mint-status operations. | Recovery tests can simulate failure between each external step. |
+| [x] | F9 | Reduce the React processor to lifecycle wiring for migrated flows. | Mount/unmount starts/cancels work without owning payment decisions. |
 
 ### G. Make Rust operations independent and persistence explicit
 
@@ -1048,3 +1048,123 @@ Added [synthetic clock/provider/native boundaries](cashu-app/tests/browser/cashI
 Verification: all 52 scheduler/flow tests and all 298 frontend/payment tests pass, as do all five processor/store browser checks. Isolated module-loader removal of the stopped-owner guard fails initial-response cancellation, queued-callback and deadline/late-result checks; an isolated browser bundle omitting the processor cleanup leaves both jobs scheduled and fails its unmount regression. Production files are never mutated by these experiments. TypeScript/production build, both release checks at 0.1.20, documentation links and whitespace checks pass. Existing Vite mixed-import/chunk warnings remain tracked under H4a–H4e.
 
 Fingerprints confirm only flowServices and useTransactionProcessor changed among pre-existing runtime sources, plus the new scheduler adapter. All service code outside cash-in verification is byte-identical apart from its scheduler type import; saved-transfer/backend processor effects, quote/fulfillment/payout bodies, UI, CSS, stores, providers, native code and lockfiles are unchanged. Other pre-existing work is preserved. No funded execution, actual provider/native operation, device or APK verification was performed; browser tests retain the real processor/store in an isolated profile with synthetic external boundaries. F4 has not been started.
+
+
+### F4 — Cash-in transaction access by ID
+
+Implemented on 2026-11-23. [startPaymentVerification](cashu-app/src/services/flowServices.ts) now receives transactionId and the [MomoTransactionAccess](cashu-app/src/types/momo.ts) port alongside its scheduler/ownership guard. Every status request, phase/result/deadline update and fulfillment call uses the captured ID. The verifier no longer reads the global active transaction directly. [TransactionProcessor](cashu-app/src/hooks/useTransactionProcessor.ts) injects the [store adapter](cashu-app/src/services/momoTransactionAccess.ts); its existing React cleanup/guard still retires replaced owners.
+
+The adapter looks up active/history records by ID and delegates to the existing ID-based update action without promoting a saved record into the foreground. A new atomic setErrorForTransaction action in [transactionStore](cashu-app/src/store/transactionStore.ts) updates the presentation error only when that ID is active. Failed provider results also preserve their reason in that transfer's existing recoveryMessage. Missing, completed, recovery or otherwise ineligible targets cannot receive late verification results; their owner stops polling. Fulfillment receives the explicit ID while its internal implementation remains unchanged for F8.
+
+Verification:
+
+- Red: new ownership tests failed against the pre-F4 verifier because stale callbacks queried or changed the foreground transfer.
+- Green: all 59 flow tests and all 307 frontend/payment tests pass.
+- All 11 isolated Chrome processor/store tests pass, including saved-transfer success/failure, scoped error updates, polling/deadline ownership, removed targets and processor replacement.
+- In-memory mutations independently removed the fulfillment ID and reversed the store error guard. Tests failed on the resulting wrong-foreground completion/error changes; production files were not mutated.
+- TypeScript/Vite production build passes. Existing mixed-import/chunk-size warnings remain tracked under H4a–H4e.
+- Both release checks pass for 0.1.20, including history hygiene. Task-only diff/whitespace and file fingerprints checked.
+
+Only the verifier, its processor wiring, transaction access types/adapter, scoped store error action, focused tests and these architecture/review documents change. Other service bodies and saved-transfer/backend processor effects are byte-identical. UI/CSS/animations, quote calculations, payout policy, persistence schema, providers and native code are unchanged. Tests use synthetic external boundaries; no funded operations, actual provider/native execution, device or APK verification was performed. F5 has not been started.
+
+
+### F5 — Injected cash-in provider status access
+
+Implemented on 2026-11-23. [startPaymentVerification](cashu-app/src/services/flowServices.ts) now requires checkPaymentStatus(transactionId), used by both the immediate request and scheduled polls. [TransactionProcessor](cashu-app/src/hooks/useTransactionProcessor.ts) supplies the existing provider adapter at the composition point. No implicit provider fallback is used by the verifier.
+
+The [MomoPaymentStatusResult](cashu-app/src/types/momo.ts) contract defines SUCCESSFUL, FAILED, PENDING and UNKNOWN plus an optional message. [momoService](cashu-app/src/services/momoService.ts) annotates its existing normalizer with that result type; HTTP calls, raw-response normalization, provider aliases and ambiguous-outcome behavior are unchanged. The shared payout helper gains the same explicit return type without a runtime change.
+
+[Polling tests](cashu-app/tests/momoFlows.test.mjs) now inject ordinary status functions directly, including deferred promises and rejected requests. A new regression runs two owners with independent fakes and verifies that their initial/polled outcomes stay separate while the module adapter is never called. Loader interception remains for unrelated flow dependencies, recovery status and fulfillment until their planned tasks; it no longer supplies this verifier's status results. The [browser fixture](cashu-app/tests/browser/cashInPolling.fixture.tsx) also supplies status explicitly for direct verifier calls.
+
+Verification:
+
+- Red: converted/new tests failed against the F4 verifier, which ignored the supplied function and called the module adapter instead.
+- Green: all 60 flow tests and all 308 frontend/payment tests pass, including existing provider-normalization coverage.
+- All 11 isolated Chrome processor/store tests pass with synthetic providers, covering processor wiring, replacement/unmount, saved-transfer updates and deadlines.
+- TypeScript/Vite production build and both 0.1.20 release checks (including history hygiene) pass. Existing mixed-import/chunk-size warnings remain under H4a–H4e.
+- Byte comparisons confirm other service bodies, provider runtime implementation and saved-transfer/backend processor effects are unchanged. Fingerprints and an F5-only review patch preserve the earlier uncommitted F4 work; diff/whitespace and documentation links checked.
+
+UI, CSS, animations, transaction persistence, calculations, timing/cancellation, failure messages, payout/recovery behavior and fulfillment policy are unchanged. No funded operation, actual provider/native execution, device or APK verification was performed. F6 has not been started. Changes are left uncommitted and unpushed for review.
+
+
+### F6 — Explicit payout polling dependencies and owned cleanup
+
+Implemented on 2026-11-23. [initiateAndVerifyPayout](cashu-app/src/services/flowServices.ts) now receives transactionId, MomoTransactionAccess, checkPayoutStatus, Scheduler and an optional isCurrent guard. It returns idempotent cleanup synchronously, including during an unresolved initiation request. [TransactionProcessor](cashu-app/src/hooks/useTransactionProcessor.ts) injects the same store/scheduler adapters used for cash-in plus the normalized payout status function; its Mobile Money timer refs and stopPolling callback are removed.
+
+All payout transaction reads, writes, status queries and error updates target the captured ID. Callbacks check existence, direction, pending status, expected phase and ownership before changing state. Saved payouts can be verified directly without taking the foreground. Removed/settled/recovery targets and canceled owners cannot restart timers or apply late results to another transfer. Success retains wallet refresh and recording the selected recipient in the address book.
+
+The existing delayed first poll, sequential request scheduling and interval/deadline values are preserved. PENDING, UNKNOWN and rejected status requests remain unresolved until recovery; a deadline or explicit funded provider failure preserves the funding and pending record without resubmission. The deadline now mirrors recovery into history through the existing ID-based store action. Cleanup cannot undo a dispatched provider request; canceled initiation results leave the submitting intent for recovery. Existing funding/intent guards, submission request format and failure/support messages are retained, including empty-exception fallback messages.
+
+Initiation remains inside this operation and still calls the existing adapter directly; extracting it is F7. Wallet/contact effects remain direct service dependencies. This task does not claim that payout initiation or all processor responsibilities have been migrated.
+
+Verification:
+
+- Red: the new dependency/cleanup tests failed against the prior React-ref API; a separate failing regression caught the empty-exception fallback during implementation.
+- Green: all 75 flow tests and all 323 frontend/payment tests pass.
+- All 20 isolated Chrome payout/cash-in processor/store tests pass: 9 payout tests including the suite parent, plus 11 cash-in tests. Coverage includes delayed polling, success/contact recording, unknown/rejected/late outcomes, deadlines, saved-ID isolation, queued callbacks, unmount/replacement, initiation handoff and lost-response remount without resubmission.
+- TypeScript/Vite production build and both 0.1.20 release checks, including history hygiene, pass. Existing mixed-import/chunk-size warnings remain under H4a–H4e.
+- Byte comparisons confirm every service body outside payout and the saved-transfer/backend processor effects are unchanged. File fingerprints preserve earlier uncommitted F4/F5 work. The F6-only review patch, whitespace and documentation links are checked.
+
+Added [payout browser boundaries](cashu-app/tests/browser/payoutPolling.boundaries.ts), [fixture](cashu-app/tests/browser/payoutPolling.fixture.tsx), [tests](cashu-app/tests/browser/payoutPolling.test.mjs) and the test:momo-payout-polling command in [package.json](cashu-app/package.json). The command builds and runs scheduler/flow/browser checks serially. Tests use synthetic provider/native/funding boundaries; no funded operation, actual provider/native execution, device or APK verification was performed. UI/CSS/animations, quote calculations, persistence schema, provider adapters and native code are unchanged. F7 has not started. Changes are uncommitted and unpushed for review.
+
+
+### F7 — Separate payout initiation from verification
+
+Implemented on 2026-11-23. New [startPayoutInitiation](cashu-app/src/services/payoutInitiation.ts) receives transactionId, MomoTransactionAccess, an injected submitPayout function and an optional lifecycle guard. It owns the funding/intent checks and submission response, returns synchronous cleanup and has no scheduler, provider-module or transaction-store imports. [startPayoutVerification](cashu-app/src/services/flowServices.ts) replaces the combined initiateAndVerifyPayout API and owns only verification/completion/recovery; it cannot dispatch a payout. [TransactionProcessor](cashu-app/src/hooks/useTransactionProcessor.ts) wires the two phases to these separate operations.
+
+Only a funded pending initiation record explicitly marked not_started can submit. The service synchronously writes submitting through updateById before invoking the provider and rechecks ownership before dispatch. A failed intent write prevents dispatch. The access contract now states the synchronous persistence requirement; the production adapter retains its existing localStorage-backed Zustand write. Existing references advance directly to verification. Submitting/accepted/rejected/missing markers do not submit again; duplicate ownership retains conservative recovery behavior. Confirmed responses save the reference and accepted marker before entering verification. Unknown/rejected/exception results preserve funding and recovery messages, and canceled/obsolete results cannot update a replacement transfer. Recovery-write failures are reported without retrying submission.
+
+Added the typed [MomoPayoutSubmissionResult](cashu-app/src/types/momo.ts) and applied it to the existing [provider adapter](cashu-app/src/services/momoService.ts). Its HTTP implementation, request format and normalization behavior are unchanged. The guarantee is client-side guarding of a persisted intent; provider-side idempotency and coordination across multiple app instances are unchanged. An asynchronous replacement for transaction storage must introduce an awaited persistence boundary before dispatch.
+
+Verification:
+
+- Red: initiation/polling separation tests failed before the new entry points existed.
+- Green: all 79 flow tests and all 327 frontend/payment tests pass. Tests use ordinary injected submission functions and cover intent-before-dispatch, duplicate starts, existing interrupted/rejected markers, accepted references, persistence failure, lost responses and canceled results.
+- All 22 isolated Chrome payout/cash-in processor/store tests pass. The payout boundary inspects actual localStorage when synthetic dispatch occurs; it sees the saved submitting marker and funded transaction ID. Additional checks prove one dispatch across duplicate owners and zero dispatch after a real Storage.setItem failure. Existing interval/deadline, recovery, phase-handoff, unmount and saved-ID isolation checks still pass.
+- In-memory mutations independently removed the submitting write and the marker guard. Tests failed on missing persisted intent and duplicate dispatch respectively; production files were not mutated.
+- TypeScript/Vite production build and both 0.1.20 release checks, including history hygiene, pass. Existing mixed-import/chunk-size warnings remain under H4a–H4e.
+- Byte comparisons confirm unrelated flow bodies and saved-transfer/backend processor effects are unchanged, and provider changes are type-only. Fingerprints preserve prior uncommitted F4–F6 work. F7-only diff, whitespace and documentation links checked.
+
+Updated the existing flow and payout browser tests/fixtures and [DESIGN.md](cashu-app/DESIGN.md); the existing test:momo-payout-polling command exercises both operations. Transaction persistence schema/store implementation, UI/CSS/animations, quote calculations, polling timing, wallet/contact completion policy and native code are unchanged. Tests use synthetic external boundaries; no funded operation, actual provider/native execution, device or APK verification was performed. F8 has not started. Changes remain uncommitted and unpushed for review.
+
+
+### F8 — Injected fulfillment payment and mint-status operations
+
+Implemented on 2026-11-23. New [fulfillMomoTransaction](cashu-app/src/services/momoFulfillment.ts) receives a transaction ID, transaction access, typed payment/mint-status/wait/clock operations and a completion callback. It owns fulfillment/recovery without importing a provider, native API, store or real timer. New [momoFulfillmentOperations](cashu-app/src/services/momoFulfillmentOperations.ts) composes the existing Lightning payment adapter, native status check with a twenty-second deadline, waits and clock. [handleFulfillOrder](cashu-app/src/services/flowServices.ts) remains the existing caller-facing wrapper, supplying the store adapter and wallet/address-book effects; cash-in/recovery caller signatures and the React processor are unchanged.
+
+The existing quote-first recovery behavior, exact saved invoice/quote, two-second retry delay, twenty-attempt maximum, ninety-second between-attempt budget and normal failure/completion messages are preserved. The budget does not abort an in-flight twenty-second status request. Confirmed claimed quotes skip payment, including older records without a saved invoice. A missing quote blocks native work; a missing invoice blocks payment with a support message. An unresolved payment still requires recovery/status reconciliation; this change does not establish provider-side exactly-once payment.
+
+The per-ID guard remains, with state checks after async boundaries. Missing, completed, cash-out or changed invoice/quote records cannot be fulfilled by an obsolete owner. A newer recovery/terminal phase is not rolled back. Saved targets retain their own updates while another foreground transfer/error remains unchanged. The extracted implementation removes the old fulfillment non-null assertions and any catches.
+
+Verification:
+
+- Red: new ordinary-fake operation tests failed before the extracted entry point existed.
+- Green: all 347 frontend/payment tests pass, including 19 fulfillment tests and 80 existing flow/adapter tests. Coverage includes unavailable preflight, payment rejection/exception, post-payment mint errors, retry/budget exhaustion, interrupted waits, phase/completion save failures, retry after recovery, missing/changed data, concurrent owners and late results for removed/newer targets.
+- A deterministic adapter test verifies that an unresolved initial native status check reaches recovery after twenty seconds without asking the gateway to pay.
+- All 25 isolated Chrome cash-in/fulfillment/payout tests pass. Real store/wrapper/adapter wiring with synthetic external boundaries verifies preflight failure on a saved ID, unknown payment recovery followed by claimed-quote completion without another payment, and post-payment mint-status failure/retry without paying again.
+- In-memory mutations forced payment of an already claimed quote and ignored a rejected payment result. Tests failed on the extra payment and incorrect completion respectively; production files were not mutated.
+- TypeScript/Vite production build and both 0.1.20 release checks, including history hygiene, pass. Existing mixed-import/chunk-size warnings remain under H4a–H4e.
+- Byte comparisons confirm all flow service bodies outside fulfillment are unchanged. File fingerprints preserve earlier uncommitted F4–F7 work. F8-only diff, added-line whitespace and documentation links checked.
+
+Added [momoFulfillment.test.mjs](cashu-app/tests/momoFulfillment.test.mjs), updated the existing flow and cash-in browser tests/fixtures, documented the boundary in [DESIGN.md](cashu-app/DESIGN.md), and added test:momo-fulfillment in [package.json](cashu-app/package.json). The command builds and runs fulfillment/flow/browser checks serially. Save-failure fakes verify recovery control flow, not process-crash durability or successful persistence while storage remains unavailable. UI markup/CSS/animations, quote calculations, transaction schema/store implementation, provider implementations, payout operations, processor and native code are unchanged. No funded operation, actual provider/native execution, device or APK verification was performed. F9 has not started. Changes remain uncommitted and unpushed for review.
+
+
+### F9 — Lifecycle wiring for migrated Mobile Money flows
+
+Implemented on 2026-11-23. [TransactionProcessor](cashu-app/src/hooks/useTransactionProcessor.ts) now starts active/saved Mobile Money owners and returns cleanup. It no longer imports Mobile Money phases/providers/flow functions or owns saved-transfer filtering/backoff/timers. New [momoProcessing](cashu-app/src/services/momoProcessing.ts) owns those decisions using typed operation/snapshot/scheduler/clock dependencies, with no React/store/provider imports. New [active processing adapter](cashu-app/src/services/momoProcessingAdapter.ts) and [saved recovery adapter](cashu-app/src/services/savedMomoRecoveryAdapter.ts) compose the existing production services. The adapters make dependency wiring explicit without putting payment decisions back into React.
+
+Phase routing remains cash-in verification for PENDING_PAYMENT/VERIFYING_PAYMENT, payout initiation for INITIATING_PAYOUT, payout verification for VERIFYING_PAYOUT, the existing funding action for AWAITING_INVOICE_PAYMENT, and refresh for AWAITING_ASP_BOARDING/READY_TO_CLAIM. Active cleanup retires its guard before cancelling delegated work, is idempotent and detects foreground ID replacement. The legacy funding action's internal store/native behavior is unchanged; this extraction does not make a dispatched funding request abortable.
+
+Saved reconciliation retains its five-second initial/cadence delay, one eligible non-active transfer per pass, sequential requests, existing phase/direction/status eligibility, and 30/60/120/240/300-second capped per-ID backoff. Ineligible IDs lose attempt state as before. Cleanup now additionally ignores already queued callbacks before state reads/provider checks. A recovery request already dispatched can still settle by ID, but cannot schedule more work after cleanup. Unknown funded payouts remain unresolved without resubmission. The separate backend/Spark effect is outside the migrated flows and is byte-identical.
+
+Verification:
+
+- Red: new ordinary-fake phase/ownership/reconciliation tests failed before the extracted service entry points existed.
+- Green: all 359 frontend/payment tests pass, including 12 new processing tests. They cover every routed phase, stale selections, cancellation ordering/idempotence, eligibility, selection, exact backoff/cap, error continuation, non-overlap, queued callbacks, pending-request cleanup and attempt reset.
+- All 28 isolated Chrome cash-in/fulfillment/payout tests pass. New real processor/store checks cover saved top-up completion without changing the foreground/error, unknown funded saved payout recovery without resubmission, and queued recovery callbacks after unmount. Existing F3–F8 regressions remain green.
+- Browser fixtures give active and saved scheduling independent manual clocks; production retains the existing stateless timeoutScheduler for both. Added [saved recovery clock boundary](cashu-app/tests/browser/savedMomoRecovery.boundaries.ts); external payment/provider/native boundaries remain synthetic.
+- In-memory mutations disabled active-owner retirement and the queued saved-callback guard. Tests failed on the live cancellation guard and an unwanted post-cleanup state read respectively; production files were not mutated.
+- TypeScript/Vite production build and both 0.1.20 release checks, including history hygiene, pass. Existing mixed-import/chunk-size warnings remain under H4a–H4e.
+- Byte comparison proves the backend/Spark effect is unchanged. File fingerprints preserve previous uncommitted F4–F8 work. F9-only diff, whitespace and documentation links checked.
+
+Added [momoProcessing.test.mjs](cashu-app/tests/momoProcessing.test.mjs), updated existing cash-in/payout browser tests and fixtures, documented ownership in [DESIGN.md](cashu-app/DESIGN.md), and added test:momo-processing in [package.json](cashu-app/package.json). Flow/fulfillment/payout/provider implementations, transaction persistence schema/store, UI/CSS/animations, quote calculations and native code are unchanged. No funded operation, actual provider/native execution, device or APK verification was performed. F1–F9 are complete; G1 has not started. Changes remain uncommitted and unpushed for review.

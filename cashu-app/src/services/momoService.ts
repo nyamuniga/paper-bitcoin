@@ -1,3 +1,4 @@
+import type { MomoPaymentStatusResult, MomoPayoutSubmissionResult } from '../types/momo';
 import { Encryption } from '../utils/encryption';
 
 import { requestProxyJson, ProxyRequestError } from './proxyRequest';
@@ -78,7 +79,7 @@ export const initiateMomoPayout = async (
   amount: number,
   netSats: number,
   phoneNumber: string
-): Promise<any> => {
+): Promise<MomoPayoutSubmissionResult> => {
   const targetUrl = `${MOMO_API_BASE_URL}/payment/payout/octoba`;
 
   let submitted = false;
@@ -138,7 +139,7 @@ export const initiateMomoPayout = async (
 
 export const checkMomoPayoutStatus = (txId: string | null) => checkStatus('payout', txId);
 
-async function checkStatus(kind: 'request' | 'payout', txId: string | null) {
+async function checkStatus(kind: 'request' | 'payout', txId: string | null): Promise<MomoPaymentStatusResult> {
   if (!txId) return {status:'UNKNOWN', message:'The saved transaction ID is missing. Contact support before retrying.'};
   try {
     const data = await requestProxyJson(`${MOMO_API_BASE_URL}/payment/${kind}/octoba/status/${encodeURIComponent(txId)}`);

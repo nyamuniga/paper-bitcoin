@@ -1,18 +1,16 @@
 import {
   initiateMomoPaymentRequest,
   checkMomoPaymentStatus,
-  initiateMomoPayout,
   checkMomoPayoutStatus
 } from "./momoService";
 import {
-  payLightningInvoice,
   createLightningInvoice,
 } from "./lightningService";
 import {
   AppPhase,
   FulfillmentStep,
 } from "../types/momo";
-import type { AppTab } from '../types/momo';
+import type { AppTab, MomoPaymentStatusResult, MomoTransactionAccess } from '../types/momo';
 import { invoke } from '@tauri-apps/api/core';
 import { fetch } from '@tauri-apps/plugin-http';
 
@@ -34,9 +32,11 @@ import { buildMomoReview, assertMomoReviewApproved } from './momoReview';
 import type { MomoReview } from './momoReview';
 import { MOMO_RECOVERY_MESSAGE } from './momoRecovery';
 import type { Scheduler } from './scheduler';
+import { fulfillMomoTransaction } from './momoFulfillment';
+import { momoFulfillmentOperations } from './momoFulfillmentOperations';
+import { momoTransactionAccess } from './momoTransactionAccess';
 
 const recoveryChecks = new Set<string>();
-const fulfillmentChecks = new Set<string>();
 const findTransaction = (id?: string) => {
   const {activeTransaction, history} = useTransactionStore.getState();
   return id ? (activeTransaction?.id === id ? activeTransaction : history.find(tx => tx.id === id)) : activeTransaction;
@@ -211,92 +211,43 @@ export const calculateQuote = async (
 };
 
 export const handleFulfillOrder = async (id?: string) => {
-  const store = useTransactionStore.getState();
-  const currentTx = findTransaction(id);
-  if (!currentTx || fulfillmentChecks.has(currentTx.id)) return;
-  fulfillmentChecks.add(currentTx.id);
-
-  try {
-    store.updateTransactionById(currentTx.id, {currentPhase:AppPhase.PAYING_INVOICE});
-
-    // A previous app session may already have paid/claimed this exact invoice.
-    const existing = await withDeadline(() => invoke<string>('check_transaction_status', {txId:currentTx!.mintQuoteId}), 20000);
-    if (existing !== 'Success') {
-      const { success, message } = await payLightningInvoice(currentTx.invoice!);
-      if (!success) throw new Error(message || "Gateway failed to pay the Lightning invoice.");
-    }
-
-    store.updateTransactionById(currentTx.id, {currentPhase:AppPhase.FULFILLING});
-
-    let mintSuccess = existing === 'Success';
-    let mintErrMessage = "";
-    // Was: 30 s total, 5 s/attempt, 15 attempts.
-    const MINT_MAX_ATTEMPTS = 20;
-    const mintDeadline = Date.now() + 90000;
-
-    for (let i = 0; i < MINT_MAX_ATTEMPTS && !mintSuccess && Date.now() < mintDeadline; i++) {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const status = await withDeadline(
-          () => invoke<string>('check_transaction_status', { txId: currentTx!.mintQuoteId }),
-          20000 // was 5000
-        );
-        if (status === 'Success') {
-          mintSuccess = true;
-          break;
-        } else {
-          mintErrMessage = `Status returned: ${status}`;
+  const transaction = findTransaction(id);
+  if (!transaction) return;
+  await fulfillMomoTransaction({
+    transactionId: transaction.id,
+    transactions: momoTransactionAccess,
+    operations: momoFulfillmentOperations,
+    onCompleted: completed => {
+      useWalletStore.getState().refreshWallet();
+      if (completed.momoPhoneNumber) {
+        try {
+          useAddressBookStore.getState().recordSuccessfulUse('momo', completed.momoPhoneNumber, {
+            network: completed.momoPhoneNumber.startsWith('078') || completed.momoPhoneNumber.startsWith('079') ? 'mtn' : undefined,
+            currency: 'RWF',
+          });
+        } catch (error) {
+          console.warn('Failed to record address book contact:', error);
         }
-      } catch (mintErr: any) {
-        console.warn(`Mint attempt ${i + 1} failed:`, mintErr);
-        mintErrMessage = mintErr.toString();
       }
-    }
-
-    if (!mintSuccess) {
-      throw new Error(`Payment succeeded but failed to mint eCash. Please retry from History. Error: ${mintErrMessage}`);
-    }
-
-    store.updateTransactionById(currentTx.id, {
-      fulfillmentStep: FulfillmentStep.COMPLETED,
-      status: "COMPLETED",
-      timestamp: Date.now(),
-      currentPhase: AppPhase.READY_TO_CLAIM
-    });
-
-    useWalletStore.getState().refreshWallet();
-
-    if (currentTx.momoPhoneNumber) {
-      try {
-        useAddressBookStore.getState().recordSuccessfulUse('momo', currentTx.momoPhoneNumber, {
-          network: currentTx.momoPhoneNumber.startsWith('078') || currentTx.momoPhoneNumber.startsWith('079') ? 'mtn' : undefined,
-          currency: 'RWF',
-        });
-      } catch (e) {
-        console.warn('Failed to record address book contact:', e);
-      }
-    }
-  } catch (err: any) {
-    console.error("Fulfillment error:", err);
-    if (useTransactionStore.getState().activeTransaction?.id === currentTx.id) store.setError(err.message || "Failed to fulfill order. Please try again.");
-    store.updateTransactionById(currentTx.id, { currentPhase: AppPhase.RECOVERY_REQUIRED, recoveryMessage:err.message || MOMO_RECOVERY_MESSAGE });
-  } finally {
-    fulfillmentChecks.delete(currentTx.id);
-  }
+    },
+  });
 };
 
-export const startPaymentVerification = ({ scheduler, isCurrent = () => true }: {
+export const startPaymentVerification = ({ transactionId, transactions, checkPaymentStatus, scheduler, isCurrent = () => true }: {
+  transactionId: string;
+  transactions: MomoTransactionAccess;
+  checkPaymentStatus: (transactionId: string) => Promise<MomoPaymentStatusResult>;
   scheduler: Scheduler;
   isCurrent?: () => boolean;
 }) => {
-  const store = useTransactionStore.getState();
-  const transaction = store.activeTransaction;
-  if (!transaction || !isCurrent()) return;
+  const transaction = transactions.findById(transactionId);
+  if (!transactionId || !transaction || transaction.id !== transactionId || !isCurrent()
+    || transaction.direction !== 'RWF_TO_SATS' || transaction.status !== 'PENDING'
+    || (transaction.currentPhase !== AppPhase.PENDING_PAYMENT && transaction.currentPhase !== AppPhase.VERIFYING_PAYMENT)) return;
 
   let stopped = false;
   let cancelPoll: (() => void) | undefined;
   let cancelDeadline: (() => void) | undefined;
-  const current = () => !stopped && isCurrent();
   const stop = () => {
     stopped = true;
     cancelPoll?.();
@@ -304,42 +255,47 @@ export const startPaymentVerification = ({ scheduler, isCurrent = () => true }: 
     cancelPoll = undefined;
     cancelDeadline = undefined;
   };
-  store.updateTransactionPhase(AppPhase.VERIFYING_PAYMENT);
+  const current = () => {
+    if (stopped) return false;
+    const target = transactions.findById(transactionId);
+    if (!isCurrent() || !target || target.id !== transactionId || target.direction !== 'RWF_TO_SATS'
+      || target.status !== 'PENDING' || target.currentPhase !== AppPhase.VERIFYING_PAYMENT) {
+      stop();
+      return false;
+    }
+    return true;
+  };
+  transactions.updateById(transactionId, { currentPhase: AppPhase.VERIFYING_PAYMENT });
 
   const handlePollingResult = (status: 'SUCCESSFUL' | 'FAILED', message?: string) => {
     if (!current()) return;
     stop();
-    const currentTx = useTransactionStore.getState().activeTransaction;
-    if (!currentTx) return;
-
     if (status === "SUCCESSFUL") {
-      store.updateTransaction({
+      transactions.updateById(transactionId, {
         fulfillmentStep: FulfillmentStep.AWAITING_FULFILLMENT,
         currentPhase: AppPhase.VERIFYING_PAYMENT
       });
-      handleFulfillOrder();
+      handleFulfillOrder(transactionId);
     } else if (status === "FAILED") {
-      store.setError(message || "Your payment failed or was rejected.");
-      store.updateTransaction({
+      const error = message || "Your payment failed or was rejected.";
+      transactions.setErrorFor(transactionId, error);
+      transactions.updateById(transactionId, {
         status: "FAILED",
+        recoveryMessage: error,
         timestamp: Date.now(),
         currentPhase: AppPhase.PAYMENT_FAILED
       });
-      store.moveToHistory(useTransactionStore.getState().activeTransaction!);
     }
   };
 
   const pollMomo = async () => {
     if (!current()) return;
     try {
-      const tx = useTransactionStore.getState().activeTransaction;
-      if (tx) {
-        const { status, message } = await checkMomoPaymentStatus(tx.id);
-        if (!current()) return;
-        if (status === "SUCCESSFUL" || status === "FAILED") {
-          handlePollingResult(status, message);
-          return;
-        }
+      const { status, message } = await checkPaymentStatus(transactionId);
+      if (!current()) return;
+      if (status === "SUCCESSFUL" || status === "FAILED") {
+        handlePollingResult(status, message);
+        return;
       }
     } catch (pollErr) {
       console.warn('Payment status poll failed; will retry:', pollErr);
@@ -349,7 +305,7 @@ export const startPaymentVerification = ({ scheduler, isCurrent = () => true }: 
 
   const checkInitialStatus = async () => {
     try {
-      const res = await checkMomoPaymentStatus(transaction.id);
+      const res = await checkPaymentStatus(transactionId);
       if (!current()) return;
       if (res.status === "SUCCESSFUL" || res.status === "FAILED") {
         handlePollingResult(res.status, res.message);
@@ -365,13 +321,8 @@ export const startPaymentVerification = ({ scheduler, isCurrent = () => true }: 
     cancelDeadline = scheduler.schedule(() => {
       if (!current()) return;
       stop();
-      if (useTransactionStore.getState().activeTransaction?.currentPhase === AppPhase.VERIFYING_PAYMENT) {
-        store.setError(null);
-        store.updateTransaction({ currentPhase: AppPhase.RECOVERY_REQUIRED, recoveryMessage:'The provider has not confirmed payment yet. Check status before starting another top-up.' });
-        if (useTransactionStore.getState().activeTransaction) {
-          store.moveToHistory(useTransactionStore.getState().activeTransaction!);
-        }
-      }
+      transactions.setErrorFor(transactionId, null);
+      transactions.updateById(transactionId, { currentPhase: AppPhase.RECOVERY_REQUIRED, recoveryMessage:'The provider has not confirmed payment yet. Check status before starting another top-up.' });
     }, POLLING_TIMEOUT_MS);
   };
 
@@ -490,122 +441,91 @@ export const executeSendPayment = async () => {
   }
 };
 
-export const initiateAndVerifyPayout = async (
-  stopPolling: () => void,
-  pollingIntervalRef: React.MutableRefObject<any>,
-  pollingTimeoutRef: React.MutableRefObject<any>,
-  isCurrent: () => boolean = () => true
-) => {
-  const store = useTransactionStore.getState();
-  const transaction = store.activeTransaction;
-  if (!transaction) return;
+export const startPayoutVerification = ({ transactionId, transactions, checkPayoutStatus, scheduler, isCurrent = () => true }: {
+  transactionId: string;
+  transactions: MomoTransactionAccess;
+  checkPayoutStatus: (transactionId: string) => Promise<MomoPaymentStatusResult>;
+  scheduler: Scheduler;
+  isCurrent?: () => boolean;
+}) => {
+  const transaction = transactions.findById(transactionId);
+  if (!transactionId || !transaction || transaction.id !== transactionId || !isCurrent()
+    || transaction.direction !== 'SATS_TO_RWF' || transaction.status !== 'PENDING'
+    || transaction.currentPhase !== AppPhase.VERIFYING_PAYOUT) return;
 
-  stopPolling();
-  try {
-    // Check if payout was already initiated
-    let referenceId = transaction.payoutReferenceId;
-
-    if (!referenceId) {
-      if (!transaction.invoicePaid) {
-        store.updateTransaction({currentPhase:AppPhase.RECOVERY_REQUIRED, recoveryMessage:'The funding payment has not been confirmed. Contact support before retrying this cashout.'});
-        return;
-      }
-      if (transaction.momoSubmission !== 'not_started') {
-        store.updateTransaction({currentPhase:AppPhase.RECOVERY_REQUIRED, recoveryMessage:MOMO_RECOVERY_MESSAGE});
-        return;
-      }
-      store.updateTransaction({momoSubmission:'submitting'});
-      const payoutRes = await initiateMomoPayout(
-        transaction.id,
-        transaction.rwfAmount,
-        transaction.satsAmount,
-        transaction.momoPhoneNumber
-      );
-      if (!isCurrent()) return;
-
-      if (!payoutRes.success || !payoutRes.referenceId) {
-        if (payoutRes.submission === 'rejected') store.updateTransaction({momoSubmission:'rejected'});
-        throw new Error(payoutRes.message || "Failed to initiate MoMo payout.");
-      }
-      referenceId = payoutRes.referenceId;
-
-      store.updateTransaction({
-        payoutReferenceId: referenceId,
-        momoSubmission: 'accepted',
-        currentPhase: AppPhase.VERIFYING_PAYOUT
-      });
-    } else {
-      store.updateTransactionPhase(AppPhase.VERIFYING_PAYOUT);
+  let stopped = false;
+  let cancelPoll: (() => void) | undefined;
+  let cancelDeadline: (() => void) | undefined;
+  const stop = () => {
+    stopped = true;
+    cancelPoll?.();
+    cancelDeadline?.();
+    cancelPoll = undefined;
+    cancelDeadline = undefined;
+  };
+  const current = () => {
+    if (stopped) return;
+    const target = transactions.findById(transactionId);
+    if (!isCurrent() || !target || target.id !== transactionId || target.direction !== 'SATS_TO_RWF'
+      || target.status !== 'PENDING' || target.currentPhase !== AppPhase.VERIFYING_PAYOUT) {
+      stop();
+      return;
     }
-
-    const handlePollingResult = (status: 'SUCCESSFUL' | 'FAILED', message?: string) => {
-      if (!isCurrent()) return;
-      stopPolling();
-      const currentTx = useTransactionStore.getState().activeTransaction;
-      if (!currentTx) return;
-
-      if (status === "SUCCESSFUL") {
-        store.updateTransaction({
-          status: "COMPLETED",
-          fulfillmentStep: FulfillmentStep.COMPLETED,
-          timestamp: Date.now(),
-          currentPhase: AppPhase.READY_TO_CLAIM
+    return target;
+  };
+  const recover = (recoveryMessage: string, error?: string | null) => {
+    if (!current()) return;
+    stop();
+    if (error !== undefined) transactions.setErrorFor(transactionId, error);
+    transactions.updateById(transactionId, { currentPhase: AppPhase.RECOVERY_REQUIRED, recoveryMessage });
+  };
+  const handlePollingResult = (status: 'SUCCESSFUL' | 'FAILED', message?: string) => {
+    const target = current();
+    if (!target) return;
+    if (status === 'FAILED') {
+      recover('The Mobile Money payout failed after funding. Contact support with this transaction ID to resolve it; do not pay again.', message || 'MoMo payout failed or was rejected.');
+      return;
+    }
+    stop();
+    transactions.updateById(transactionId, {
+      status: 'COMPLETED',
+      fulfillmentStep: FulfillmentStep.COMPLETED,
+      timestamp: Date.now(),
+      currentPhase: AppPhase.READY_TO_CLAIM,
+    });
+    useWalletStore.getState().refreshWallet();
+    if (target.momoPhoneNumber) {
+      try {
+        useAddressBookStore.getState().recordSuccessfulUse('momo', target.momoPhoneNumber, {
+          network: target.momoPhoneNumber.startsWith('078') || target.momoPhoneNumber.startsWith('079') ? 'mtn' : undefined,
+          currency: 'RWF',
         });
-        store.moveToHistory(useTransactionStore.getState().activeTransaction!);
-        useWalletStore.getState().refreshWallet();
-
-        if (currentTx.momoPhoneNumber) {
-          try {
-            useAddressBookStore.getState().recordSuccessfulUse('momo', currentTx.momoPhoneNumber, {
-              network: currentTx.momoPhoneNumber.startsWith('078') || currentTx.momoPhoneNumber.startsWith('079') ? 'mtn' : undefined,
-              currency: 'RWF',
-            });
-          } catch (e) {
-            console.warn('Failed to record address book contact:', e);
-          }
-        }
-      } else if (status === "FAILED") {
-        store.setError(message || "MoMo payout failed or was rejected.");
-        store.updateTransaction({ currentPhase:AppPhase.RECOVERY_REQUIRED, recoveryMessage:'The Mobile Money payout failed after funding. Contact support with this transaction ID to resolve it; do not pay again.' });
-        store.moveToHistory(useTransactionStore.getState().activeTransaction!);
+      } catch (error) {
+        console.warn('Failed to record address book contact:', error);
       }
-    };
-
-    if (!pollingIntervalRef.current) {
-      const pollPayout = async () => {
-        if (!isCurrent()) return;
-        try {
-          const tx = useTransactionStore.getState().activeTransaction;
-          if (tx) {
-            const { status, message } = await checkMomoPayoutStatus(tx.id);
-            if (!isCurrent()) return;
-            if (status === "SUCCESSFUL" || status === "FAILED") {
-              handlePollingResult(status, message);
-              return; // stop polling
-            }
-          }
-        } catch (pollErr) {
-          console.warn('Payout status poll failed; will retry:', pollErr);
-          if (!isCurrent()) return;
-        }
-        pollingIntervalRef.current = setTimeout(pollPayout, POLLING_INTERVAL_MS);
-      };
-      pollingIntervalRef.current = setTimeout(pollPayout, POLLING_INTERVAL_MS);
     }
-
-    pollingTimeoutRef.current = setTimeout(() => {
-      if (!isCurrent()) return;
-      stopPolling();
-      if (useTransactionStore.getState().activeTransaction?.currentPhase === AppPhase.VERIFYING_PAYOUT) {
-        store.setError(null);
-        store.updateTransaction({currentPhase:AppPhase.RECOVERY_REQUIRED, recoveryMessage:'The payout has not been confirmed yet. Check status before trying another cashout.'});
+  };
+  const pollPayout = async () => {
+    if (!current()) return;
+    try {
+      const { status, message } = await checkPayoutStatus(transactionId);
+      if (!current()) return;
+      if (status === 'SUCCESSFUL' || status === 'FAILED') {
+        handlePollingResult(status, message);
+        return;
       }
+    } catch (error) {
+      console.warn('Payout status poll failed; will retry:', error);
+    }
+    if (current()) cancelPoll = scheduler.schedule(pollPayout, POLLING_INTERVAL_MS);
+  };
+  if (!transaction.payoutReferenceId) {
+    recover(transaction.invoicePaid ? MOMO_RECOVERY_MESSAGE : 'The funding payment has not been confirmed. Contact support before retrying this cashout.');
+  } else {
+    cancelPoll = scheduler.schedule(pollPayout, POLLING_INTERVAL_MS);
+    cancelDeadline = scheduler.schedule(() => {
+      recover('The payout has not been confirmed yet. Check status before trying another cashout.', null);
     }, POLLING_TIMEOUT_MS);
-
-  } catch (err: any) {
-    store.setError(err.message || "Failed to initiate MoMo payout.");
-    store.updateTransaction({currentPhase:AppPhase.RECOVERY_REQUIRED, recoveryMessage:err.message || MOMO_RECOVERY_MESSAGE});
-    store.moveToHistory(useTransactionStore.getState().activeTransaction!);
   }
+  return stop;
 };
-

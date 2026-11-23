@@ -2,14 +2,8 @@ import { useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTransactionStore } from '../store/transactionStore';
 import { useWalletStore } from '../store/wallet';
-import { AppPhase } from '../types/momo';
-import { 
-  startPaymentVerification, 
-  executeSendPayment, 
-  initiateAndVerifyPayout,
-  checkMomoRecovery,
-} from '../services/flowServices';
-import { timeoutScheduler } from '../services/scheduler';
+import { startActiveMomoProcessing } from '../services/momoProcessingAdapter';
+import { startSavedMomoProcessing } from '../services/savedMomoRecoveryAdapter';
 import { subscribeToSparkEvents, syncAndSweepSpark } from '../services/sparkService';
 
 const POLLING_INTERVAL = 2000;
@@ -19,73 +13,16 @@ export const TransactionProcessor = () => {
   const { activeTransaction } = useTransactionStore();
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
-  // These timer refs belong to payout verification; cash-in owns its cleanup.
-  const momoPollingRef = useRef<any>(null);
-  const momoTimeoutRef = useRef<any>(null);
   const backendPollingRef = useRef<any>(null);
   const isPollingRef = useRef<boolean>(false);
   const lastSparkSweepRef = useRef<number>(0);
 
-  // 1. Transaction Resumption (Mobile Money)
   useEffect(() => {
-    if (!activeTransaction) {
-      if (momoPollingRef.current) { clearInterval(momoPollingRef.current); momoPollingRef.current = null; }
-      if (momoTimeoutRef.current) { clearTimeout(momoTimeoutRef.current); momoTimeoutRef.current = null; }
-      return;
-    }
-
-    const stopPolling = () => {
-      if (momoPollingRef.current) { clearInterval(momoPollingRef.current); momoPollingRef.current = null; }
-      if (momoTimeoutRef.current) { clearTimeout(momoTimeoutRef.current); momoTimeoutRef.current = null; }
-    };
-
-    const phase = activeTransaction.currentPhase;
-    let cancelled = false;
-    let stopCashInVerification: (() => void) | undefined;
-    const isCurrent = () => !cancelled && useTransactionStore.getState().activeTransaction?.id === activeTransaction.id;
-
-    // MoMo specific phases
-    if (phase === AppPhase.PENDING_PAYMENT || phase === AppPhase.VERIFYING_PAYMENT) {
-      stopCashInVerification = startPaymentVerification({ scheduler: timeoutScheduler, isCurrent });
-    } else if (phase === AppPhase.AWAITING_INVOICE_PAYMENT) {
-      executeSendPayment();
-    } else if (phase === AppPhase.INITIATING_PAYOUT || phase === AppPhase.VERIFYING_PAYOUT) {
-      initiateAndVerifyPayout(stopPolling, momoPollingRef, momoTimeoutRef, isCurrent);
-    } else if (phase === AppPhase.AWAITING_ASP_BOARDING) {
-      // With FixedFloat, deposits settle directly to Cashu mint
-      refreshWallet();
-    } else if (phase === AppPhase.READY_TO_CLAIM) {
-      refreshWallet();
-    }
-
-    return () => { cancelled = true; stopCashInVerification?.(); stopPolling(); };
+    if (!activeTransaction) return;
+    return startActiveMomoProcessing(activeTransaction.id, activeTransaction.currentPhase, refreshWallet);
   }, [activeTransaction?.id, activeTransaction?.currentPhase, refreshWallet]);
 
-  // Saved transfers continue reconciling by ID without taking over a new form.
-  // Never submit/re-fund a cashout here. Confirmed top-ups may finish crediting.
-  useEffect(() => {
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const checks = new Map<string, {next:number; attempts:number}>();
-    const pollSaved = async () => {
-      const {activeTransaction, history} = useTransactionStore.getState();
-      const now = Date.now();
-      const pending = history.filter(tx => ['RWF_TO_SATS', 'SATS_TO_RWF'].includes(tx.direction) && tx.id !== activeTransaction?.id && tx.status === 'PENDING' &&
-        [AppPhase.RECOVERY_REQUIRED, AppPhase.RETRYABLE_ERROR, AppPhase.PENDING_PAYMENT,
-          AppPhase.VERIFYING_PAYMENT, AppPhase.VERIFYING_PAYOUT].includes(tx.currentPhase!));
-      for (const id of checks.keys()) if (!pending.some(tx => tx.id === id)) checks.delete(id);
-      const tx = pending.find(tx => (checks.get(tx.id)?.next ?? 0) <= now);
-      if (tx) {
-        const attempts = (checks.get(tx.id)?.attempts ?? 0) + 1;
-        checks.set(tx.id, {attempts, next:now + Math.min(300000, 15000 * 2 ** Math.min(attempts, 5))});
-        try { await checkMomoRecovery(tx.id); }
-        catch { console.error('Could not reconcile a saved Mobile Money transfer.'); }
-      }
-      if (!stopped) timer = setTimeout(pollSaved, 5000);
-    };
-    timer = setTimeout(pollSaved, 5000);
-    return () => { stopped = true; clearTimeout(timer); };
-  }, []);
+  useEffect(() => startSavedMomoProcessing(), []);
 
   // 2. Backend Transactions Polling (Ecash, Lightning, Onchain)
   useEffect(() => {
