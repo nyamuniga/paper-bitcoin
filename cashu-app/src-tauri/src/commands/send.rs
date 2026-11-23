@@ -334,10 +334,16 @@ async fn send_ecash_operation(
                 if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
                     tx.status = TransactionStatus::Pending;
                 }
-                w_state.save_encrypted(&path, &passphrase).ok();
+                let mut message = format!("Failed to split tokens: {}", e);
+                if let Err(save_error) = w_state.save_encrypted(&path, &passphrase) {
+                    message.push_str(&format!(
+                        " Recovery state could not be saved: {save_error:#}. Outcome remains unknown; do not resend."
+                    ));
+                    eprintln!("[send_ecash] {tx_id}: {message}");
+                }
                 return Err(SendEcashError::new(
                     SendEcashErrorCode::OutcomeUnknown,
-                    format!("Failed to split tokens: {}", e),
+                    message,
                     Some(tx_id),
                 ));
             }

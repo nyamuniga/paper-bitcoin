@@ -262,7 +262,7 @@ Perform these after comparing the existing call sites. Validate shared behavior 
 
 | Done | ID | Task | Acceptance |
 | --- | --- | --- | --- |
-| [ ] | G1 | Surface a send recovery save failure. | Original outcome and save failure are both diagnosable; no automatic resend. |
+| [x] | G1 | Surface a send recovery save failure. | Original outcome and save failure are both diagnosable; no automatic resend. |
 | [ ] | G2 | Apply the same policy to one receive recovery path. | Failed durability cannot be reported as saved recovery. |
 | [ ] | G3 | Extract pure proof selection to the wallet crate. | Exact selection, insufficient funds, and denomination boundaries are tested. |
 | [ ] | G4 | Extract outgoing token/result construction. | V3/V4 payload behavior is preserved by fixtures. |
@@ -1192,3 +1192,21 @@ Verification:
 Added [walletReconciliation.test.mjs](cashu-app/tests/walletReconciliation.test.mjs), the [browser fixture](cashu-app/tests/browser/walletReconciliation.fixture.tsx), [synthetic boundaries](cashu-app/tests/browser/walletReconciliation.boundaries.ts), [browser tests](cashu-app/tests/browser/walletReconciliation.test.mjs) and [backend test clock](cashu-app/tests/browser/backendPollingClock.boundaries.ts). Existing cash-in/payout tests give backend scheduling its own clock. Added test:wallet-reconciliation in [package.json](cashu-app/package.json) and documented ownership in [DESIGN.md](cashu-app/DESIGN.md).
 
 This removes frontend sequencing delays; native wallet-lock contention, mint/network latency, encrypted saves and send-side wallet-refresh waits remain unchanged. Already-dispatched work is not aborted. Tests use synthetic external boundaries and prove ordering/ownership, not live settlement speed or SDK/node availability. No funded operation, actual provider/native execution, device or APK verification was performed. UI markup/styles/animations, transaction schema and provider request formats are unchanged. G1 has not started. Changes remain uncommitted and unpushed for review.
+
+
+### G1 — Surface an eCash send recovery-save failure
+
+Implemented on 2026-11-23. The split-error branch in [send_ecash_operation](cashu-app/src-tauri/src/commands/send.rs) no longer discards the recovery save result with .ok(). A failed save appends its complete error chain to the original split diagnostic, explicitly retains the unknown outcome/do-not-resend instruction, and emits a receipt-correlated stderr diagnostic. The returned OUTCOME_UNKNOWN code and original pending transaction ID are preserved. A successful recovery save retains the previous error message exactly. Both structured v2 and legacy string errors retain the diagnostic; frontend handling remains code-based with its existing safe History message and unresolved-send guard.
+
+No retry, resend, new API field or logging infrastructure is added. Pending state remains pending. The change does not claim that the latest recovery state was saved after a failed write. Receive recovery remains for G2; proof selection, fees, token encoding, locking, normalization, file format and atomic-save implementation are unchanged.
+
+Verification:
+
+- Red: the corrected native regression failed against the original branch because the returned message omitted the failed recovery save. The accepted test socket is explicitly blocking, with bounded local-server waits.
+- Green: all 92 Rust workspace tests pass, with zero failures, ignored or filtered tests and no compiler warnings. Command: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline`, with localhost mock-server access. The native library includes the new regression and existing send/API contract tests.
+- The new [native regression](cashu-app/src-tauri/src/commands/send_tests.rs) uses an isolated temporary wallet and local synthetic mint. It preserves the initially saved pending receipt, replaces the wallet destination with a directory, then returns a split-preparation error. It asserts the original error, actual OS save error, unknown-outcome code, original pending ID, and legacy error compatibility. Only the two expected GET requests occur; no swap submission/retry occurs in this fixture.
+- All 378 frontend/payment tests pass, including the new [caller regression](cashu-app/tests/sendEcashCaller.test.mjs): two send attempts after the combined OUTCOME_UNKNOWN error produce only one native dispatch and retain History guidance.
+- Both 0.1.20 release checks, including history hygiene, pass. Added-test rustfmt, added-line whitespace and documentation links checked.
+- Byte comparison proves the runtime diff is confined to this one send recovery branch. Receive/G2, all other native/Rust code, frontend runtime, Lightning/Spark separation and prior Mobile Money work are unchanged. Prior test bodies are byte-identical.
+
+The native failure fixture stops during swap preparation; it does not simulate a funded swap, real process termination, disk-full conditions or a mint spending proofs. It verifies a real filesystem save failure and retained diagnostic, not guaranteed recovery persistence while storage remains unavailable. Frontend/UI runtime is unchanged, so browser/device checks were not repeated. No funded operation, actual provider execution, APK build, commit or push was performed. Updated [DESIGN.md](cashu-app/DESIGN.md) with the error policy. G2 has not started.

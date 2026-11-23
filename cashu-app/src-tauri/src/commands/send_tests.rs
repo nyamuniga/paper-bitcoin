@@ -285,3 +285,95 @@ async fn successful_send_preserves_the_existing_result_shape() {
     assert_eq!(saved.transactions[0].status, TransactionStatus::Success);
     assert_eq!(saved.total_balance(), 0);
 }
+
+#[tokio::test]
+async fn swap_failure_and_recovery_save_failure_preserve_both_diagnostics() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::time::{Duration, Instant};
+
+    let fixture = TestWallet::new();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let mint = format!("http://{}", listener.local_addr().unwrap());
+    {
+        let mut guard = fixture.state.wallet.lock().await;
+        let wallet = guard.as_mut().unwrap();
+        let proofs = wallet.proofs.remove(MINT).unwrap();
+        wallet.proofs.insert(mint.clone(), proofs);
+    }
+    let wallet_path = fixture.state.wallet_path.clone();
+    let initial_save = fixture.directory.join("initial-wallet.json");
+    let saved_snapshot = initial_save.clone();
+    let server = std::thread::spawn(move || {
+        let mut requests = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(15);
+        for expected_path in ["/v1/keysets", "/v1/keys"] {
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "expected local mint request");
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("local mint accept failed: {error}"),
+                }
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut reader = BufReader::new(&mut stream);
+            let mut request = String::new();
+            reader.read_line(&mut request).unwrap();
+            assert!(request.starts_with(&format!("GET {expected_path} ")));
+            loop {
+                let mut header = String::new();
+                if reader.read_line(&mut header).unwrap() == 0 || header == "\r\n" {
+                    break;
+                }
+            }
+            requests.push(request.trim().to_string());
+            let body = if expected_path == "/v1/keys" {
+                // The intent is already durable. Only its later recovery write fails.
+                std::fs::rename(&wallet_path, &saved_snapshot).unwrap();
+                std::fs::create_dir(&wallet_path).unwrap();
+                r#"{"error":"synthetic-split-failure"}"#
+            } else {
+                r#"{"keysets":[]}"#
+            };
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        }
+        requests
+    });
+
+    let pubkey = ecash_core::MintKeypair::generate().public_key_hex();
+    let error = send_ecash_operation(mint, 100, Some(pubkey), None, None, &fixture.state)
+        .await
+        .err()
+        .expect("ambiguous split and failed recovery save must return an error");
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert!(requests.iter().all(|request| request.starts_with("GET ")));
+    assert_eq!(error.code, SendEcashErrorCode::OutcomeUnknown);
+    assert!(error.message.contains("synthetic-split-failure"));
+    assert!(error.message.contains("Recovery state could not be saved"));
+    let save_error = std::fs::rename(
+        fixture.state.wallet_path.with_extension("json.tmp"),
+        &fixture.state.wallet_path,
+    )
+    .unwrap_err();
+    assert!(error.message.contains(&save_error.to_string()));
+    assert!(error.message.contains("do not resend"));
+
+    let saved = ecash_wallet::WalletState::load_encrypted(&initial_save, PASSWORD).unwrap();
+    let transaction = saved
+        .transactions
+        .iter()
+        .find(|transaction| Some(&transaction.id) == error.tx_id.as_ref())
+        .expect("the original pending send identity must be retained");
+    assert_eq!(transaction.status, TransactionStatus::Pending);
+    assert_eq!(saved.transactions.len(), 1);
+    let legacy = crate::error::CommandError::from(error);
+    assert!(legacy.0.contains("synthetic-split-failure"));
+    assert!(legacy.0.contains(&save_error.to_string()));
+}

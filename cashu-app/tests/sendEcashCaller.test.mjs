@@ -172,3 +172,14 @@ test('local missing-mint validation does not latch an unresolved native failure'
   assert.match(messages[0],/No mint/);
   assert.deepEqual(await f.hook.sendEcash(100,'https://mint.example'),receipt);
 });
+
+test('a send recovery-save failure remains unresolved and cannot automatically resend',async()=>{
+  const f=fixture();const messages=[];
+  f.invoke=async()=>{throw {code:'OUTCOME_UNKNOWN',tx_id:'pending-send',
+    message:'Failed to split tokens: synthetic split failure. Recovery state could not be saved: synthetic disk failure. Outcome remains unknown; do not resend.'};};
+  const options={silent:true,onError:message=>messages.push(message)};
+  assert.equal(await f.hook.sendEcash(100,undefined,undefined,options),null);
+  assert.equal(await f.hook.sendEcash(100,undefined,undefined,options),null);
+  assert.equal(f.calls.length,1);assert.equal(f.calls[0][0],'send_ecash_v2');
+  assert.ok(messages.every(message=>message.includes('History')));assert.deepEqual(f.toasts,[]);
+});
