@@ -4,8 +4,14 @@ import { fileURLToPath } from 'node:url';
 import { createBrowserFixture, wait } from './browserFixture.mjs';
 const boundaries={name:'cash-in-clock-and-provider-boundaries',setup(build){
   const path=fileURLToPath(new URL('./cashInPolling.boundaries.ts',import.meta.url));
+  const backendPath=fileURLToPath(new URL('./backendPollingClock.boundaries.ts',import.meta.url));
   const recoveryPath=fileURLToPath(new URL('./savedMomoRecovery.boundaries.ts',import.meta.url));
-  build.onResolve({filter:/^@tauri-apps\/api\/core$|\/((services\/)?(scheduler|momoService|lightningService|sparkService)|store\/wallet|constants\.local)$/},args=>({path:args.path.endsWith('/scheduler')&&args.importer.endsWith('/savedMomoRecoveryAdapter.ts')?recoveryPath:path}));
+  build.onResolve({filter:/^@tauri-apps\/api\/core$|\/((services\/)?(scheduler|momoService|lightningService|sparkService)|store\/wallet|constants\.local)$/},args=>{
+    const isScheduler=args.path.endsWith('/scheduler');
+    if(isScheduler&&args.importer.endsWith('/savedMomoRecoveryAdapter.ts'))return {path:recoveryPath};
+    if(isScheduler&&args.importer.endsWith('/walletReconciliationAdapter.ts'))return {path:backendPath};
+    return {path};
+  });
   build.onResolve({filter:/^@tauri-apps\/plugin-http$/},()=>({path}));
 }};
 test('cash-in polling: real processor and store lifecycle',{timeout:30000},async t=>{

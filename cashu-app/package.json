@@ -23,6 +23,7 @@
     "test:momo-primary": "npm run build && node --test tests/browser/momoPrimaryAction.test.mjs",
     "test:momo-entry": "npm run build && node --test --test-concurrency=1 tests/momoEntryFormContracts.test.mjs tests/browser/momoEntryForm.test.mjs",
     "test:momo-cash-in-polling": "npm run build && node --experimental-strip-types --test --test-concurrency=1 tests/scheduler.test.mjs tests/momoFlows.test.mjs tests/browser/cashInPolling.test.mjs",
+    "test:wallet-reconciliation": "npm run build && node --experimental-strip-types --test --test-concurrency=1 tests/walletReconciliation.test.mjs tests/browser/walletReconciliation.test.mjs tests/browser/cashInPolling.test.mjs tests/browser/payoutPolling.test.mjs",
     "test:momo-processing": "npm run build && node --experimental-strip-types --test --test-concurrency=1 tests/momoProcessing.test.mjs tests/browser/cashInPolling.test.mjs tests/browser/payoutPolling.test.mjs",
     "test:momo-fulfillment": "npm run build && node --experimental-strip-types --test --test-concurrency=1 tests/momoFulfillment.test.mjs tests/momoFlows.test.mjs tests/browser/cashInPolling.test.mjs",
     "test:momo-payout-polling": "npm run build && node --experimental-strip-types --test --test-concurrency=1 tests/scheduler.test.mjs tests/momoFlows.test.mjs tests/browser/payoutPolling.test.mjs",

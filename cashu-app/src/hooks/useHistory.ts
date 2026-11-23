@@ -9,7 +9,7 @@ import { Transaction } from '../components/history/TransactionCard';
 import { listEcashInvoices } from '../services/savedEcashInvoices';
 import type { EcashInvoiceSummary } from '../services/savedEcashInvoices';
 import { mergeEcashRequests } from '../services/ecashRequestHistory';
-import { syncAndSweepSpark } from '../services/sparkService';
+import { checkHistoryTransactionStatus } from '../services/walletReconciliationAdapter';
 
 export const useHistory = () => {
   const [rawTransactions, setRawTransactions] = useState<Transaction[]>([]);
@@ -116,8 +116,7 @@ export const useHistory = () => {
   const handleRecoverPendingTransaction = async (txId: string) => {
     try {
       toast.loading('Checking status...', { id: txId });
-      await syncAndSweepSpark().catch(() => {});
-      const status = await invoke<string>('check_transaction_status', { txId });
+      const status = await checkHistoryTransactionStatus(txId, rawTransactions.find(transaction => transaction.id === txId));
 
       if (status === 'Success') {
         toast.success('Transaction was successful.', { id: txId });
