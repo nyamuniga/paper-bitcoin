@@ -62,6 +62,7 @@ pub async fn get_transactions(state: State<'_, AppState>) -> CommandResult<Vec<T
                     }
                 }
             }
+            w_state.normalize_proofs_for_persistence();
             let _ = w_state.save_encrypted(&path, &passphrase);
         }
     }

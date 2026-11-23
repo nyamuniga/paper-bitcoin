@@ -15,6 +15,7 @@ pub const DEFAULT_MINT_URL: &str = "https://mint.28waves.com";
 
 
 pub mod state;
+pub mod storage;
 pub mod stable;
 pub mod client;
 pub mod invoice;
@@ -28,6 +29,13 @@ pub mod token;
 pub mod deferred_ecash;
 pub mod payment_request;
 pub mod ecash_invoice;
+pub mod proof_selection;
+pub mod outgoing;
+pub mod send;
+pub mod send_error;
+pub mod payment_quote;
+pub mod receive;
+pub mod receive_input;
 
 pub use state::*;
 pub use invoice::*;

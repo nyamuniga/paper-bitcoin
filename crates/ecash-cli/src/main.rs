@@ -328,6 +328,7 @@ fn cmd_init(wallet_path: &PathBuf, force: bool) -> Result<()> {
     println!("Deriving encryption key…");
 
     let mut state = WalletState::new(seed_hex, Some(phrase));
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, &passphrase)?;
 
     println!("Wallet created and encrypted.");
@@ -356,6 +357,7 @@ fn cmd_recover(wallet_path: &PathBuf) -> Result<()> {
     println!("Deriving encryption key…");
 
     let mut state = WalletState::new(seed_hex, Some(phrase));
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, &passphrase)?;
 
     println!("Wallet recovered and encrypted.");
@@ -372,6 +374,7 @@ fn cmd_migrate(wallet_path: &PathBuf) -> Result<()> {
 
     let passphrase = prompt_new_passphrase()?;
     println!("Deriving encryption key…");
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, &passphrase)?;
 
     println!("Wallet encrypted successfully.");

@@ -124,6 +124,7 @@ pub async fn prepare_issue_multimint_note(
         std::collections::HashMap::from([(hub_keyset.id.clone(), hub_keyset.keys.clone())]),
     );
     state.transactions.push(pending_tx);
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     Ok((tx_id, hub_mint.to_string(), hub_inv, total_hub_needed))
@@ -226,6 +227,7 @@ pub async fn resume_issue_note(
 
     state.proofs.entry(issue_data.hub_mint.clone()).or_default().extend(hub_all_proofs.clone());
     if !state.mints.contains(&issue_data.hub_mint) { state.mints.push(issue_data.hub_mint.clone()); }
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     let mut entries = Vec::new();
@@ -330,6 +332,7 @@ pub async fn resume_issue_note(
         });
     }
 
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     let child_results = futures::future::join_all(child_futures).await;
@@ -354,6 +357,7 @@ pub async fn resume_issue_note(
             state_proofs.retain(|p| !entry.proofs.iter().any(|ep| ep.id == p.id && ep.secret == p.secret));
         }
     }
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     let public_entries: Vec<_> = entries.iter().map(|e| e.to_public()).collect();
@@ -383,6 +387,7 @@ pub async fn resume_issue_note(
             data.note = Some(note.clone());
         }
     }
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     Ok(note)

@@ -63,7 +63,7 @@ impl WalletState {
     }
 
     pub fn default_path() -> PathBuf {
-        dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")).join(".ecash").join("wallet.json")
+        crate::storage::default_wallet_path()
     }
 
     /// Overwrite sensitive secret strings in memory before dropping the in-memory wallet state.
@@ -114,49 +114,30 @@ impl WalletState {
 
     /// Save wallet state as AES-256-GCM encrypted JSON (Argon2id key derivation).
     /// Uses an atomic write-to-temp-and-rename so crashes mid-write never corrupt the wallet file.
-    pub fn save_encrypted(&mut self, path: &PathBuf, passphrase: &str) -> Result<()> {
-        self.dedup_proofs();
-        let mut plaintext = serde_json::to_vec(self)?;
-        let encrypted = encrypt_wallet(&plaintext, passphrase);
-        plaintext.fill(0);
-        let encrypted = encrypted?;
-        if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
-        let serialized = serde_json::to_string_pretty(&encrypted)?;
-        let tmp_path = path.with_extension("json.tmp");
-        std::fs::write(&tmp_path, &serialized)?;
-        std::fs::rename(&tmp_path, path)?;
-        Ok(())
+    /// Does not mutate domain state; callers normalize proofs explicitly beforehand.
+    pub fn save_encrypted(&self, path: &PathBuf, passphrase: &str) -> Result<()> {
+        crate::storage::save_encrypted_wallet(self, path, passphrase)
     }
 
     /// Load and decrypt wallet state.
     pub fn load_encrypted(path: &PathBuf, passphrase: &str) -> Result<Self> {
-        let data = std::fs::read_to_string(path)
-            .context("Wallet not found — run `ecash init` first")?;
-        // Support both encrypted and legacy plaintext wallets for migration
-        if let Ok(enc) = serde_json::from_str::<EncryptedWallet>(&data) {
-            if enc.version == 1 {
-                let plaintext = decrypt_wallet(&enc, passphrase)?;
-                let mut state: WalletState = serde_json::from_slice(&plaintext)?;
-                state.heal_corrupt_proofs();
-                state.normalize_mints();
-                return Ok(state);
-            }
-        }
-        // Fallback: legacy plaintext wallet
-        Err(anyhow!("Wallet appears to be unencrypted. Run `ecash migrate` to encrypt it."))
-    }
-
-    /// Load a legacy plaintext wallet (used only by `ecash migrate`).
-    pub fn load_plaintext(path: &PathBuf) -> Result<Self> {
-        let data = std::fs::read_to_string(path)
-            .context("Wallet not found — run `ecash init` first")?;
-        let mut state: WalletState = serde_json::from_str(&data)?;
+        let mut state = crate::storage::load_encrypted_wallet(path, passphrase)?;
         state.heal_corrupt_proofs();
         state.normalize_mints();
         Ok(state)
     }
 
-    fn dedup_proofs(&mut self) {
+    /// Load a legacy plaintext wallet (used only by `ecash migrate`).
+    pub fn load_plaintext(path: &PathBuf) -> Result<Self> {
+        let mut state = crate::storage::load_plaintext_wallet(path)?;
+        state.heal_corrupt_proofs();
+        state.normalize_mints();
+        Ok(state)
+    }
+
+    /// Explicitly deduplicate stored proofs per mint by secret (preserving first occurrence
+    /// and relative order) before persistence.
+    pub fn normalize_proofs_for_persistence(&mut self) {
         for proofs in self.proofs.values_mut() {
             let mut seen = std::collections::HashSet::new();
             proofs.retain(|p| seen.insert(p.secret.clone()));
@@ -517,71 +498,7 @@ pub fn mnemonic_to_seed_hex(phrase: &str) -> Result<String> {
 
 // ─── Wallet Encryption ────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct EncryptedWallet {
-    pub version: u8,
-    /// Argon2id salt, hex-encoded (32 bytes).
-    pub salt: String,
-    /// AES-GCM nonce, hex-encoded (12 bytes).
-    pub nonce: String,
-    /// Ciphertext (AES-256-GCM encrypted JSON), hex-encoded.
-    pub ciphertext: String,
-}
-
-fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32]> {
-    use argon2::{Argon2, Algorithm, Version, Params};
-    let params = Params::new(65536, 3, 4, Some(32))
-        .map_err(|e| anyhow!("Argon2 params error: {}", e))?;
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    let mut key = [0u8; 32];
-    argon2.hash_password_into(passphrase.as_bytes(), salt, &mut key)
-        .map_err(|e| anyhow!("Key derivation failed: {}", e))?;
-    Ok(key)
-}
-
-pub fn encrypt_wallet(plaintext: &[u8], passphrase: &str) -> Result<EncryptedWallet> {
-    use aes_gcm::{Aes256Gcm, KeyInit};
-    use aes_gcm::aead::Aead;
-    use rand::RngCore;
-
-    let mut salt = [0u8; 32];
-    let mut nonce_bytes = [0u8; 12];
-    rand::rngs::OsRng.fill_bytes(&mut salt);
-    rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
-
-    let key_bytes = derive_key(passphrase, &salt)?;
-    let key = Aes256Gcm::new_from_slice(&key_bytes)
-        .map_err(|e| anyhow!("Key init failed: {}", e))?;
-    let nonce = aes_gcm::Nonce::from(nonce_bytes);
-
-    let ciphertext = key.encrypt(&nonce, plaintext)
-        .map_err(|e| anyhow!("Encryption failed: {}", e))?;
-
-    Ok(EncryptedWallet {
-        version: 1,
-        salt: hex::encode(salt),
-        nonce: hex::encode(nonce_bytes),
-        ciphertext: hex::encode(ciphertext),
-    })
-}
-
-pub fn decrypt_wallet(enc: &EncryptedWallet, passphrase: &str) -> Result<Vec<u8>> {
-    use aes_gcm::{Aes256Gcm, KeyInit};
-    use aes_gcm::aead::Aead;
-
-    let salt = hex::decode(&enc.salt).context("Invalid salt")?;
-    let nonce_bytes = hex::decode(&enc.nonce).context("Invalid nonce")?;
-    let ciphertext = hex::decode(&enc.ciphertext).context("Invalid ciphertext")?;
-
-    let key_bytes = derive_key(passphrase, &salt)?;
-    let nonce_arr: [u8; 12] = nonce_bytes.try_into().map_err(|_| anyhow!("Nonce must be 12 bytes"))?;
-    let nonce = aes_gcm::Nonce::from(nonce_arr);
-    let cipher = Aes256Gcm::new_from_slice(&key_bytes)
-        .map_err(|e| anyhow!("Key init failed: {}", e))?;
-
-    cipher.decrypt(&nonce, ciphertext.as_ref())
-        .map_err(|_| anyhow!("Decryption failed — wrong passphrase?"))
-}
+pub use crate::storage::{decrypt_wallet, encrypt_wallet, EncryptedWallet};
 
 pub fn encrypt_local_secret(secret: &str, context_key: &str) -> Result<(String, String)> {
     use aes_gcm::{Aes256Gcm, KeyInit};

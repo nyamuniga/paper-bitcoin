@@ -73,6 +73,7 @@ pub async fn ecash_save_invoice(
         .unwrap_or_default()
         .as_secs();
     wallet.ecash_invoices.push(invoice);
+    wallet.normalize_proofs_for_persistence();
     if let Err(error) = wallet.save_encrypted(&path, &passphrase) {
         wallet.ecash_invoices.pop();
         return Err(error.into());
@@ -140,6 +141,7 @@ pub async fn ecash_invoice_payment(
         .find(|invoice| invoice.id == id)
         .unwrap();
     let previous = invoice.pending_token.replace(token);
+    wallet.normalize_proofs_for_persistence();
     if let Err(error) = wallet.save_encrypted(&path, &passphrase) {
         wallet
             .ecash_invoices
@@ -181,6 +183,7 @@ pub async fn ecash_invoice_relays(
         .ok_or_else(|| CommandError("Request not found".into()))?;
     let previous = wallet.ecash_invoices[index].relays.clone();
     if wallet.ecash_invoices[index].add_delivery_relays(&relays) {
+        wallet.normalize_proofs_for_persistence();
         if let Err(error) = wallet.save_encrypted(&path, &passphrase) {
             wallet.ecash_invoices[index].relays = previous;
             return Err(error.into());

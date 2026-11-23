@@ -57,6 +57,7 @@ pub async fn issue_direct_note(
         mint_url: "Local Wallet".to_string(),
     };
     state.transactions.push(pending_tx);
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     let mut entries = Vec::new();
@@ -67,6 +68,7 @@ pub async fn issue_direct_note(
         let client = MintClient::new(*mint_url);
         let keyset = client.fetch_keyset().await.map_err(|e| {
             if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) { tx.status = TransactionStatus::Failed; }
+            state.normalize_proofs_for_persistence();
             state.save_encrypted(wallet_path, passphrase).ok();
             anyhow!("Failed to fetch keyset: {}", e)
         })?;
@@ -132,6 +134,7 @@ pub async fn issue_direct_note(
         }
         
         state.derivation_index = wallet_deriv.index;
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase)?;
 
         // Call swap
@@ -178,6 +181,7 @@ pub async fn issue_direct_note(
             mint_proofs.extend(change_proofs);
         }
         
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase)?;
 
         let token_entry = TokenEntry { mint: mint_url.to_string(), proofs: desired_proofs };
@@ -211,6 +215,7 @@ pub async fn issue_direct_note(
         }
         tx.status = TransactionStatus::Success;
     }
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     Ok(note)
@@ -290,6 +295,7 @@ pub async fn redeem_direct_note(
         if !state.mints.contains(mint_url) {
             state.mints.push(mint_url.clone());
         }
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase)?;
     }
 
@@ -314,6 +320,7 @@ pub async fn redeem_direct_note(
     };
     
     state.transactions.push(tx);
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     Ok(total_amount)

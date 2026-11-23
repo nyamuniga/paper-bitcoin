@@ -263,19 +263,19 @@ Perform these after comparing the existing call sites. Validate shared behavior 
 | Done | ID | Task | Acceptance |
 | --- | --- | --- | --- |
 | [x] | G1 | Surface a send recovery save failure. | Original outcome and save failure are both diagnosable; no automatic resend. |
-| [ ] | G2 | Apply the same policy to one receive recovery path. | Failed durability cannot be reported as saved recovery. |
-| [ ] | G3 | Extract pure proof selection to the wallet crate. | Exact selection, insufficient funds, and denomination boundaries are tested. |
-| [ ] | G4 | Extract outgoing token/result construction. | V3/V4 payload behavior is preserved by fixtures. |
-| [ ] | G5 | Extract pending send-record construction. | Recovery ID, proofs, amount, and status are preserved. |
-| [ ] | G6 | Move send orchestration into a wallet operation. | Tauri delegates; existing locking, fee caps, and duplicate-request protection remain tested. |
-| [ ] | G7 | Extract receive-input normalization/validation. | Valid and malformed token fixtures establish behavior. |
-| [ ] | G8 | Move receive orchestration into a wallet operation. | Receiving and interrupted recovery are testable without Tauri state. |
-| [ ] | G9 | Delegate file read/write through a storage module. | Encryption format, atomic replacement behavior, and paths stay compatible. |
-| [ ] | G10 | Inject storage into one operation for failure testing. | Tests simulate save failures before/after external submission. |
-| [ ] | G11 | Characterize current proof normalization before persistence. | Duplicate and already-normalized wallet fixtures have explicit outcomes. |
-| [ ] | G12 | Add an explicit normalization/preparation call and migrate one save caller. | That caller preserves the characterized behavior. |
-| [ ] | G13 | Migrate remaining save callers one per change. | Inventory shows no caller relies on implicit normalization. |
-| [ ] | G14 | Remove normalization from raw persistence. | Saving no longer changes domain state; wallet round trips still pass. |
+| [x] | G2 | Apply the same policy to one receive recovery path. | Failed durability cannot be reported as saved recovery. |
+| [x] | G3 | Extract pure proof selection to the wallet crate. | Exact selection, insufficient funds, and denomination boundaries are tested. |
+| [x] | G4 | Extract outgoing token/result construction. | V3/V4 payload behavior is preserved by fixtures. |
+| [x] | G5 | Extract pending send-record construction. | Recovery ID, proofs, amount, and status are preserved. |
+| [x] | G6 | Move send orchestration into a wallet operation. | Tauri delegates; existing locking, fee caps, and duplicate-request protection remain tested. |
+| [x] | G7 | Extract receive-input normalization/validation. | Valid and malformed token fixtures establish behavior. |
+| [x] | G8 | Move receive orchestration into a wallet operation. | Receiving and interrupted recovery are testable without Tauri state. |
+| [x] | G9 | Delegate file read/write through a storage module. | Encryption format, atomic replacement behavior, and paths stay compatible. |
+| [x] | G10 | Inject storage into one operation for failure testing. | Tests simulate save failures before/after external submission. |
+| [x] | G11 | Characterize current proof normalization before persistence. | Duplicate and already-normalized wallet fixtures have explicit outcomes. |
+| [x] | G12 | Add an explicit normalization/preparation call and migrate one save caller. | That caller preserves the characterized behavior. |
+| [x] | G13 | Migrate remaining save callers one per change. | Inventory shows no caller relies on implicit normalization. |
+| [x] | G14 | Remove normalization from raw persistence. | Saving no longer changes domain state; wallet round trips still pass. |
 
 ### H. Enforce improvements and reassess
 
@@ -1210,3 +1210,242 @@ Verification:
 - Byte comparison proves the runtime diff is confined to this one send recovery branch. Receive/G2, all other native/Rust code, frontend runtime, Lightning/Spark separation and prior Mobile Money work are unchanged. Prior test bodies are byte-identical.
 
 The native failure fixture stops during swap preparation; it does not simulate a funded swap, real process termination, disk-full conditions or a mint spending proofs. It verifies a real filesystem save failure and retained diagnostic, not guaranteed recovery persistence while storage remains unavailable. Frontend/UI runtime is unchanged, so browser/device checks were not repeated. No funded operation, actual provider execution, APK build, commit or push was performed. Updated [DESIGN.md](cashu-app/DESIGN.md) with the error policy. G2 has not started.
+
+
+### G2 — Surface one receive recovery-save failure
+
+Implemented on 2026-11-23. The generic non-spent swap-error branch of [receive_ecash](cashu-app/src-tauri/src/commands/send.rs) now checks its recovery save result instead of discarding it with .ok(). A failed save preserves the original receive diagnostic, appends the save-error chain, states that the outcome remains unknown and advises checking History before claiming again. A receipt-correlated stderr diagnostic is emitted. The receipt remains pending, and the operation returns an error rather than a received amount or a claim of saved recovery. When the recovery save succeeds, the prior error message remains exactly unchanged. No automatic retry or new block on explicit later attempts is introduced.
+
+A thin public Tauri wrapper delegates its original six arguments to a private receive_ecash_operation, matching the existing send test seam. The receive body is byte-identical except for this selected branch. This is not G8's wallet-crate orchestration extraction. Validation, invoice constraints, fees, locking, Nostr handling, proof processing, idempotency, spent-token restore branches and successful receive behavior remain unchanged. G1 send behavior is unchanged.
+
+Verification:
+
+- Red: the native failure regression reproduced the missing recovery-save diagnostic. The existing successful-save error was characterized and retained exactly.
+- Green: all 94 Rust workspace tests pass in the full parallel run, with zero failures, ignored or filtered tests and no compiler warnings. Command: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline`, with localhost test-server access. Both receive cases and G1's send-save regression pass.
+- The shared [native fault fixture](cashu-app/src-tauri/src/commands/send_tests.rs) uses temporary encrypted wallets and a localhost synthetic mint. It preserves the first pending receipt, replaces the destination with a directory and exercises a real recovery-save rename failure. Assertions cover both causes, the actual OS error, original pending identity, unchanged balance/no incoming credit and exact legacy behavior when saving succeeds. The fixture makes only two GET requests and fails before a funded swap; G1 assertions are retained.
+- All 379 frontend/payment tests pass. The new [receive caller regression](cashu-app/tests/sendEcashCaller.test.mjs) checks visible and silent failures: no success amount, balance refresh or automatic retry, and both diagnostics reach onError/the existing error toast.
+- Initial full runs exposed intermittent connection errors in existing wallet-client localhost tests; all seven client tests passed in isolation. Their mock server could treat an accepted nonblocking socket's unavailable read as end-of-request and close early. A single test-only set_nonblocking(false) in [client.rs](crates/ecash-wallet/src/client.rs) makes it wait for request bytes with its existing timeout. All assertions and parallel execution are preserved; production HTTP code is unchanged. The final full run passes.
+- Both 0.1.20 release checks, including history hygiene, pass. Changed native-test formatting, added-line whitespace and documentation links checked.
+- Byte comparisons prove the receive body changes only in the selected error branch, G1 send logic and assertions remain intact, and wallet-client production code is unchanged. File fingerprints preserve prior frontend, Mobile Money and Lightning/Spark work.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) with the receive durability policy and test limits. These checks do not simulate a mint spending proofs, a funded receive/restore, disk exhaustion or real process termination, and do not guarantee a save while storage remains unavailable. Frontend runtime/UI is unchanged, so browser/device tests were not repeated. Native API signatures, error schema, wallet formats and dependencies are unchanged. No funded operation, actual provider execution, APK build, commit or push was performed. G3 has not started.
+
+
+### G3 — Extract pure proof selection into the wallet crate
+
+Implemented on 2026-11-23. [proof_selection.rs](crates/ecash-wallet/src/proof_selection.rs) now owns select_exact_proofs, exposed through the wallet crate's module declaration. Both existing native send call sites import this helper instead of a private command-layer implementation. The function borrows proofs, copies credentials without mutation and returns an exact selection or None for the existing swap path. It depends only on the core Proof type; there is no Tauri, wallet-state, mint, storage or asynchronous dependency in the helper.
+
+Stable largest-first ordering, equal-denomination identity, all proof metadata, greedy fallback for arbitrary denominations and the original zero-target behavior are preserved. Subtracting from the remaining target replaces overflow-prone sum + proof.amount; a boundary regression reproduced the old overflow before this correction. Selected proofs are moved from the owned sorted copy rather than cloned a second time. Native send/receive orchestration, G1/G2 recovery diagnostics, fees, locking, token construction, error contracts and wallet formats are unchanged. The native test module now imports Proof directly because production send code no longer needs that type import.
+
+Verification:
+
+- Test-first red: the new public-boundary integration tests initially failed because the wallet module did not exist. After moving the original selection algorithm, six tests passed and the large-denomination regression failed with addition overflow.
+- Green: all seven [pure selection tests](crates/ecash-wallet/tests/proof_selection.rs) pass. They cover exact amounts, insufficient funds, missing denominations, input immutability, stable identity and full credential metadata, zero behavior, all 64 binary denominations and neighboring amounts, and repeated large proofs at u64::MAX. An independent subset-sum oracle checks all 81 inventories with zero to two copies of denominations 1, 2, 4 and 8, for every positive target through total + 1; returned proofs must be unique input credentials summing to the target.
+- Full native/workspace verification: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 101 tests, with zero failures, ignored or filtered tests and no compiler warnings. This includes G1/G2 native recovery regressions. Existing localhost tests use synthetic mint responses; pure selector tests need no network.
+- Both release checks for 0.1.20 pass, including history hygiene. New Rust files pass rustfmt; whitespace and added documentation links checked.
+- Byte comparison proves native runtime changes only in the helper extraction and imports. Existing native test bodies are unchanged apart from the direct Proof import. File fingerprints preserve all other prior G2, Mobile Money and Lightning/Spark work.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) with the helper location and compatibility policy. Frontend runtime/UI, dependencies and release versions are unchanged; frontend/browser/device suites were not repeated for this Rust-only extraction. Fixtures contain synthetic credentials and do not validate funded mint interoperability. No funded operation, actual provider execution, APK build, commit or push was performed. G4 has not started.
+
+
+### G4 — Extract outgoing token and result construction
+
+Implemented on 2026-11-23. The new [outgoing.rs](crates/ecash-wallet/src/outgoing.rs) owns encode_outgoing_tokens, OutgoingTokens and the existing serializable SendEcashResult. The native send module re-exports that result type and delegates payload construction. Encoding still runs V3 then V4 with unit sat, before success-record updates. The native command still stores V3 in history, saves the wallet and only then builds the response with the existing success transaction ID. The result definition is copied byte-for-byte: token, token_v3, token_v4 and tx_id, with V3 as the primary token. No Tauri, wallet state, I/O or clock is introduced into the helper.
+
+Encoding-error labels remain exactly Failed to encode token v3/v4: followed by the original error; the native adapter retains OUTCOME_UNKNOWN and the same pending recovery ID. The encoders themselves, proof selection, fee policy, pending/success record construction, save order and G1/G2 recovery behavior are unchanged. G5's pending-record extraction is not included.
+
+Verification:
+
+- Fixed [V3/V4 fixtures](crates/ecash-wallet/tests/fixtures/outgoing_tokens.json), independently constructed from the existing JSON/CBOR layout, first passed against the original encoders before extraction. They cover ordinary proofs, long keyset IDs, object/string witnesses, incomplete DLEQ and wallet-only metadata omission, empty input and multiple keysets. All credentials are synthetic and unfunded; the mint uses the reserved invalid domain.
+- Test-first red: new helper/result tests failed because the outgoing module did not exist. Green: all three [outgoing-token tests](crates/ecash-wallet/tests/outgoing_tokens.rs) pass. V3 and single-keyset V4 compare exact bytes. Multiple-keyset V4 compares decoded CBOR with only keyset-entry order normalized, preserving the original HashMap order variability. Input credentials remain unchanged. Serialized response assertions cover all four fields, V3 as default and the supplied transaction ID.
+- Mutation check: temporarily changing the default token to V4 made the response-shape fixture fail as expected. The correct V3 implementation was restored before native wiring and full verification.
+- All 379 frontend/payment tests pass, with no failures or skipped tests.
+- Full workspace verification: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 104 tests, with zero failures, ignored or filtered tests and no compiler warnings. The existing successful native send-result regression and G1/G2 recovery tests pass unchanged.
+- Both 0.1.20 release checks pass, including history hygiene.
+- New Rust files and the changed native encoding snippet pass rustfmt. Whitespace checks pass. File fingerprints confine G4 to seven files, preserving all prior work; byte comparisons confirm the native result definition is identical, history still uses V3 and all transaction/recovery/save logic is retained.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) with the outgoing boundary and fixture policy. The low-level encoders, dependencies, release versions and frontend runtime/UI are unchanged. Fixtures do not establish funded mint interoperability; no funded operation, actual provider execution, device/APK build, commit or push was performed. Browser/device checks were not repeated for this Rust-only extraction. G5 has not started.
+
+
+### G5 — Extract pending send-record construction
+
+Implemented on 2026-11-23. PendingSend in [outgoing.rs](crates/ecash-wallet/src/outgoing.rs) names the caller-supplied recovery ID, request, selected proofs, amount, fee, timestamp and mint. Its into_transaction method creates the existing Send transaction with an empty token string and Pending status. It moves proof credentials unchanged and has no wallet, Tauri, clock, storage or network dependency. Named fields avoid a long positional argument list with interchangeable amount/fee/time integers.
+
+The native command supplies the same cloned ID/request/proofs and scalar values. Its tx_send_ ID generation, timestamp expression and evaluation location, pending_tx_id assignment, push, encrypted save, swap call and recovery handling remain unchanged. The helper performs no validation, fee arithmetic, normalization or ID generation; those responsibilities stay at their existing boundaries. Successful record construction and G4's token encoding/result construction are unchanged. This does not include G6's send-orchestration move.
+
+Verification:
+
+- Before extraction, the strengthened [native recovery regression](cashu-app/src-tauri/src/commands/send_tests.rs) passes against the original constructor. It reads the encrypted snapshot actually saved before swap preparation and asserts original pending identity, input proof credentials, amount, fee, mint, empty token and no payment request. Existing diagnostic and identity assertions remain intact. The synthetic mint makes only the existing two GET requests and fails before a funded swap.
+- Test-first red: [pure pending-record tests](crates/ecash-wallet/tests/pending_send.rs) failed because PendingSend did not yet exist. Green: all three pass after extraction. Assertions cover the complete serialized recovery contract and proof metadata/order, request presence/legacy omission, and preservation of supplied IDs, amounts, fees and timestamps at u64 boundaries. Boundary cases characterize construction only; native validation is not bypassed or changed.
+- Mutation check: temporarily producing Success instead of Pending makes the complete record fixture fail. Pending is restored before native integration and full verification.
+- Full verification: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 107 Rust tests, with zero failures, ignored or filtered tests and no compiler warnings. The strengthened native snapshot regression, G1/G2 diagnostics, G3 proof selection and G4 payload/result fixtures pass together.
+- Both 0.1.20 release checks pass, including history hygiene.
+- Changed Rust files and isolated native construction/test snippets pass rustfmt. Whitespace checks pass. Byte comparison confines native runtime changes to the pending-record constructor and its import; G4 encoding/result methods remain byte-identical. File fingerprints preserve all prior work outside the six G5 files.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) with the pending-record boundary and test coverage. Wallet formats, dependencies, release versions, public command signatures, frontend runtime/UI and Lightning/Spark behavior are unchanged. Frontend/browser/device checks were not repeated for this Rust-only extraction. Tests use synthetic unfunded credentials and temporary encrypted wallets; they do not establish funded mint interoperability or simulate a mint spend. No funded operation, actual provider execution, APK build, commit or push was performed. G6 has not started.
+
+
+### G6 — Move send orchestration into a wallet operation
+
+Implemented on 2026-11-23. [send.rs](crates/ecash-wallet/src/send.rs) now owns the complete existing eCash send workflow, accepting an exclusively borrowed WalletState, its existing path/passphrase and a named SendEcashRequest. It has no Tauri/AppState dependency. Validation, duplicate protection, both fee-cap checks, exact selection/spent-proof cleanup, swap preparation, durable pending intent, unknown-outcome diagnostics, token construction, success updates and save ordering are preserved. Storage and mint access remain concrete; this does not implement G9/G10.
+
+The legacy and structured native entry points keep their signatures and shared adapter. Authentication/loading and their distinct error codes remain native, and the same wallet guard stays alive across the awaited operation. The native adapter adds no early unlock, background work, retry or extra provider call. [payment_quote.rs](crates/ecash-wallet/src/payment_quote.rs) owns the unchanged quote implementation shared by review and execution. [send_error.rs](crates/ecash-wallet/src/send_error.rs) owns the exact former structured error definitions. Native modules re-export their former Rust paths and retain legacy message-only conversion. Both dependent extractions are necessary to remove the operation's native-layer dependencies without duplicating policy.
+
+Verification:
+
+- Test-first red: [standalone operation tests](crates/ecash-wallet/tests/send_operation.rs) failed before the wallet send/error modules existed. Baseline characterization then passed against the extracted operation while native sends still used their original workflow.
+- A synthetic exact-proof send saves a real temporary encrypted wallet without AppState and returns the existing V3-primary result/history identity. Duplicate requests retain their original receipt across all four statuses and mint differences, with no new save/state change. Fee fixtures verify initial quote rejection, rejection after a later fee increase and acceptance when the later total exactly equals the cap. The accepted case reaches durable Pending recovery, then fails during synthetic preparation before any swap POST. All fee-fixture requests are GETs.
+- The new [native concurrency regression](cashu-app/src-tauri/src/commands/send_tests.rs) gates a mint response, checks that the wallet mutex is held during the await, polls another send to prove it queues, releases the gate and checks queued progress/final lock release. Its initial assertion incorrectly expected immediate try_lock availability while a queued waiter had Tokio's FIFO reservation. The test now waits for that queued send with a bounded timeout before checking final availability; production locking is unchanged.
+- Mutation check: inverting the wallet duplicate-request predicate makes the duplicate regression fail. The original predicate is restored before native delegation. The existing fee-cap boundary unit test moves intact from the native module to the wallet module; all other pre-existing native test bodies/fixtures are preserved.
+- All 379 frontend/payment tests pass with zero failures or skipped tests. The native v2-error fixture, legacy errors, public response contract, G1/G2 recovery diagnostics and G3–G5 contracts pass in the delegated workflow.
+- Final verification: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 111 Rust tests, with zero failures, ignored or filtered tests and zero compiler warnings. After extraction, Transaction became test-only in the native module; its import was moved to the test module and the full suite rerun to verify a clean build.
+- Both 0.1.20 release checks pass, including history hygiene.
+- New Rust files and isolated native adapter/lock-test snippets pass rustfmt. Whitespace checks pass. Formatted-source comparisons prove the moved send and quote bodies preserve their original logic apart from module paths and borrowed path/passphrase arguments. Structured error definitions are byte-identical. Authentication/guard acquisition, native payment command bodies, legacy conversion, receive orchestration and existing native regressions remain unchanged apart from necessary imports and the intact test migration.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) and the [architecture map](CONTRIBUTING.md) with the new operation/quote/error locations. No dependencies, release versions, wallet formats, public IPC signatures or frontend runtime/UI changed. File fingerprints preserve prior Mobile Money, Lightning/Spark and G1–G5 implementation work. G6 remains uncommitted and unpushed. No funded operation, actual provider execution, APK/device build or browser/device check was performed. Synthetic GET-only preparation failures do not prove funded swap interoperability or process-crash recovery. G7 has not started.
+
+
+### G7 — Extract receive-input normalization and validation
+
+Implemented on 2026-11-23. [receive_input.rs](crates/ecash-wallet/src/receive_input.rs) owns three pure helpers with explicit decoded/prepared values. validate_receive_constraints preserves the original pre-wallet invoice completeness, byte limits and gross-amount/mint checks. decode_receive_token preserves the ordinary parse-error prefix and remains after authentication, Nostr-key update and raw receipt lookup. prepare_receive_input owns the original strict invoice keyset resolution, permissive prefix resolution, checked aggregate fees, positive-net guard and post-fee invoice validation after native mint metadata retrieval. No helper reads wallet/storage/clock state or makes a mint request.
+
+The existing decoder and invoice validators are reused unchanged. Raw token text remains caller-owned and is not rewritten for history or idempotency. Ordinary receives retain their previous first-match keyset resolution and missing-fee fallback; invoice receives retain unique sat-keyset resolution. Native locking, metadata-fetch behavior, receipt checks, pending claim creation, encrypted saves, swap/restore orchestration and G2 recovery diagnostics remain unchanged. This does not implement G8 or alter persisted-wallet normalization.
+
+Verification:
+
+- Original decoder characterization first passed against frozen token fixtures; the final [fixture set](crates/ecash-wallet/tests/fixtures/receive_inputs.json) contains 26 synthetic valid/malformed V3/V4 inputs. Coverage includes URI wrappers/whitespace, padded/standard/URL-safe base64, normalized mint paths, witnesses, lowercase signature aliases, legacy/v2 keyset IDs, missing fields, unsupported units, amount overflow, invalid encodings and zero-value cases.
+- Three new [native characterization tests](cashu-app/src-tauri/src/commands/send_tests.rs) passed against the original workflow before extraction. They prove constraint/size/invoice-parse error precedence over locked wallet access, ordinary auth/parse precedence, the existing Nostr-key update before ordinary parse failure, and successful raw receipt return before ordinary decoding. All prior native test bodies and fixtures remain byte-identical.
+- Test-first red: the new helper tests failed before the receive_input module existed. Green: all 11 [pure/fixture tests](crates/ecash-wallet/tests/receive_input.rs) pass. They cover all constraint-presence combinations, UTF-8 byte boundaries, ordinary-size compatibility, raw versus contextual parse errors, credential/order preservation, first-match versus strict unique-sat resolution, aggregate rounding, checked sum/rounding overflow, no-net-value rejection and post-fee invoice coverage.
+- Mutation check: changing the fee guard to allow fee == token amount makes the zero-net regression fail. The original guard is restored before native integration.
+- All 379 frontend/payment tests pass with zero failures or skipped tests.
+- Full verification: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 125 Rust tests, with zero failures, ignored or filtered tests and zero compiler warnings. The new native ordering cases, G2 receive recovery diagnostics and all G1–G6 send contracts pass with the helpers integrated.
+- Both 0.1.20 release checks pass, including history hygiene.
+- New Rust files and isolated native integration/test snippets pass rustfmt; whitespace checks pass. Formatted-source comparisons prove the extracted constraint, normalization and fee bodies retain their original logic and error text after module/borrow/error adaptations. The native diff is confined to those staged integrations and imports; all existing auth, Nostr, receipt, claim, recovery, persistence and send code is unchanged.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) and the [architecture map](CONTRIBUTING.md) with the helper locations and ordering policy. The codec, invoice validators, wallet formats, dependencies, versions, public IPC signatures, frontend runtime/UI and prior Lightning/Spark/Mobile Money work are unchanged. Fixtures use synthetic unfunded credentials and do not establish cryptographic validity or funded mint interoperability. No actual provider execution, funded claim/swap, APK build, browser/device check, commit or push was performed. G8 has not started.
+
+
+### G8 — Move receive orchestration into a wallet operation
+
+Implemented on 2026-11-23. [receive.rs](crates/ecash-wallet/src/receive.rs) now owns the complete existing eCash receive workflow, accepting an exclusively borrowed WalletState, its existing encrypted wallet path/passphrase and a named ReceiveEcashRequest (or pre-validated ValidatedReceiveRequest). It has no Tauri/AppState dependency. Staged invoice constraint validation, Nostr-key updates, raw-token receipt lookup and invoice-idempotency checks, decoding, strict-invoice versus permissive-ordinary mint metadata fetches, keyset/fee preparation, deferred-claim reuse, durable pending claim saves, swap execution, scoped spent-token restore for ordinary receives, G2 recovery-save diagnostics and final success persistence keep their existing order and exact error strings. Storage and mint access remain concrete; storage injection and implicit persistence normalization remain deferred to G9–G14. The three existing spent-token restore branches retain their `.ok()` save calls as a preserved limitation rather than expanding G8 into a recovery-policy rewrite.
+
+The public native `receive_ecash` command keeps its signature and thin adapter. `receive_ecash_operation` validates pre-wallet invoice constraints via `ReceiveEcashRequest::validate()` before acquiring the authenticated wallet guard, then holds that guard across the awaited `receive_ecash_validated` call. No early unlock, wallet clone, new retry or extra provider call is introduced. `save_ecash_for_later` remains unchanged in the native module.
+
+Verification:
+
+- Test-first red: [standalone receive operation tests](crates/ecash-wallet/tests/receive_operation.rs) failed to compile before `ecash_wallet::receive` existed.
+- Green: all 6 standalone wallet receive tests pass without Tauri/AppState, covering raw receipt return before decoding, invoice-identity enforcement, Nostr-key update ordering before ordinary parse failure, pre-wallet invoice constraint checks and strict metadata fetches, deferred `save_for_later` card reuse with durable pending intent, G2 recovery-save failure diagnostics, legacy error text on successful recovery save, and scoped restore on already-spent ordinary receives versus pending preservation on invoice receives.
+- New [native receive concurrency regression](cashu-app/src-tauri/src/commands/send_tests.rs) gates `/v1/keysets`, proves the wallet mutex guard stays held across mint awaits while a second receive queues, releases the gate and verifies queued resumption and final lock release. All existing native receive-ordering, G2 recovery and G1–G6 send regressions remain intact and pass.
+- All 379 frontend/payment tests pass with zero failures or skipped tests.
+- Full verification: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 132 Rust tests, with zero failures, ignored or filtered tests and zero compiler warnings.
+- `rustfmt --edition 2021 --check` passes on `crates/ecash-wallet/src/receive.rs` and `crates/ecash-wallet/tests/receive_operation.rs`. `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) and the [architecture map](CONTRIBUTING.md) with the receive operation boundary and preserved limitations. No dependencies, release versions, wallet formats, public IPC signatures or frontend runtime/UI changed. Synthetic localhost fixtures fail during GET-only preparation before any funded swap or restore and do not prove funded mint interoperability or real process-crash recovery. G8 remains uncommitted and unpushed. G9 has not started.
+
+
+### G9 — Delegate file read/write through a storage module
+
+Implemented on 2026-11-24. [storage.rs](crates/ecash-wallet/src/storage.rs) now owns encrypted wallet file persistence, atomic replacement, encryption helpers and default/temp path helpers (`EncryptedWallet`, `encrypt_wallet`, `decrypt_wallet`, `default_wallet_path`, `temp_wallet_path`, `save_encrypted_wallet`, `load_encrypted_wallet`, `load_plaintext_wallet`). [state.rs](crates/ecash-wallet/src/state.rs) delegates `WalletState::default_path`, `save_encrypted`, `load_encrypted` and `load_plaintext` to `ecash_wallet::storage` and re-exports `EncryptedWallet`, `encrypt_wallet` and `decrypt_wallet` at their existing paths so no caller imports break.
+
+The v1 AES-256-GCM + Argon2id (`65536` KiB, 3 iterations, 4 lanes, 32-byte key, 32-byte salt, 12-byte nonce) pretty-printed JSON format, plaintext zeroization, parent-directory creation, `.json.tmp` atomic write-and-rename replacement, default `~/.ecash/wallet.json` path, legacy plaintext migration reads and exact error messages remain unchanged. Existing `WalletState` pre-save `dedup_proofs()` and post-load `heal_corrupt_proofs()`/`normalize_mints()` remain in `state.rs` (storage injection is deferred to G10; proof-normalization characterization and removal belong to G11–G14).
+
+Verification:
+
+- Test-first red: [wallet storage tests](crates/ecash-wallet/tests/wallet_storage.rs) failed to compile before `ecash_wallet::storage` existed.
+- Green: all 4 standalone storage tests pass, covering v1 encrypted JSON format and secret non-leakage on disk, direct `encrypt_wallet`/`decrypt_wallet` compatibility, missing/wrong-passphrase/unsupported-version/plaintext error messages, `.json.tmp` temp path preservation, protection of an existing wallet file when temp-file creation fails, atomic overwrite, failed final rename behavior and `default_wallet_path` parity.
+- All 379 frontend/payment tests pass with zero failures or skipped tests.
+- Full verification: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 136 Rust tests, with zero failures, ignored or filtered tests and zero compiler warnings.
+- `rustfmt --edition 2021 --check` passes on `crates/ecash-wallet/src/storage.rs` and `crates/ecash-wallet/tests/wallet_storage.rs`. `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) and the [architecture map](CONTRIBUTING.md) with the storage module location and preserved normalization boundary. No dependencies, release versions, wallet formats, public IPC signatures or frontend runtime/UI changed. G9 remains uncommitted and unpushed. G10 has not started.
+
+
+### G10 — Inject storage into one operation for failure testing
+
+Implemented on 2026-11-24. [storage.rs](crates/ecash-wallet/src/storage.rs) now defines `WalletStorage` (`fn save(&mut self, state: &mut WalletState) -> Result<()>`) and `EncryptedFileStorage<'a>`, which delegates to `WalletState::save_encrypted` to preserve existing encryption, atomic replacement and pre-save proof deduplication (G11–G14 remain separate). [send.rs](crates/ecash-wallet/src/send.rs) now exposes `send_ecash_with_storage<S: WalletStorage>`, routing all four send-level persistence calls through the injected `WalletStorage`. `send_ecash` constructs `EncryptedFileStorage::new(path, passphrase)` and delegates directly to `send_ecash_with_storage`, keeping the existing signature and production behavior unchanged. Internal swap persistence inside `swap_proofs` still uses the concrete path/passphrase.
+
+Verification:
+
+- Test-first red: [send operation tests](crates/ecash-wallet/tests/send_operation.rs) failed to compile before `WalletStorage` and `send_ecash_with_storage` existed.
+- Green: all 3 new injected-storage failure tests in [send_operation.rs](crates/ecash-wallet/tests/send_operation.rs) pass using a scripted in-memory `WalletStorage` without filesystem rename hacks:
+  - Pre-swap pending-intent save failure aborts with `InternalError` (`tx_id: None`) after `/v1/keysets` and before `/v1/keys` (swap preparation) is requested.
+  - Post-swap recovery save failure (save #1 succeeds and captures the `Pending` snapshot; mint swap preparation fails; save #2 fails) returns `OutcomeUnknown` with the original `tx_id`, both diagnostics and the exact `Recovery state could not be saved: ... Outcome remains unknown; do not resend.` suffix.
+  - Exact-send final save failure returns `OutcomeUnknown` (`tx_id: None`) after in-memory proof removal.
+- All 379 frontend/payment tests pass with zero failures or skipped tests.
+- Full verification: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 139 Rust tests, with zero failures, ignored or filtered tests and zero compiler warnings.
+- `rustfmt --edition 2021 --check` passes on `crates/ecash-wallet/src/storage.rs`, `crates/ecash-wallet/src/send.rs` and `crates/ecash-wallet/tests/send_operation.rs`. `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) and the [architecture map](CONTRIBUTING.md) with the `WalletStorage` trait and `send_ecash_with_storage` boundary. No dependencies, release versions, wallet formats, public IPC signatures or frontend runtime/UI changed. Synthetic localhost fixtures fail during GET-only preparation before any funded swap submission and do not prove funded mint interoperability or real process-crash recovery. G10 remains uncommitted and unpushed. G11 has not started.
+
+
+### G11 — Characterize current proof normalization before persistence
+
+Implemented on 2026-11-24. Added [proof_normalization.rs](crates/ecash-wallet/tests/proof_normalization.rs) with 5 synthetic characterization tests documenting the exact current pre-persistence behavior of `WalletState::save_encrypted` without changing production code:
+
+- Per-mint deduplication keys on `proof.secret`, retaining the first occurrence (including its amount, keyset ID and derivation index) and preserving relative order of distinct proofs.
+- Deduplication is scoped per mint entry rather than globally across mints, so identical secrets under distinct mint URLs are both kept.
+- Already-normalized wallets (including witnesses, DLEQ metadata and empty mint proof vectors) are unchanged in memory and round-trip identically.
+- `WalletState::save_encrypted` mutates `self.proofs` in memory before disk replacement, even when the underlying write/rename fails.
+- Raw `storage::save_encrypted_wallet` does not deduplicate proofs, confirming that implicit normalization currently lives strictly in `WalletState::save_encrypted` ahead of G12–G14.
+
+Verification:
+
+- Focused characterization suite: `CARGO_INCREMENTAL=0 cargo test --workspace --test proof_normalization --locked --offline` passes all 5 tests with zero compiler warnings.
+- Full Rust workspace: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 144 Rust tests, with zero failures, ignored or filtered tests and zero compiler warnings.
+- All 379 frontend/payment tests pass with zero failures or skipped tests.
+- `rustfmt --edition 2021 --check crates/ecash-wallet/tests/proof_normalization.rs`, `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) with the characterized proof-normalization contract. No production code, dependencies, release versions, wallet formats, public IPC signatures or frontend runtime/UI changed. G11 remains uncommitted and unpushed. G12 has not started.
+
+
+### G12 — Add an explicit normalization/preparation call and migrate one save caller
+
+Implemented on 2026-11-24. Exposed `WalletState::normalize_proofs_for_persistence(&mut self)` in [state.rs](crates/ecash-wallet/src/state.rs) with the exact characterized per-mint secret deduplication logic (preserving first occurrence and relative order). `WalletState::save_encrypted` still delegates to `self.normalize_proofs_for_persistence()` until remaining save callers are migrated in G13 and raw persistence drops implicit mutation in G14.
+
+Migrated the first save caller, [send.rs](crates/ecash-wallet/src/send.rs) (`send_ecash_with_storage`), so all four send-level saves call `persist_send_state` (`w_state.normalize_proofs_for_persistence()` followed by `storage.save(w_state)`). Remaining callers (`receive.rs`, `swap.rs`, `melt.rs`, `restore.rs`, `history.rs`, CLI and native commands) are left for G13.
+
+Verification:
+
+- Test-first red: `proof_normalization` failed to compile before `WalletState::normalize_proofs_for_persistence` existed.
+- Green: `explicit_normalize_proofs_for_persistence_matches_characterized_behavior` in [proof_normalization.rs](crates/ecash-wallet/tests/proof_normalization.rs) verifies per-mint deduplication, cross-mint preservation and idempotence.
+- Caller proof: `send_normalizes_proofs_explicitly_before_calling_injected_storage` in [send_operation.rs](crates/ecash-wallet/tests/send_operation.rs) runs `send_ecash_with_storage` with `ScriptedStorage` (which never calls `WalletState::save_encrypted`) on a wallet with duplicate proofs and proves the saved snapshot is already normalized before `storage.save`.
+- Full Rust workspace: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 146 Rust tests, with zero failures, ignored or filtered tests and zero compiler warnings.
+- All 379 frontend/payment tests pass with zero failures or skipped tests.
+- `rustfmt --edition 2021 --check` passes on `crates/ecash-wallet/src/send.rs`, `crates/ecash-wallet/tests/proof_normalization.rs` and `crates/ecash-wallet/tests/send_operation.rs`. `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) with the explicit normalization helper and migrated `send.rs` boundary. No dependencies, release versions, wallet formats, public IPC signatures or frontend runtime/UI changed. G12 remains uncommitted and unpushed. G13 has not started.
+
+
+### G13 — Migrate remaining save callers
+
+Implemented on 2026-11-24. Audited and migrated all 83 remaining production `save_encrypted` call sites across 17 files so every production save caller explicitly invokes `normalize_proofs_for_persistence()` before saving:
+
+- `crates/ecash-wallet/src/`: `receive.rs` (6), `swap.rs` (5), `restore.rs` (3), `history.rs` (3), `direct.rs` (7), `mint.rs` (5), `melt.rs` (20) — 49 sites (plus `send.rs` already migrated in G12).
+- `crates/ecash-cli/src/`: `main.rs` (3 sites).
+- `cashu-app/src-tauri/src/commands/`: `send.rs` (`save_ecash_for_later`, 1), `receive.rs` (2), `auth.rs` (2), `history.rs` (1), `wallet.rs` (4), `verify.rs` (1), `ecash_invoice.rs` (3), `spark.rs` (8), `stable.rs` (9) — 31 sites.
+
+`WalletState::save_encrypted` itself is unchanged in G13; removing implicit normalization from raw persistence is left strictly for G14.
+
+Verification:
+
+- Automated workspace inventory check confirms **0 unmigrated production `save_encrypted` callers** remain anywhere in `crates/` or `cashu-app/src-tauri/src/` (outside `state.rs`/`storage.rs` and tests).
+- Full Rust workspace: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 146 Rust tests, with zero failures, ignored or filtered tests and zero compiler warnings.
+- All 379 frontend/payment tests pass with zero failures or skipped tests.
+- `rustfmt --edition 2021 --check crates/ecash-wallet/src/receive.rs`, `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) with the completed caller-migration inventory. No dependencies, release versions, wallet formats, public IPC signatures or frontend runtime/UI changed. G13 remains uncommitted and unpushed. G14 has not started.
+
+
+### G14 — Remove normalization from raw persistence
+
+Implemented on 2026-11-24. Removed the implicit `normalize_proofs_for_persistence()` call from `WalletState::save_encrypted` in [state.rs](crates/ecash-wallet/src/state.rs) and tightened both `WalletState::save_encrypted(&self, ...)` and `WalletStorage::save(&mut self, state: &WalletState)` (plus `EncryptedFileStorage`) in [storage.rs](crates/ecash-wallet/src/storage.rs) to accept an immutable `&WalletState`. Raw persistence can no longer mutate domain state at compile time; all production callers normalize explicitly beforehand (migrated in G12–G13).
+
+Updated [proof_normalization.rs](crates/ecash-wallet/tests/proof_normalization.rs), [send_operation.rs](crates/ecash-wallet/tests/send_operation.rs) and [wallet_storage.rs](crates/ecash-wallet/tests/wallet_storage.rs) to match the immutable `&WalletState` persistence signature and added `save_encrypted_does_not_mutate_domain_state_on_success_or_failure`, proving an immutable `&WalletState` saves without altering duplicate proofs on either success or write failure while explicit normalization + save round-trips preserve the characterized deduplication contract.
+
+Verification:
+
+- Full Rust workspace: `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` passes all 146 Rust tests (including all 6 `proof_normalization`, 4 `wallet_storage`, 7 `send_operation`, 6 `receive_operation` and 22 native tests), with zero failures, ignored or filtered tests and zero compiler warnings.
+- All 379 frontend/payment tests pass with zero failures or skipped tests.
+- `rustfmt --edition 2021 --check` passes on `crates/ecash-wallet/src/storage.rs`, `crates/ecash-wallet/tests/proof_normalization.rs`, `crates/ecash-wallet/tests/send_operation.rs` and `crates/ecash-wallet/tests/wallet_storage.rs`. `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+Updated [DESIGN.md](cashu-app/DESIGN.md) to reflect immutable raw persistence. Section G (G1–G14) is complete. No dependencies, release versions, wallet formats, public IPC signatures or frontend runtime/UI changed. G14 remains uncommitted and unpushed. H1 has not started.

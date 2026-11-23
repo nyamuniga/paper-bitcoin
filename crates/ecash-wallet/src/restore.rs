@@ -262,6 +262,7 @@ pub async fn restore_from_mints_range(
 
     if max_used_index >= 0 {
         state.derivation_index = std::cmp::max(state.derivation_index, (max_used_index as u64) + 1);
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase)?;
     }
 
@@ -547,6 +548,7 @@ pub async fn restore_from_mints_adaptive(
 
     if max_used_index >= 0 {
         state.derivation_index = std::cmp::max(state.derivation_index, (max_used_index as u64) + 1);
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase)?;
     }
 
@@ -816,6 +818,7 @@ pub async fn clean_wallet_proofs(
     }
 
     // 9. Save encrypted wallet to disk
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     if let Some(tx) = &progress_tx {

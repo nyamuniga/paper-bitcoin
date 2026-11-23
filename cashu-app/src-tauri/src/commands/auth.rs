@@ -273,6 +273,7 @@ pub async fn create_wallet(
         );
     }
     
+    w_state.normalize_proofs_for_persistence();
     w_state.save_encrypted(&path, &passphrase)?;
 
     if remember_me {
@@ -330,6 +331,7 @@ pub async fn restore_wallet(
         }
     }
 
+    w_state.normalize_proofs_for_persistence();
     w_state.save_encrypted(&path, &passphrase)?;
 
     if remember_me {

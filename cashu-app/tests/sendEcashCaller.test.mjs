@@ -183,3 +183,19 @@ test('a send recovery-save failure remains unresolved and cannot automatically r
   assert.equal(f.calls.length,1);assert.equal(f.calls[0][0],'send_ecash_v2');
   assert.ok(messages.every(message=>message.includes('History')));assert.deepEqual(f.toasts,[]);
 });
+
+test('a receive recovery-save error reports failure without success or an automatic retry',async()=>{
+  for(const silent of [false,true]){
+    const f=fixture();const messages=[];
+    const diagnostic='Failed to receive ecash: synthetic receive failure. Recovery state could not be saved: synthetic write failure. Outcome remains unknown; check History before claiming again.';
+    f.invoke=async command=>{
+      if(command==='get_custom_nostr_key')return null;
+      if(command==='receive_ecash')throw diagnostic;
+      throw new Error('Unexpected receive command');
+    };
+    assert.equal(await f.hook.receiveEcash('cashuAsynthetic',{silent,onError:message=>messages.push(message)}),null);
+    assert.equal(f.calls.filter(([command])=>command==='receive_ecash').length,1);
+    assert.equal(f.refreshes,0);assert.deepEqual(messages,[diagnostic]);
+    assert.deepEqual(f.toasts,silent?[]:[`Receive failed: ${diagnostic}`]);
+  }
+});

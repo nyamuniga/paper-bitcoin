@@ -78,6 +78,7 @@ pub async fn retry_mint(state: &mut WalletState, wallet_path: &PathBuf, passphra
         t.status = TransactionStatus::Success;
     }
     
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
     
     Ok(())
@@ -644,6 +645,7 @@ pub async fn apply_transaction_diff(
         }
     };
 
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
     Ok(new_status)
 }
@@ -711,6 +713,7 @@ pub async fn check_transaction_status_legacy(state: &mut WalletState, wallet_pat
         if let Some(t) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
             t.status = new_status.clone();
         }
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase)?;
         return Ok(new_status);
     }

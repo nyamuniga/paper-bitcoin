@@ -307,6 +307,7 @@ pub async fn swap_proofs(
 
         // Save index before network call
         state.derivation_index = deriv.index;
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase)?;
 
         // Call the mint
@@ -330,6 +331,7 @@ pub async fn swap_proofs(
                         attempts
                     );
                     state.derivation_index += 25;
+                    state.normalize_proofs_for_persistence();
                     state.save_encrypted(wallet_path, passphrase)?;
                     continue;
                 }
@@ -371,6 +373,7 @@ pub async fn swap_proofs(
                             if let Some(mint_proofs) = state.proofs.get_mut(mint_url) {
                                 mint_proofs.retain(|p| !spent_secrets.contains(&p.secret));
                             }
+                            state.normalize_proofs_for_persistence();
                             state.save_encrypted(wallet_path, passphrase).ok();
                             eprintln!("[swap_tokens] Automatically purged {} dead/spent proof(s) from wallet.", spent_secrets.len());
                         }
@@ -426,6 +429,7 @@ pub async fn swap_proofs(
         state.proofs.insert(mint_url.to_string(), change_proofs);
     }
 
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     Ok(desired_proofs)
@@ -522,6 +526,7 @@ async fn isolate_and_purge_unverified_inputs(
         if let Some(mint_proofs) = state.proofs.get_mut(mint_url) {
             mint_proofs.retain(|p| !bad_secrets.contains(&p.secret));
         }
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase).ok();
         eprintln!("[isolate_unverified] Successfully purged {} bad proof(s) from wallet on {}.", count, mint_url);
         count

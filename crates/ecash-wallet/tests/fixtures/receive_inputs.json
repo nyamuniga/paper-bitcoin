@@ -1,0 +1,273 @@
+[
+  {
+    "name": "v3",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50Ijo4LCJpZCI6IjAwMDAwMDAwMDAwMDAwMDAiLCJzZWNyZXQiOiJzeW50aGV0aWMtdW5mdW5kZWQtcmVjZWl2ZSIsIkMiOiIwMjExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEiLCJ3aXRuZXNzIjp7InNpZ25hdHVyZXMiOlsic3ludGhldGljLXdpdG5lc3MiXX0sImRsZXEiOnsiZSI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIiLCJzIjoiMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMyJ9LCJDXyI6IjAyNDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NCIsImRlcml2YXRpb25faW5kZXgiOjEyM31dfV0sInVuaXQiOiJzYXQifQ",
+    "expected": {
+      "mint_url": "https://synthetic-mint.invalid/Bitcoin",
+      "input_proofs": [
+        {
+          "amount": 8,
+          "id": "0000000000000000",
+          "secret": "synthetic-unfunded-receive",
+          "C": "021111111111111111111111111111111111111111111111111111111111111111",
+          "derivation_index": 0,
+          "witness": {
+            "signatures": [
+              "synthetic-witness"
+            ]
+          }
+        }
+      ],
+      "total_amount": 8
+    }
+  },
+  {
+    "name": "v3_uri_and_whitespace",
+    "token": " \nCaShU://  cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50Ijo4LCJpZCI6IjAwMDAwMDAwMDAwMDAwMDAiLCJzZWNyZXQiOiJzeW50aGV0aWMtdW5mdW5kZWQtcmVjZWl2ZSIsIkMiOiIwMjExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEiLCJ3aXRuZXNzIjp7InNpZ25hdHVyZXMiOlsic3ludGhldGljLXdpdG5lc3MiXX0sImRsZXEiOnsiZSI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIiLCJzIjoiMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMyJ9LCJDXyI6IjAyNDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NCIsImRlcml2YXRpb25faW5kZXgiOjEyM31dfV0sInVuaXQiOiJzYXQifQ \t",
+    "expected": {
+      "mint_url": "https://synthetic-mint.invalid/Bitcoin",
+      "input_proofs": [
+        {
+          "amount": 8,
+          "id": "0000000000000000",
+          "secret": "synthetic-unfunded-receive",
+          "C": "021111111111111111111111111111111111111111111111111111111111111111",
+          "derivation_index": 0,
+          "witness": {
+            "signatures": [
+              "synthetic-witness"
+            ]
+          }
+        }
+      ],
+      "total_amount": 8
+    }
+  },
+  {
+    "name": "v3_padded",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50Ijo4LCJpZCI6IjAwMDAwMDAwMDAwMDAwMDAiLCJzZWNyZXQiOiJzeW50aGV0aWMtdW5mdW5kZWQtcmVjZWl2ZSIsIkMiOiIwMjExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEiLCJ3aXRuZXNzIjp7InNpZ25hdHVyZXMiOlsic3ludGhldGljLXdpdG5lc3MiXX0sImRsZXEiOnsiZSI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIiLCJzIjoiMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMyJ9LCJDXyI6IjAyNDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NCIsImRlcml2YXRpb25faW5kZXgiOjEyM31dfV0sInVuaXQiOiJzYXQifQ==",
+    "expected": {
+      "mint_url": "https://synthetic-mint.invalid/Bitcoin",
+      "input_proofs": [
+        {
+          "amount": 8,
+          "id": "0000000000000000",
+          "secret": "synthetic-unfunded-receive",
+          "C": "021111111111111111111111111111111111111111111111111111111111111111",
+          "derivation_index": 0,
+          "witness": {
+            "signatures": [
+              "synthetic-witness"
+            ]
+          }
+        }
+      ],
+      "total_amount": 8
+    }
+  },
+  {
+    "name": "v3_standard_base64",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50Ijo4LCJpZCI6IjAwMDAwMDAwMDAwMDAwMDAiLCJzZWNyZXQiOiJzeW50aGV0aWMt77+/77+/77+/IiwiQyI6IjAyMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMSIsIndpdG5lc3MiOnsic2lnbmF0dXJlcyI6WyJzeW50aGV0aWMtd2l0bmVzcyJdfSwiZGxlcSI6eyJlIjoiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiIsInMiOiIzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIn0sIkNfIjoiMDI0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0IiwiZGVyaXZhdGlvbl9pbmRleCI6MTIzfV19XSwidW5pdCI6InNhdCJ9",
+    "expected": {
+      "mint_url": "https://synthetic-mint.invalid/Bitcoin",
+      "input_proofs": [
+        {
+          "amount": 8,
+          "id": "0000000000000000",
+          "secret": "synthetic-￿￿￿",
+          "C": "021111111111111111111111111111111111111111111111111111111111111111",
+          "derivation_index": 0,
+          "witness": {
+            "signatures": [
+              "synthetic-witness"
+            ]
+          }
+        }
+      ],
+      "total_amount": 8
+    }
+  },
+  {
+    "name": "v3_lowercase_c",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50Ijo4LCJpZCI6IjAwMDAwMDAwMDAwMDAwMDAiLCJzZWNyZXQiOiJzeW50aGV0aWMtdW5mdW5kZWQtcmVjZWl2ZSIsIndpdG5lc3MiOnsic2lnbmF0dXJlcyI6WyJzeW50aGV0aWMtd2l0bmVzcyJdfSwiZGxlcSI6eyJlIjoiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiIsInMiOiIzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIn0sIkNfIjoiMDI0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0IiwiZGVyaXZhdGlvbl9pbmRleCI6MTIzLCJjIjoiMDIxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExIn1dfV0sInVuaXQiOiJzYXQifQ",
+    "expected": {
+      "mint_url": "https://synthetic-mint.invalid/Bitcoin",
+      "input_proofs": [
+        {
+          "amount": 8,
+          "id": "0000000000000000",
+          "secret": "synthetic-unfunded-receive",
+          "C": "021111111111111111111111111111111111111111111111111111111111111111",
+          "derivation_index": 0,
+          "witness": {
+            "signatures": [
+              "synthetic-witness"
+            ]
+          }
+        }
+      ],
+      "total_amount": 8
+    }
+  },
+  {
+    "name": "v4",
+    "token": "cashuBo2FteCdodHRwczovL1NZTlRIRVRJQy1NSU5ULmludmFsaWQvQml0Y29pbi9hdWNzYXRhdIGiYWlIAAAAAAAAAABhcIGkYWEIYXN4GnN5bnRoZXRpYy11bmZ1bmRlZC1yZWNlaXZlYWNYIQIREREREREREREREREREREREREREREREREREREREREREWF3eCR7InNpZ25hdHVyZXMiOlsic3ludGhldGljLXdpdG5lc3MiXX0",
+    "expected": {
+      "mint_url": "https://synthetic-mint.invalid/Bitcoin",
+      "input_proofs": [
+        {
+          "amount": 8,
+          "id": "0000000000000000",
+          "secret": "synthetic-unfunded-receive",
+          "C": "021111111111111111111111111111111111111111111111111111111111111111",
+          "derivation_index": 0,
+          "witness": "{\"signatures\":[\"synthetic-witness\"]}"
+        }
+      ],
+      "total_amount": 8
+    }
+  },
+  {
+    "name": "v4_uri",
+    "token": " cashu: cashuBo2FteCdodHRwczovL1NZTlRIRVRJQy1NSU5ULmludmFsaWQvQml0Y29pbi9hdWNzYXRhdIGiYWlIAAAAAAAAAABhcIGkYWEIYXN4GnN5bnRoZXRpYy11bmZ1bmRlZC1yZWNlaXZlYWNYIQIREREREREREREREREREREREREREREREREREREREREREWF3eCR7InNpZ25hdHVyZXMiOlsic3ludGhldGljLXdpdG5lc3MiXX0\n",
+    "expected": {
+      "mint_url": "https://synthetic-mint.invalid/Bitcoin",
+      "input_proofs": [
+        {
+          "amount": 8,
+          "id": "0000000000000000",
+          "secret": "synthetic-unfunded-receive",
+          "C": "021111111111111111111111111111111111111111111111111111111111111111",
+          "derivation_index": 0,
+          "witness": "{\"signatures\":[\"synthetic-witness\"]}"
+        }
+      ],
+      "total_amount": 8
+    }
+  },
+  {
+    "name": "unknown_prefix",
+    "token": "not-a-token",
+    "error": "Invalid token: must start with cashuA or cashuB"
+  },
+  {
+    "name": "bad_base64",
+    "token": "cashuA*",
+    "error_prefix": "Base64 decode error: "
+  },
+  {
+    "name": "bad_json",
+    "token": "cashuAew",
+    "error_prefix": "JSON parse error: "
+  },
+  {
+    "name": "missing_token_array",
+    "token": "cashuAeyJ1bml0Ijoic2F0In0",
+    "error": "Invalid token format: missing 'token' array"
+  },
+  {
+    "name": "multiple_mints",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHBzOi8vc3ludGhldGljLW1pbnQuaW52YWxpZC9CaXRjb2luIiwicHJvb2ZzIjpbeyJhbW91bnQiOjgsImlkIjoiMDAwMDAwMDAwMDAwMDAwMCIsInNlY3JldCI6InN5bnRoZXRpYy11bmZ1bmRlZC1yZWNlaXZlIiwiQyI6IjAyMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMSIsIndpdG5lc3MiOnsic2lnbmF0dXJlcyI6WyJzeW50aGV0aWMtd2l0bmVzcyJdfSwiZGxlcSI6eyJlIjoiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiIsInMiOiIzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIn0sIkNfIjoiMDI0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0IiwiZGVyaXZhdGlvbl9pbmRleCI6MTIzfV19LHsibWludCI6Imh0dHBzOi8vc3ludGhldGljLW1pbnQuaW52YWxpZC9CaXRjb2luIiwicHJvb2ZzIjpbeyJhbW91bnQiOjgsImlkIjoiMDAwMDAwMDAwMDAwMDAwMCIsInNlY3JldCI6InN5bnRoZXRpYy11bmZ1bmRlZC1yZWNlaXZlIiwiQyI6IjAyMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMSIsIndpdG5lc3MiOnsic2lnbmF0dXJlcyI6WyJzeW50aGV0aWMtd2l0bmVzcyJdfSwiZGxlcSI6eyJlIjoiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiIsInMiOiIzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIn0sIkNfIjoiMDI0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0IiwiZGVyaXZhdGlvbl9pbmRleCI6MTIzfV19XX0",
+    "error": "Token must contain exactly one mint entry"
+  },
+  {
+    "name": "unsupported_unit",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50Ijo4LCJpZCI6IjAwMDAwMDAwMDAwMDAwMDAiLCJzZWNyZXQiOiJzeW50aGV0aWMtdW5mdW5kZWQtcmVjZWl2ZSIsIkMiOiIwMjExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEiLCJ3aXRuZXNzIjp7InNpZ25hdHVyZXMiOlsic3ludGhldGljLXdpdG5lc3MiXX0sImRsZXEiOnsiZSI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIiLCJzIjoiMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMyJ9LCJDXyI6IjAyNDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NCIsImRlcml2YXRpb25faW5kZXgiOjEyM31dfV0sInVuaXQiOiJ1c2QifQ",
+    "error": "Only sat tokens are supported"
+  },
+  {
+    "name": "missing_mint",
+    "token": "cashuAeyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJhbW91bnQiOjgsImlkIjoiMDAwMDAwMDAwMDAwMDAwMCIsInNlY3JldCI6InN5bnRoZXRpYy11bmZ1bmRlZC1yZWNlaXZlIiwiQyI6IjAyMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMSIsIndpdG5lc3MiOnsic2lnbmF0dXJlcyI6WyJzeW50aGV0aWMtd2l0bmVzcyJdfSwiZGxlcSI6eyJlIjoiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiIsInMiOiIzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIn0sIkNfIjoiMDI0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0IiwiZGVyaXZhdGlvbl9pbmRleCI6MTIzfV19XSwidW5pdCI6InNhdCJ9",
+    "error": "Token missing mint URL"
+  },
+  {
+    "name": "missing_amount",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siaWQiOiIwMDAwMDAwMDAwMDAwMDAwIiwic2VjcmV0Ijoic3ludGhldGljLXVuZnVuZGVkLXJlY2VpdmUiLCJDIjoiMDIxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExIiwid2l0bmVzcyI6eyJzaWduYXR1cmVzIjpbInN5bnRoZXRpYy13aXRuZXNzIl19LCJkbGVxIjp7ImUiOiIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyIiwicyI6IjMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMifSwiQ18iOiIwMjQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQiLCJkZXJpdmF0aW9uX2luZGV4IjoxMjN9XX1dLCJ1bml0Ijoic2F0In0",
+    "error": "Proof missing amount"
+  },
+  {
+    "name": "missing_id",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50Ijo4LCJzZWNyZXQiOiJzeW50aGV0aWMtdW5mdW5kZWQtcmVjZWl2ZSIsIkMiOiIwMjExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEiLCJ3aXRuZXNzIjp7InNpZ25hdHVyZXMiOlsic3ludGhldGljLXdpdG5lc3MiXX0sImRsZXEiOnsiZSI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIiLCJzIjoiMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMyJ9LCJDXyI6IjAyNDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NCIsImRlcml2YXRpb25faW5kZXgiOjEyM31dfV0sInVuaXQiOiJzYXQifQ",
+    "error": "Proof missing id"
+  },
+  {
+    "name": "missing_secret",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50Ijo4LCJpZCI6IjAwMDAwMDAwMDAwMDAwMDAiLCJDIjoiMDIxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExIiwid2l0bmVzcyI6eyJzaWduYXR1cmVzIjpbInN5bnRoZXRpYy13aXRuZXNzIl19LCJkbGVxIjp7ImUiOiIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyIiwicyI6IjMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMifSwiQ18iOiIwMjQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQiLCJkZXJpdmF0aW9uX2luZGV4IjoxMjN9XX1dLCJ1bml0Ijoic2F0In0",
+    "error": "Proof missing secret"
+  },
+  {
+    "name": "missing_C",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50Ijo4LCJpZCI6IjAwMDAwMDAwMDAwMDAwMDAiLCJzZWNyZXQiOiJzeW50aGV0aWMtdW5mdW5kZWQtcmVjZWl2ZSIsIndpdG5lc3MiOnsic2lnbmF0dXJlcyI6WyJzeW50aGV0aWMtd2l0bmVzcyJdfSwiZGxlcSI6eyJlIjoiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiIsInMiOiIzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIn0sIkNfIjoiMDI0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0IiwiZGVyaXZhdGlvbl9pbmRleCI6MTIzfV19XSwidW5pdCI6InNhdCJ9",
+    "error": "Proof missing C"
+  },
+  {
+    "name": "negative_v3_amount",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50IjotMSwiaWQiOiIwMDAwMDAwMDAwMDAwMDAwIiwic2VjcmV0Ijoic3ludGhldGljLXVuZnVuZGVkLXJlY2VpdmUiLCJDIjoiMDIxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExIiwid2l0bmVzcyI6eyJzaWduYXR1cmVzIjpbInN5bnRoZXRpYy13aXRuZXNzIl19LCJkbGVxIjp7ImUiOiIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyIiwicyI6IjMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMifSwiQ18iOiIwMjQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQiLCJkZXJpdmF0aW9uX2luZGV4IjoxMjN9XX1dLCJ1bml0Ijoic2F0In0",
+    "error": "Proof missing amount"
+  },
+  {
+    "name": "empty_proofs",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W119XSwidW5pdCI6InNhdCJ9",
+    "error": "Token has zero value"
+  },
+  {
+    "name": "amount_overflow",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50IjoxODQ0Njc0NDA3MzcwOTU1MTYxNSwiaWQiOiIwMDAwMDAwMDAwMDAwMDAwIiwic2VjcmV0Ijoic3ludGhldGljLXVuZnVuZGVkLXJlY2VpdmUiLCJDIjoiMDIxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExIiwid2l0bmVzcyI6eyJzaWduYXR1cmVzIjpbInN5bnRoZXRpYy13aXRuZXNzIl19LCJkbGVxIjp7ImUiOiIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyIiwicyI6IjMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMifSwiQ18iOiIwMjQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQiLCJkZXJpdmF0aW9uX2luZGV4IjoxMjN9LHsiYW1vdW50IjoxLCJpZCI6IjAwMDAwMDAwMDAwMDAwMDAiLCJzZWNyZXQiOiJzeW50aGV0aWMtdW5mdW5kZWQtcmVjZWl2ZSIsIkMiOiIwMjExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEiLCJ3aXRuZXNzIjp7InNpZ25hdHVyZXMiOlsic3ludGhldGljLXdpdG5lc3MiXX0sImRsZXEiOnsiZSI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIiLCJzIjoiMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMyJ9LCJDXyI6IjAyNDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NCIsImRlcml2YXRpb25faW5kZXgiOjEyM31dfV0sInVuaXQiOiJzYXQifQ",
+    "error": "Token amount overflow"
+  },
+  {
+    "name": "v4_non_map",
+    "token": "cashuBgA",
+    "error": "CBOR token is not a map"
+  },
+  {
+    "name": "v4_no_entries",
+    "token": "cashuBo2FteCZodHRwczovL3N5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbmF1Y3NhdGF0gA",
+    "error": "Token contains no entries"
+  },
+  {
+    "name": "v4_negative_amount",
+    "token": "cashuBo2FteCdodHRwczovL1NZTlRIRVRJQy1NSU5ULmludmFsaWQvQml0Y29pbi9hdWNzYXRhdIGiYWlIAAAAAAAAAABhcIGkYWEgYXN4GnN5bnRoZXRpYy11bmZ1bmRlZC1yZWNlaXZlYWNYIQIREREREREREREREREREREREREREREREREREREREREREWF3eCR7InNpZ25hdHVyZXMiOlsic3ludGhldGljLXdpdG5lc3MiXX0",
+    "error": "Token has zero value"
+  },
+  {
+    "name": "legacy_short_keyset",
+    "token": "cashuAeyJ0b2tlbiI6W3sibWludCI6InN5bnRoZXRpYy1taW50LmludmFsaWQvQml0Y29pbi8vLyIsInByb29mcyI6W3siYW1vdW50Ijo4LCJpZCI6IjAwMDAiLCJzZWNyZXQiOiJzeW50aGV0aWMtdW5mdW5kZWQtcmVjZWl2ZSIsIkMiOiIwMjExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEiLCJ3aXRuZXNzIjp7InNpZ25hdHVyZXMiOlsic3ludGhldGljLXdpdG5lc3MiXX0sImRsZXEiOnsiZSI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIiLCJzIjoiMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMyJ9LCJDXyI6IjAyNDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NCIsImRlcml2YXRpb25faW5kZXgiOjEyM31dfV0sInVuaXQiOiJzYXQifQ",
+    "expected": {
+      "mint_url": "https://synthetic-mint.invalid/Bitcoin",
+      "input_proofs": [
+        {
+          "amount": 8,
+          "id": "0000",
+          "secret": "synthetic-unfunded-receive",
+          "C": "021111111111111111111111111111111111111111111111111111111111111111",
+          "derivation_index": 0,
+          "witness": {
+            "signatures": [
+              "synthetic-witness"
+            ]
+          }
+        }
+      ],
+      "total_amount": 8
+    }
+  },
+  {
+    "name": "v4_short_v2_keyset",
+    "token": "cashuBo2FteCdodHRwczovL1NZTlRIRVRJQy1NSU5ULmludmFsaWQvQml0Y29pbi9hdWNzYXRhdIGiYWlIAaurq6urq6thcIGkYWEIYXN4GnN5bnRoZXRpYy11bmZ1bmRlZC1yZWNlaXZlYWNYIQIREREREREREREREREREREREREREREREREREREREREREWF3eCR7InNpZ25hdHVyZXMiOlsic3ludGhldGljLXdpdG5lc3MiXX0",
+    "expected": {
+      "mint_url": "https://synthetic-mint.invalid/Bitcoin",
+      "input_proofs": [
+        {
+          "amount": 8,
+          "id": "01ababababababab",
+          "secret": "synthetic-unfunded-receive",
+          "C": "021111111111111111111111111111111111111111111111111111111111111111",
+          "derivation_index": 0,
+          "witness": "{\"signatures\":[\"synthetic-witness\"]}"
+        }
+      ],
+      "total_amount": 8
+    }
+  }
+]

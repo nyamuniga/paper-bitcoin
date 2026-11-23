@@ -59,6 +59,7 @@ pub async fn set_custom_nostr_key(key: Option<String>, state: State<'_, AppState
     let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
     let w_state = wallet_guard.as_mut().unwrap();
     w_state.custom_nostr_key = key;
+    w_state.normalize_proofs_for_persistence();
     w_state.save_encrypted(&path, &passphrase)?;
 
     Ok(true)
@@ -70,6 +71,7 @@ pub async fn set_default_nostr_key(key: String, state: State<'_, AppState>) -> C
     let w_state = wallet_guard.as_mut().unwrap();
     if w_state.default_nostr_key.as_deref() != Some(&key) {
         w_state.default_nostr_key = Some(key);
+        w_state.normalize_proofs_for_persistence();
         w_state.save_encrypted(&path, &passphrase)?;
     }
 
@@ -104,6 +106,7 @@ pub async fn remove_mint(mint_url: String, state: State<'_, AppState>) -> Comman
     let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
     let w_state = wallet_guard.as_mut().unwrap();
     w_state.remove_mint(&mint_url)?;
+    w_state.normalize_proofs_for_persistence();
     w_state.save_encrypted(&path, &passphrase)?;
 
     Ok(())
@@ -143,6 +146,7 @@ pub async fn add_mint(mint_url: String, state: State<'_, AppState>) -> CommandRe
         &mint_url,
         std::collections::HashMap::from([(keyset.id, keyset.keys)]),
     );
+    w_state.normalize_proofs_for_persistence();
     w_state.save_encrypted(&path, &passphrase)?;
 
     Ok(())

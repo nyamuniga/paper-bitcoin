@@ -443,6 +443,7 @@ pub async fn spark_melt_to_spark(
 
     w_state.transactions.insert(0, pending_onchain_tx);
 
+    w_state.normalize_proofs_for_persistence();
     if let Err(e) = w_state.save_encrypted(&path, &passphrase) {
         spark_state.is_sending.store(false, Ordering::SeqCst);
         return Err(CommandError(e.to_string()));
@@ -485,6 +486,7 @@ pub async fn spark_topup_for_send(
         w_state.transactions.remove(pos);
     }
 
+    w_state.normalize_proofs_for_persistence();
     w_state.save_encrypted(&path, &passphrase)?;
 
     Ok(MeltToSparkResponse {
@@ -525,6 +527,7 @@ pub async fn spark_finalize_onchain_send(
                 }
             }
         }
+        w_state.normalize_proofs_for_persistence();
         w_state.save_encrypted(&path, &passphrase)?;
     }
 
@@ -568,6 +571,7 @@ pub async fn spark_prepare_onchain_receive(
                 || tx.status != TransactionStatus::Pending
                 || !matches!(&tx.tx_type, TransactionType::ReceiveOnchain(d) if d.txid.is_none())
         });
+        w_state.normalize_proofs_for_persistence();
         w_state.save_encrypted(&path, &passphrase)?;
         return Ok(PrepareOnchainReceiveResponse {
             tx_id: existing_id,
@@ -596,6 +600,7 @@ pub async fn spark_prepare_onchain_receive(
         },
     );
 
+    w_state.normalize_proofs_for_persistence();
     w_state.save_encrypted(&path, &passphrase)?;
 
     Ok(PrepareOnchainReceiveResponse {
@@ -808,6 +813,7 @@ pub async fn spark_prepare_mint_from_spark(
         quote_id.clone()
     };
 
+    w_state.normalize_proofs_for_persistence();
     w_state.save_encrypted(&path, &passphrase)?;
 
     Ok(PrepareMintFromSparkResponse {
@@ -837,6 +843,7 @@ pub async fn spark_complete_mint_from_spark(
             found = Some(tx.clone());
         }
         if found.is_some() {
+            w_state.normalize_proofs_for_persistence();
             w_state.save_encrypted(&path, &passphrase)?;
         }
         let keys = found
@@ -881,6 +888,7 @@ pub async fn spark_abort_unpaid_mint_from_spark(
                 d.outputs.clear();
                 d.blinding_sessions_hex.clear();
             }
+            w_state.normalize_proofs_for_persistence();
             w_state.save_encrypted(&path, &passphrase)?;
             return Ok(true);
         }

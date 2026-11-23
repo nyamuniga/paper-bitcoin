@@ -128,6 +128,7 @@ pub async fn stable_refresh_quote(
     }
     validate_review_quote(&refreshed)?;
     wallet.stable_operations[pos] = refreshed.clone();
+    wallet.normalize_proofs_for_persistence();
     if let Err(error) = wallet.save_encrypted(&path, &passphrase) {
         wallet.stable_operations[pos] = previous;
         return Err(error.into());
@@ -153,6 +154,7 @@ pub async fn stable_begin(
     }
     validate_review_quote(&operation)?;
     wallet.stable_operations.push(operation.clone());
+    wallet.normalize_proofs_for_persistence();
     wallet.save_encrypted(&path, &passphrase)?;
     Ok(operation)
 }
@@ -169,6 +171,7 @@ pub async fn stable_recover_unsubmitted_conversion(id: String, state: State<'_, 
     if !wallet.stable_operations[pos].recover_unsubmitted_protected() {
         return Err(CommandError("This conversion requires status reconciliation.".into()));
     }
+    wallet.normalize_proofs_for_persistence();
     if let Err(failure) = wallet.save_encrypted(&path, &passphrase) {
         wallet.stable_operations[pos] = previous;
         return Err(failure.into());
@@ -197,6 +200,7 @@ pub async fn stable_fund(id: String, state: State<'_, AppState>) -> CommandResul
         wallet.balance_by_mint(),
     );
     wallet.stable_operations[pos].stage = StableStage::Funding;
+    wallet.normalize_proofs_for_persistence();
     wallet.save_encrypted(&path, &passphrase)?;
     let result = ecash_wallet::pay_invoice_capped(
         wallet,
@@ -222,6 +226,7 @@ pub async fn stable_fund(id: String, state: State<'_, AppState>) -> CommandResul
         );
         if before_spend == after_spend {
             wallet.stable_operations[pos].stage = StableStage::Quoted;
+            wallet.normalize_proofs_for_persistence();
             if wallet.save_encrypted(&path, &passphrase).is_err() {
                 wallet.stable_operations[pos].stage = StableStage::Funding;
             }
@@ -229,6 +234,7 @@ pub async fn stable_fund(id: String, state: State<'_, AppState>) -> CommandResul
         return Err(error.into());
     }
     wallet.stable_operations[pos].stage = StableStage::Funded;
+    wallet.normalize_proofs_for_persistence();
     if let Err(error) = wallet.save_encrypted(&path, &passphrase) {
         wallet.stable_operations[pos].stage = StableStage::Funding;
         return Err(error.into());
@@ -323,6 +329,7 @@ pub async fn stable_advance(
     if payment_id.is_some() {
         wallet.stable_operations[pos].payment_id = payment_id;
     }
+    wallet.normalize_proofs_for_persistence();
     if let Err(error) = wallet.save_encrypted(&path, &passphrase) {
         wallet.stable_operations[pos] = previous;
         return Err(error.into());
@@ -363,6 +370,7 @@ pub async fn stable_prepare_return(
     wallet.stable_operations[pos].return_quote_id = quote_id;
     wallet.stable_operations[pos].return_quote_json = quote_json;
     wallet.stable_operations[pos].return_amount = amount;
+    wallet.normalize_proofs_for_persistence();
     wallet.save_encrypted(&path, &passphrase)?;
     Ok(wallet.stable_operations[pos].clone())
 }
@@ -387,6 +395,7 @@ pub async fn stable_recover_legacy_conversion(
                 .into(),
         ));
     }
+    wallet.normalize_proofs_for_persistence();
     if let Err(error) = wallet.save_encrypted(&path, &passphrase) {
         wallet.stable_operations[pos] = previous;
         return Err(error.into());

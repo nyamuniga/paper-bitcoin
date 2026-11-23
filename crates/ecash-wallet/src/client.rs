@@ -829,6 +829,7 @@ mod tests {
             let until = std::time::Instant::now() + std::time::Duration::from_secs(3);
             while std::time::Instant::now() < until {
                 if let Ok((mut stream, _)) = server.accept() {
+                    stream.set_nonblocking(false).unwrap();
                     stream.set_read_timeout(Some(std::time::Duration::from_secs(1))).unwrap();
                     // Drain the complete request before closing the socket. A response
                     // followed by close with an unread POST body can become a TCP reset.

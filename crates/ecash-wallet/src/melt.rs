@@ -254,6 +254,7 @@ async fn redeem_note_mpp(
 
     // ── Step 4: Persist derivation index ────────────────────────────────────
     state.derivation_index = deriv.index;
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     // ── Step 5: Execute all melts in parallel with their OWN quote_id ──────
@@ -282,6 +283,7 @@ async fn redeem_note_mpp(
         for (mint, proofs, _) in &mint_data {
             state.proofs.entry(mint.clone()).or_default().extend(proofs.clone());
         }
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase).ok();
         return Err(anyhow!("MPP payment failed: one or more legs did not succeed. The note's funds have been deposited into your local wallet."));
     }
@@ -344,6 +346,7 @@ async fn redeem_note_mpp(
         tx.status = TransactionStatus::Success;
     }
 
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
     Ok(total_required)
 }
@@ -606,6 +609,7 @@ async fn redeem_note_legacy(
 
         // Advance derivation index after all sessions
         state.derivation_index = deriv.index;
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase)?;
 
         if let Some(e) = first_err {
@@ -736,6 +740,7 @@ async fn redeem_note_legacy(
 
     // Advance derivation index before final melt
     state.derivation_index = deriv.index;
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     // Save pending transaction and remove proofs from wallet balance immediately
@@ -753,6 +758,7 @@ async fn redeem_note_legacy(
         mint_url: hub_mint.clone(),
     };
     state.transactions.push(pending_tx);
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase).ok();
 
     // Send the final melt with retry on output collision
@@ -793,6 +799,7 @@ async fn redeem_note_legacy(
                         sessions.push((d, sess, index));
                     }
                     state.derivation_index = deriv.index;
+                    state.normalize_proofs_for_persistence();
                     state.save_encrypted(wallet_path, passphrase)?;
                     continue;
                 }
@@ -801,6 +808,7 @@ async fn redeem_note_legacy(
                     if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
                         tx.status = TransactionStatus::Failed;
                     }
+                    state.normalize_proofs_for_persistence();
                     state.save_encrypted(wallet_path, passphrase).ok();
                     return Err(anyhow!("This note has already been redeemed. The tokens are already spent."));
                 }
@@ -808,6 +816,7 @@ async fn redeem_note_legacy(
                     if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
                         tx.status = TransactionStatus::FailedMintError;
                     }
+                    state.normalize_proofs_for_persistence();
                     state.save_encrypted(wallet_path, passphrase).ok();
                     return Err(anyhow!("Mint rejected the proofs as invalid/corrupt. The transaction was marked as FailedMintError."));
                 }
@@ -816,6 +825,7 @@ async fn redeem_note_legacy(
                 if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == tx_id) {
                     tx.status = TransactionStatus::Failed;
                 }
+                state.normalize_proofs_for_persistence();
                 state.save_encrypted(wallet_path, passphrase).ok();
                 return Err(anyhow!("Payment failed: {}", e));
             }
@@ -898,6 +908,7 @@ async fn redeem_note_legacy(
         }
     }
 
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase).ok();
 
     if !paid {
@@ -949,6 +960,7 @@ pub async fn redeem_note(
         mint_url: "Local Wallet".to_string(),
     };
     state.transactions.push(pending_tx);
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     let token = reconstruct_token(public_data, master_seed_hex).await?;
@@ -956,6 +968,7 @@ pub async fn redeem_note(
         if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == redeem_tx_id) {
             tx.status = TransactionStatus::Failed;
         }
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase).ok();
         return Err(anyhow!("Empty token"));
     }
@@ -996,11 +1009,13 @@ pub async fn redeem_note(
                 tx.status = TransactionStatus::Failed;
             }
         }
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase).ok();
     } else {
         if let Some(tx) = state.transactions.iter_mut().find(|t| t.id == redeem_tx_id) {
             tx.status = TransactionStatus::Success;
         }
+        state.normalize_proofs_for_persistence();
         state.save_encrypted(wallet_path, passphrase).ok();
     }
 
@@ -1159,6 +1174,7 @@ pub async fn pay_invoice_capped(state: &mut WalletState, wallet_path: &PathBuf, 
             if let Some(mint_proofs) = state.proofs.get_mut(&hub_mint) {
                 mint_proofs.retain(|p| !selected_secrets.contains(&p.secret));
             }
+            state.normalize_proofs_for_persistence();
             state.save_encrypted(wallet_path, passphrase)?;
             Ok(selected_for_melt)
         };
@@ -1208,6 +1224,7 @@ pub async fn pay_invoice_capped(state: &mut WalletState, wallet_path: &PathBuf, 
     }
 
     state.derivation_index = deriv.index;
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     let tx_id = recovery_id.unwrap_or_else(|| format!("tx_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()));
@@ -1224,6 +1241,7 @@ pub async fn pay_invoice_capped(state: &mut WalletState, wallet_path: &PathBuf, 
         mint_url: hub_mint.clone(),
     };
     state.transactions.push(pending_tx);
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase)?;
 
     let melt_result = hub_client.melt_tokens(
@@ -1306,6 +1324,7 @@ pub async fn pay_invoice_capped(state: &mut WalletState, wallet_path: &PathBuf, 
                     tx.status = TransactionStatus::Failed;
                 }
             }
+            state.normalize_proofs_for_persistence();
             state.save_encrypted(wallet_path, passphrase).ok();
             return Err(anyhow!("Payment failed: {}", e));
         }
@@ -1374,6 +1393,7 @@ pub async fn pay_invoice_capped(state: &mut WalletState, wallet_path: &PathBuf, 
         }
     }
 
+    state.normalize_proofs_for_persistence();
     state.save_encrypted(wallet_path, passphrase).ok();
 
     if !paid {

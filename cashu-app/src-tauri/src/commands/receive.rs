@@ -129,6 +129,7 @@ pub(crate) async fn persist_receive_quote(
         mint_url: mint_url.clone(),
     };
     w_state.transactions.insert(0, pending_tx);
+    w_state.normalize_proofs_for_persistence();
     if let Err(error) = w_state.save_encrypted(&path, &passphrase) {
         w_state.transactions.remove(0);
         w_state.derivation_index = previous_index;
@@ -266,6 +267,7 @@ pub async fn batch_mint_external_quotes(
         }
     }
 
+    w_state.normalize_proofs_for_persistence();
     w_state.save_encrypted(&path, &passphrase)?;
 
     Ok(claimed_count)

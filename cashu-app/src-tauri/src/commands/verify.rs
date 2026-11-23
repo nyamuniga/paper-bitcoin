@@ -164,6 +164,7 @@ pub async fn verify_note(
                     if let Ok((mut wg, path, pass)) = state.lock_and_get_wallet().await {
                         if let Some(ref mut ws) = *wg {
                             ws.trusted_keys.insert(url.clone(), merged.clone());
+                            ws.normalize_proofs_for_persistence();
                             let _ = ws.save_encrypted(&path, &pass);
                         }
                     }
