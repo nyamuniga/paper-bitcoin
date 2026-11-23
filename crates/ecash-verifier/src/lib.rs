@@ -4,14 +4,20 @@
 //! pre-loaded mint public keys, no network required at verification time.
 //!
 //! ## What this verifies (offline)
-//! 1. **Format** — every proof contains a valid secp256k1 point as `C`.
-//! 2. **Integrity** — the SHA-256 validation hash matches the proof set.
-//! 3. **Trust** — the mint URL appears in the pre-loaded trusted list.
+//! 1. **Structure and value** — entries and proof sets are non-empty, and the
+//!    claimed face value does not exceed the sum of proof amounts.
+//! 2. **DLEQ (NUT-12)** — for trusted mints or mints with loaded keys, verify
+//!    each proof's blinded signature against its mint key, keyset and denomination.
+//!    Missing keys or invalid proof data cause verification to fail.
+//! 3. **Integrity** — the SHA-256 validation hash matches the proof set.
+//! 4. **Trust** — return `Valid` only when every mint is trusted. Otherwise return
+//!    `ValidUntrusted`; DLEQ is skipped for untrusted mints without loaded keys.
 //!
-//! ## What requires online (redemption)
-//! Full Chaumian blind-signature verification (`C == k·Y`) happens server-side
-//! at the mint when the token is melted. Offline DLEQ proofs (NUT-12) are a
-//! future upgrade that would enable full offline verification.
+//! ## What requires a network connection
+//! Offline verification does not establish that proofs remain unspent.
+//! `check_spend_state` queries mints for their current spend state; redemption
+//! requires the mint to validate and accept the proofs. Loading an untrusted
+//! mint's keys enables DLEQ verification but does not make that mint trusted.
 
 use std::collections::HashMap;
 
@@ -44,8 +50,8 @@ impl OfflineVerifier {
         self.mint_keys.insert(u, keys);
     }
 
-    /// Load public keys for an untrusted mint so its DLEQ signatures can still be verified
-    /// online without marking the mint as trusted.
+    /// Load public keys for offline DLEQ verification without trusting the mint.
+    /// The caller supplies the keys; this method does not fetch them.
     pub fn add_untrusted_mint_keys(&mut self, url: impl Into<String>,keys: HashMap<String, HashMap<u64, String>>) {
         let u = url.into();
         self.mint_keys.insert(u, keys);
@@ -213,7 +219,8 @@ pub enum VerificationResult {
         proof_total_sats: u64,
         mint_urls: Vec<String>,
     },
-    /// Note format and hash are valid, but mint is untrusted (DLEQ skipped).
+    /// Structural, value and integrity checks passed, but at least one mint is untrusted.
+    /// DLEQ is checked for mints with loaded keys and skipped for untrusted mints without keys.
     ValidUntrusted {
         face_value_sats: u64,
         proof_total_sats: u64,
@@ -225,7 +232,7 @@ pub enum VerificationResult {
     IntegrityMismatch,
     /// Unparseable JSON or missing required fields.
     InvalidFormat { reason: String },
-    /// A proof's `C` field is not a valid secp256k1 point (counterfeit).
+    /// A proof's blinded signature (`C_`) is not a valid secp256k1 point.
     InvalidProofPoint { index: usize },
 }
 

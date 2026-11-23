@@ -1,6 +1,6 @@
 # Releasing BitNotes
 
-The prepared release is **0.1.18**. Read [the current verification report](RELEASE_CHECKS.md), including the rotation record, upstream warnings and remaining native-device checks, before pushing. Release preparation does not publish a GitHub release, upload binaries, deploy the website, or rotate credentials.
+The source metadata targets **0.1.20**. Read [the current verification report](RELEASE_CHECKS.md), including the rotation record, upstream warnings and remaining native-device checks, before pushing. Release preparation does not publish a GitHub release, upload binaries, deploy the website, or rotate credentials.
 
 ## Public source boundary
 
@@ -55,12 +55,14 @@ CI=true npx tauri build
 npx tauri android build --apk --target aarch64
 ```
 
-Verify signatures and checksums, then publish the intended release artifacts under tag `v0.1.18`:
+For the current `0.1.20` metadata target, the expected artifact names under `v0.1.20` are:
 
-- `bitnotes-android-wallet-v0.1.18.apk`
-- `bitnotes_0.1.18_aarch64.dmg`
+- `bitnotes-android-wallet-v0.1.20.apk`
+- `bitnotes_0.1.20_aarch64.dmg`
 
-These filenames are the website contract. Upload and verify both assets before deploying `website/`; otherwise its new download links will return 404. The site is a static directory and can be previewed with `python3 -m http.server 8080 --directory website`. Check both desktop and mobile navigation/download buttons.
+The local `v0.1.20` tag already exists and predates the current working tree. Version alignment is a source correction, not a new publication. Publishing newer code requires a new release version and tag; do not move an existing tag or replace its artifacts with different code.
+
+These filenames are the website contract for the current metadata target. Verify that both matching assets are available before deploying `website/`. For a new release, update all versioned filenames and URLs together, then build, sign, upload and verify the new artifacts before deploying the site. The site is a static directory and can be previewed with `python3 -m http.server 8080 --directory website`. Check both desktop and mobile navigation/download buttons.
 
 ## Rollback
 

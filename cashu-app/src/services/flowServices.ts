@@ -33,6 +33,7 @@ import { withDeadline } from './proxyRequest';
 import { buildMomoReview, assertMomoReviewApproved } from './momoReview';
 import type { MomoReview } from './momoReview';
 import { MOMO_RECOVERY_MESSAGE } from './momoRecovery';
+import type { Scheduler } from './scheduler';
 
 const recoveryChecks = new Set<string>();
 const fulfillmentChecks = new Set<string>();
@@ -84,13 +85,12 @@ export const fetchCurrentRate = async (): Promise<number> => {
   });
 };
 
-async function reviewedMomoRate(approved: MomoReview | undefined, direction: 'RWF_TO_SATS' | 'SATS_TO_RWF', amount: number, phone: string, mint: string) {
-  if (!approved) return undefined;
+async function currentMomoQuote(direction: MomoReview['direction'], amount: number, phone: string, mint: string, approved?: MomoReview): Promise<MomoReview> {
   const rate = await fetchCurrentRate();
   const current = buildMomoReview({ direction, amount, phone, mint, rate, spread: SPREAD,
     fixedFee: MOMO_WITHDRAWAL_FIXED_FEE, networkReserve: ECASH_LIGHTNING_FEE });
-  assertMomoReviewApproved(approved, current);
-  return rate;
+  if (approved) assertMomoReviewApproved(approved, current);
+  return current;
 }
 
 export const calculateQuote = async (
@@ -116,7 +116,7 @@ export const calculateQuote = async (
     return;
   }
 
-  const reviewedRate = approved ? await reviewedMomoRate(approved, 'RWF_TO_SATS', amount, momoPhoneNumber, mintUrl) : undefined;
+  const reviewedQuote = approved ? await currentMomoQuote('RWF_TO_SATS', amount, momoPhoneNumber, mintUrl, approved) : undefined;
   // Claim the foreground transaction synchronously after the asynchronous rate check.
   if (approved && store.activeTransaction?.status === 'PENDING' && store.activeTransaction.currentPhase !== AppPhase.IDLE) {
     throw new Error('Another transfer is already in progress.');
@@ -145,15 +145,12 @@ export const calculateQuote = async (
   });
 
   try {
-    const rwfToSatsRate = reviewedRate ?? await fetchCurrentRate();
-
+    const quote = reviewedQuote ?? await currentMomoQuote('RWF_TO_SATS', amount, momoPhoneNumber, mintUrl);
     const feeRwf = 0;
-    const totalRwfToPay = amount;
+    const totalRwfToPay = quote.amount;
+    const netSats = quote.sats;
 
     store.updateTransactionPhase(AppPhase.INITIATING_PAYMENT);
-
-    // Apply 5% spread: give 5% fewer sats (absorbs 2.3% MTN fee and yields 2.7% profit)
-    const netSats = Math.floor(amount * (1 - SPREAD) * rwfToSatsRate);
 
     let invoice = "";
     let quoteId = "";
@@ -169,7 +166,7 @@ export const calculateQuote = async (
       rwfAmount: totalRwfToPay,
       satsAmount: netSats,
       fee: feeRwf,
-      rate: rwfToSatsRate * (1 - SPREAD),
+      rate: quote.rate * (1 - quote.spread),
       invoice: invoice,
       mintQuoteId: quoteId,
     });
@@ -194,7 +191,7 @@ export const calculateQuote = async (
       rwfAmount: totalRwfToPay,
       satsAmount: netSats,
       fee: feeRwf,
-      rate: rwfToSatsRate * (1 - SPREAD),
+      rate: quote.rate * (1 - quote.spread),
       invoice: invoice,
       momoReferenceId: momoResponse.referenceId,
       mintQuoteId: quoteId,
@@ -288,22 +285,30 @@ export const handleFulfillOrder = async (id?: string) => {
   }
 };
 
-export const startPaymentVerification = async (
-  stopPolling: () => void,
-  pollingIntervalRef: React.MutableRefObject<any>,
-  pollingTimeoutRef: React.MutableRefObject<any>,
-  isCurrent: () => boolean = () => true
-) => {
+export const startPaymentVerification = ({ scheduler, isCurrent = () => true }: {
+  scheduler: Scheduler;
+  isCurrent?: () => boolean;
+}) => {
   const store = useTransactionStore.getState();
   const transaction = store.activeTransaction;
-  if (!transaction) return;
+  if (!transaction || !isCurrent()) return;
 
-  stopPolling();
+  let stopped = false;
+  let cancelPoll: (() => void) | undefined;
+  let cancelDeadline: (() => void) | undefined;
+  const current = () => !stopped && isCurrent();
+  const stop = () => {
+    stopped = true;
+    cancelPoll?.();
+    cancelDeadline?.();
+    cancelPoll = undefined;
+    cancelDeadline = undefined;
+  };
   store.updateTransactionPhase(AppPhase.VERIFYING_PAYMENT);
 
   const handlePollingResult = (status: 'SUCCESSFUL' | 'FAILED', message?: string) => {
-    if (!isCurrent()) return;
-    stopPolling();
+    if (!current()) return;
+    stop();
     const currentTx = useTransactionStore.getState().activeTransaction;
     if (!currentTx) return;
 
@@ -324,55 +329,55 @@ export const startPaymentVerification = async (
     }
   };
 
-  try {
-    const res = await checkMomoPaymentStatus(transaction.id);
-    if (!isCurrent()) return;
-    if (res.status === "SUCCESSFUL" || res.status === "FAILED") {
-      handlePollingResult(res.status, res.message);
-      return;
-    }
-  } catch (e) {
-    if (!isCurrent()) return;
-    // Was: give up → RECOVERY_REQUIRED. Now: fall through to polling —
-    // a single timeout on a bad link is not a real failure.
-    console.warn('Initial payment status check failed; continuing to poll:', e);
-  }
-
-  if (!pollingIntervalRef.current) {
-    const pollMomo = async () => {
-      if (!isCurrent()) return;
-      try {
-        const tx = useTransactionStore.getState().activeTransaction;
-        if (tx) {
-          const { status, message } = await checkMomoPaymentStatus(tx.id);
-          if (!isCurrent()) return;
-          if (status === "SUCCESSFUL" || status === "FAILED") {
-            handlePollingResult(status, message);
-            return; // stop polling
-          }
+  const pollMomo = async () => {
+    if (!current()) return;
+    try {
+      const tx = useTransactionStore.getState().activeTransaction;
+      if (tx) {
+        const { status, message } = await checkMomoPaymentStatus(tx.id);
+        if (!current()) return;
+        if (status === "SUCCESSFUL" || status === "FAILED") {
+          handlePollingResult(status, message);
+          return;
         }
-      } catch (pollErr) {
-        // Was: uncaught → loop silently died and POLLING_TIMEOUT_MS
-        // then flagged a false RECOVERY_REQUIRED. Now: log and retry.
-        console.warn('Payment status poll failed; will retry:', pollErr);
-        if (!isCurrent()) return;
       }
-      pollingIntervalRef.current = setTimeout(pollMomo, POLLING_INTERVAL_MS);
-    };
-    pollingIntervalRef.current = setTimeout(pollMomo, POLLING_INTERVAL_MS);
-  }
-
-  pollingTimeoutRef.current = setTimeout(() => {
-    if (!isCurrent()) return;
-    stopPolling();
-    if (useTransactionStore.getState().activeTransaction?.currentPhase === AppPhase.VERIFYING_PAYMENT) {
-      store.setError(null);
-      store.updateTransaction({ currentPhase: AppPhase.RECOVERY_REQUIRED, recoveryMessage:'The provider has not confirmed payment yet. Check status before starting another top-up.' });
-      if (useTransactionStore.getState().activeTransaction) {
-        store.moveToHistory(useTransactionStore.getState().activeTransaction!);
-      }
+    } catch (pollErr) {
+      console.warn('Payment status poll failed; will retry:', pollErr);
     }
-  }, POLLING_TIMEOUT_MS);
+    if (current()) cancelPoll = scheduler.schedule(pollMomo, POLLING_INTERVAL_MS);
+  };
+
+  const checkInitialStatus = async () => {
+    try {
+      const res = await checkMomoPaymentStatus(transaction.id);
+      if (!current()) return;
+      if (res.status === "SUCCESSFUL" || res.status === "FAILED") {
+        handlePollingResult(res.status, res.message);
+        return;
+      }
+    } catch (error) {
+      if (!current()) return;
+      // A transient connection error does not establish that payment failed.
+      console.warn('Initial payment status check failed; continuing to poll:', error);
+    }
+    if (!current()) return;
+    cancelPoll = scheduler.schedule(pollMomo, POLLING_INTERVAL_MS);
+    cancelDeadline = scheduler.schedule(() => {
+      if (!current()) return;
+      stop();
+      if (useTransactionStore.getState().activeTransaction?.currentPhase === AppPhase.VERIFYING_PAYMENT) {
+        store.setError(null);
+        store.updateTransaction({ currentPhase: AppPhase.RECOVERY_REQUIRED, recoveryMessage:'The provider has not confirmed payment yet. Check status before starting another top-up.' });
+        if (useTransactionStore.getState().activeTransaction) {
+          store.moveToHistory(useTransactionStore.getState().activeTransaction!);
+        }
+      }
+    }, POLLING_TIMEOUT_MS);
+  };
+
+  // Return ownership immediately, including while the first provider request is pending.
+  void checkInitialStatus();
+  return stop;
 };
 
 export const calculateSendQuote = async (
@@ -398,7 +403,7 @@ export const calculateSendQuote = async (
     return;
   }
 
-  const reviewedRate = approved ? await reviewedMomoRate(approved, 'SATS_TO_RWF', amount, momoPhoneNumber, mintUrl) : undefined;
+  const reviewedQuote = approved ? await currentMomoQuote('SATS_TO_RWF', amount, momoPhoneNumber, mintUrl, approved) : undefined;
   // Claim the foreground transaction synchronously after the asynchronous rate check.
   if (approved && store.activeTransaction?.status === 'PENDING' && store.activeTransaction.currentPhase !== AppPhase.IDLE) {
     throw new Error('Another transfer is already in progress.');
@@ -427,20 +432,17 @@ export const calculateSendQuote = async (
   });
 
   try {
-    const rwfToSatsRate = reviewedRate ?? await fetchCurrentRate();
-
+    const quote = reviewedQuote ?? await currentMomoQuote('SATS_TO_RWF', amount, momoPhoneNumber, mintUrl);
     const feeRwf = 0;
-    // Total RWF equivalent in sats to charge user: covers amount + 120 RWF MTN payout fee + 5% spread margin
-    const totalRwfNeeded = amount + MOMO_WITHDRAWAL_FIXED_FEE + Math.ceil(amount * SPREAD);
-
-    const netSats = Math.ceil(totalRwfNeeded * rwfToSatsRate);
+    // The wallet budget includes the reserve; the funding invoice must not include it again.
+    const netSats = quote.fundingSats;
 
     const { paymentRequest, paymentHash } = await createLightningInvoice(netSats);
 
     store.updateTransaction({
       satsAmount: netSats,
       fee: feeRwf,
-      rate: rwfToSatsRate,
+      rate: quote.rate,
       invoice: paymentRequest,
       paymentHash: paymentHash,
       currentPhase: AppPhase.AWAITING_INVOICE_PAYMENT,

@@ -1,0 +1,21 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "direction": "toUsd",
+  "stage": "converting",
+  "mint_url": "https://mint.example",
+  "created_at": 0,
+  "expires_at": 60,
+  "output_amount": "1000000",
+  "max_debit": "1000",
+  "protection_bps": 0,
+  "funding_invoice": "",
+  "funding_sats": 1000,
+  "mint_quote_id": "",
+  "quote_json": "{}",
+  "payment_id": null,
+  "conversion_request_version": 0,
+  "prior_payment_ids": [],
+  "return_quote_id": "",
+  "return_quote_json": "",
+  "return_amount": 0
+}

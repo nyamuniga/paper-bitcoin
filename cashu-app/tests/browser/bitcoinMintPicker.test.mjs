@@ -113,13 +113,16 @@ test('Bitcoin mint-picker caller selection and locking', { timeout: 60000 }, asy
       await assertNoSubmission();
     });
   }
-  await t.test('legacy on-chain selection retains its address-refresh callback', async () => {
+  await t.test('legacy mint changes retire the old address until another explicit request', async () => {
     await load('legacy&receive');await click('.bitcoin-receive-mode button', 'On-Chain');
     await receiveAmount();await click('.bitcoin-primary', 'Get Bitcoin Address');
     await selectSecond();
     assert.deepEqual(await evaluate('window.bitcoinFixture.receives'), [
       { mode: 'onchain', amount: 3000, mint: 'https://mint-1.example.test' },
-      { mode: 'onchain', amount: 3000, mint: 'https://mint-2.example.test' },
     ]);
+    assert.equal(await evaluate('!!document.querySelector(".bitcoin-receive-form")'), true);
+    await click('.bitcoin-primary', 'Get Bitcoin Address');
+    assert.deepEqual(await evaluate('window.bitcoinFixture.receives[1]'),
+      { mode: 'onchain', amount: 3000, mint: 'https://mint-2.example.test' });
   });
 });

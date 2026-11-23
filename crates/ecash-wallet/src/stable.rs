@@ -1,11 +1,27 @@
 //! Durable conversion journal, encrypted with the Cashu wallet.
 use serde::{Deserialize, Serialize};
 
+/// Persisted journal and native-command values. Preserve their camelCase spelling.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum StableStage {
+    Quoted,
+    Funding,
+    Funded,
+    Converting,
+    Settling,
+    ReturnQuoted,
+    Returning,
+    Complete,
+    Cancelled,
+    Refunded,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StableOperation {
     pub id: String,
     pub direction: String,
-    pub stage: String,
+    pub stage: StableStage,
     pub mint_url: String,
     pub created_at: u64,
     pub expires_at: u64,
@@ -41,8 +57,8 @@ impl StableOperation {
     ) -> bool {
         if self.protection_bps != 0
             || candidate.protection_bps != 0
-            || self.stage != "quoted"
-            || candidate.stage != "quoted"
+            || self.stage != StableStage::Quoted
+            || candidate.stage != StableStage::Quoted
             || self.quote_json != expected_quote
             || self.expires_at != expected_expiry
             || self.id != candidate.id
@@ -73,22 +89,32 @@ impl StableOperation {
     /// Caller must hold live proof that the SDK observer rejected before any
     /// source payment approval. Never use this for a timeout or after a restart.
     pub fn recover_unsubmitted_protected(&mut self) -> bool {
-        if self.protection_bps != 300 || self.stage != "converting"
-            || self.conversion_request_version != 1 || self.payment_id.is_some()
-            || !matches!(self.direction.as_str(), "toUsd" | "toSats") {
+        if self.protection_bps != 300
+            || self.stage != StableStage::Converting
+            || self.conversion_request_version != 1
+            || self.payment_id.is_some()
+            || !matches!(self.direction.as_str(), "toUsd" | "toSats")
+        {
             return false;
         }
-        self.stage = if self.direction == "toUsd" {"funded"} else {"quoted"}.into();
+        self.stage = if self.direction == "toUsd" {
+            StableStage::Funded
+        } else {
+            StableStage::Quoted
+        };
         true
     }
     pub fn active(&self) -> bool {
-        !matches!(self.stage.as_str(), "complete" | "cancelled" | "refunded")
+        !matches!(
+            self.stage,
+            StableStage::Complete | StableStage::Cancelled | StableStage::Refunded
+        )
     }
     /// The original client always supplied a key on AMM sends. The SDK rejects that
     /// combination before dispatching any conversion. Never apply this reset to
     /// a compatible request or a request with a recorded payment result.
     pub fn recover_legacy_idempotency_rejection(&mut self) -> bool {
-        if self.stage != "converting"
+        if self.stage != StableStage::Converting
             || self.conversion_request_version != 0
             || self.payment_id.is_some()
         {
@@ -110,28 +136,29 @@ impl StableOperation {
             return false;
         }
         self.stage = if self.direction == "toUsd" {
-            "funded"
+            StableStage::Funded
         } else {
-            "quoted"
-        }
-        .into();
+            StableStage::Quoted
+        };
         self.conversion_request_version = 1;
         true
     }
-    pub fn can_transition(&self, next: &str) -> bool {
+    pub fn can_transition(&self, next: StableStage) -> bool {
+        use StableStage::*;
+
         matches!(
-            (self.stage.as_str(), next),
-            ("quoted", "cancelled")
-                | ("quoted", "converting")
-                | ("funded", "converting")
-                | ("converting", "settling")
-                | ("converting", "refunded")
-                | ("converting", "complete")
-                | ("settling", "complete")
-                | ("funded", "returnQuoted")
-                | ("returnQuoted", "funded")
-                | ("returnQuoted", "returning")
-                | ("returning", "complete")
+            (self.stage, next),
+            (Quoted, Cancelled)
+                | (Quoted, Converting)
+                | (Funded, Converting)
+                | (Converting, Settling)
+                | (Converting, Refunded)
+                | (Converting, Complete)
+                | (Settling, Complete)
+                | (Funded, ReturnQuoted)
+                | (ReturnQuoted, Funded)
+                | (ReturnQuoted, Returning)
+                | (Returning, Complete)
         )
     }
 }
@@ -139,11 +166,89 @@ impl StableOperation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn op(stage: &str) -> StableOperation {
+    use StableStage::*;
+
+    // Synthetic journal data with no funded proofs, private keys or live invoices.
+    fn saved_operation() -> serde_json::Value {
+        serde_json::from_str(include_str!("../tests/fixtures/stable-operation.json")).unwrap()
+    }
+
+    #[test]
+    fn saved_conversion_stages_keep_their_existing_json_values() {
+        for (stage, expected_stage) in [
+            ("quoted", Quoted),
+            ("funding", Funding),
+            ("funded", Funded),
+            ("converting", Converting),
+            ("settling", Settling),
+            ("returnQuoted", ReturnQuoted),
+            ("returning", Returning),
+            ("complete", Complete),
+            ("cancelled", Cancelled),
+            ("refunded", Refunded),
+        ] {
+            let mut saved = saved_operation();
+            saved["stage"] = serde_json::json!(stage);
+            let operation: StableOperation = serde_json::from_value(saved.clone()).unwrap();
+            assert_eq!(operation.stage, expected_stage);
+            assert_eq!(serde_json::to_value(operation).unwrap(), saved);
+
+            let wallet: crate::WalletState = serde_json::from_value(serde_json::json!({
+                "seed_hex": "00", "mnemonic": null, "derivation_index": 0,
+                "proofs": {}, "stable_operations": [saved],
+            }))
+            .unwrap();
+            assert_eq!(wallet.stable_operations.len(), 1);
+            assert_eq!(wallet.stable_operations[0].stage, expected_stage);
+            assert_eq!(
+                serde_json::to_value(&wallet.stable_operations[0]).unwrap()["stage"],
+                stage
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_conversion_stages_are_rejected_in_operations_and_wallets() {
+        for stage in [
+            serde_json::json!(""),
+            serde_json::json!("unknown"),
+            serde_json::json!("Quoted"),
+            serde_json::json!("return_quoted"),
+            serde_json::json!("returnquoted"),
+            serde_json::json!("completed"),
+            serde_json::Value::Null,
+            serde_json::json!(7),
+            serde_json::json!({}),
+        ] {
+            let mut saved = saved_operation();
+            saved["stage"] = stage.clone();
+            assert!(
+                serde_json::from_value::<StableOperation>(saved.clone()).is_err(),
+                "accepted invalid operation stage: {stage}"
+            );
+            assert!(
+                serde_json::from_value::<crate::WalletState>(serde_json::json!({
+                    "seed_hex": "00", "mnemonic": null, "derivation_index": 0,
+                    "proofs": {}, "stable_operations": [saved],
+                }))
+                .is_err(),
+                "accepted invalid wallet stage: {stage}"
+            );
+        }
+    }
+
+    #[test]
+    fn missing_conversion_stage_is_rejected() {
+        let mut saved = saved_operation();
+        saved.as_object_mut().unwrap().remove("stage");
+        assert!(serde_json::from_value::<StableOperation>(saved).is_err());
+    }
+
+    fn op(stage: StableStage) -> StableOperation {
         StableOperation {
             id: "test".into(),
             direction: "toUsd".into(),
-            stage: stage.into(),
+            stage,
             mint_url: "mint".into(),
             created_at: 0,
             expires_at: 0,
@@ -164,7 +269,7 @@ mod tests {
     }
     #[test]
     fn review_refresh_preserves_identity_and_cap_and_stops_after_confirmation() {
-        let original = op("quoted");
+        let original = op(Quoted);
         let mut updated = original.clone();
         updated.expires_at = 60;
         updated.quote_json = "new quote".into();
@@ -175,7 +280,7 @@ mod tests {
         assert_eq!(saved.id, original.id);
         assert_eq!(saved.max_debit, "1000");
         assert_eq!(saved.output_amount, "950000");
-        for stage in ["funding", "funded", "converting", "complete", "cancelled"] {
+        for stage in [Funding, Funded, Converting, Complete, Cancelled] {
             let mut started = op(stage);
             assert!(!started.refresh_review(&updated, &original.quote_json, original.expires_at));
         }
@@ -197,20 +302,21 @@ mod tests {
     }
     #[test]
     fn only_unrecorded_protected_conversions_can_restore_after_live_guard_rejection() {
-        let mut saved = op("converting");
+        let mut saved = op(Converting);
         assert!(!saved.recover_unsubmitted_protected());
         saved.protection_bps = 300;
         assert!(!saved.recover_unsubmitted_protected());
         saved.conversion_request_version = 1;
         assert!(saved.recover_unsubmitted_protected());
-        assert_eq!(saved.stage, "funded");
+        assert_eq!(saved.stage, Funded);
         assert!(!saved.recover_unsubmitted_protected());
-        saved.stage = "converting".into();saved.payment_id = Some("recorded".into());
+        saved.stage = Converting;
+        saved.payment_id = Some("recorded".into());
         assert!(!saved.recover_unsubmitted_protected());
     }
     #[test]
     fn protected_review_cannot_change_floor_cap_or_expiry() {
-        let mut saved = op("quoted");
+        let mut saved = op(Quoted);
         saved.protection_bps = 300;
         let mut next = saved.clone();
         next.expires_at = 60;
@@ -220,22 +326,22 @@ mod tests {
     }
     #[test]
     fn irreversible_stages_cannot_be_cancelled_or_retried() {
-        for stage in ["funding", "funded", "converting", "settling"] {
-            assert!(!op(stage).can_transition("cancelled"));
-            assert!(!op(stage).can_transition("quoted"));
+        for stage in [Funding, Funded, Converting, Settling] {
+            assert!(!op(stage).can_transition(Cancelled));
+            assert!(!op(stage).can_transition(Quoted));
             assert!(op(stage).active());
         }
-        assert!(op("quoted").can_transition("cancelled"));
-        assert!(!op("complete").active());
-        assert!(!op("cancelled").active());
+        assert!(op(Quoted).can_transition(Cancelled));
+        assert!(!op(Complete).active());
+        assert!(!op(Cancelled).active());
     }
     #[test]
     fn rejected_legacy_conversion_can_resume_without_refunding_or_repaying() {
         for (direction, conversion_type, expected_stage) in [
-            ("toUsd", "fromBitcoin", "funded"),
-            ("toSats", "toBitcoin", "quoted"),
+            ("toUsd", "fromBitcoin", Funded),
+            ("toSats", "toBitcoin", Quoted),
         ] {
-            let mut operation = op("converting");
+            let mut operation = op(Converting);
             operation.direction = direction.into();
             operation.quote_json = serde_json::json!({"conversionEstimate":{"options":{"conversionType":{"type":conversion_type}}}}).to_string();
             assert!(operation.recover_legacy_idempotency_rejection());
@@ -246,7 +352,7 @@ mod tests {
     }
     #[test]
     fn compatible_or_recorded_conversion_cannot_be_reset_as_legacy() {
-        let mut operation = op("converting");
+        let mut operation = op(Converting);
         operation.quote_json =
             r#"{"conversionEstimate":{"options":{"conversionType":{"type":"fromBitcoin"}}}}"#
                 .into();
@@ -261,7 +367,7 @@ mod tests {
     }
     #[test]
     fn saved_legacy_operation_defaults_to_legacy_request_version() {
-        let mut saved = serde_json::to_value(op("converting")).unwrap();
+        let mut saved = serde_json::to_value(op(Converting)).unwrap();
         saved
             .as_object_mut()
             .unwrap()

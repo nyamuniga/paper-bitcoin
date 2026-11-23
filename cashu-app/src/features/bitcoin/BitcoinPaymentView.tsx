@@ -1,39 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MintBalancePicker } from '../../components/shared/MintBalancePicker';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { PaymentPageLayout } from '../../components/shared/PaymentPageLayout';
-import { IconButton } from '../../components/shared/IconButton';
-import { FormField } from '../../components/shared/FormField';
+import { BitcoinSendReview, BitcoinSendConfirmation } from './BitcoinSendReview';
+import { BitcoinDestinationEntry } from './BitcoinDestinationEntry';
+import { BitcoinReceive } from './BitcoinReceive';
+import { useBitcoinSend } from './useBitcoinSend';
+import { useBitcoinReceive } from './useBitcoinReceive';
 import './BitcoinPages.css';
-import { X, Copy, Check, Loader2, Zap, Bitcoin, ArrowUp, ArrowDown, QrCode, BookUser } from 'lucide-react';
-import { OnchainSendEstimate, OnchainLimits, getOnchainSendLimits } from '../../services/sparkService';
+import { X, Loader2, Bitcoin, ArrowUp, ArrowDown } from 'lucide-react';
+import { OnchainLimits, getOnchainSendLimits } from '../../services/sparkService';
 import { useAddressBookStore } from '../../store/addressBookStore';
 import { AddressBookPickerModal } from '../../components/addressBook/AddressBookPickerModal';
-import { AddressBookAutocomplete } from '../../components/addressBook/AddressBookAutocomplete';
 
 import { toast } from 'react-hot-toast';
 import { useWalletStore } from '../../store/wallet';
 import { useBitcoin } from '../../hooks/useBitcoin';
 import { useHistory } from '../../hooks/useHistory';
 
-import { SovereignStampOverlay, StampPaymentStatus } from '../../components/shared/SovereignStampOverlay';
+import { SovereignStampOverlay } from '../../components/shared/SovereignStampOverlay';
 import { FullScreenLoader } from '../../components/shared/FullScreenLoader';
-import { MintIcon } from '../../components/shared/MintIcon';
-import { MintName } from '../../components/shared/MintName';
 import { createPortal } from 'react-dom';
 import { AmountDisplay } from '../../components/shared/AmountDisplay';
 import { NumberPad } from '../../components/shared/NumberPad';
-import QRCode from 'react-qr-code';
 import { Scanner } from '@yudiel/react-qr-scanner';
-import { parseBitcoinInput } from '../../utils/bitcoinValidation';
 import { readClipboardText, writeClipboardText } from '../../utils/clipboard';
 import { fetchLnurlPayInvoice } from '../../services/lnurlService';
 import { useLnurlValidation, validateLnurlPay } from '../../hooks/useLnurlValidation';
-import { LnurlValidationStatus } from '../../components/shared/LnurlValidationStatus';
 import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { openMempoolTx, openMempoolAddress } from '../../utils/mempool';
-import { SlidingSegmentedControl } from '../../components/shared/SlidingSegmentedControl';
 
 export interface BitcoinPaymentViewProps {
   page?: boolean;
@@ -45,335 +41,107 @@ export interface BitcoinPaymentViewProps {
 }
 
 type Tab = 'send' | 'receive';
-type SendStep = 'input' | 'amount' | 'confirm';
-type ReceiveMode = 'lightning' | 'onchain';
 
 export const BitcoinPaymentView: React.FC<BitcoinPaymentViewProps> = ({ mintUrl: initialMintUrl, initialTab = 'send', initialInvoice = '', initialAmountSats, onClose, page = false }) => {
-  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose, modal: !page });
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  const [mintUrl, setMintUrl] = useState(initialMintUrl);
+  const [showScanner, setShowScanner] = useState(false);
+  const [showAddressBook, setShowAddressBook] = useState(false);
+  const [onchainLimits, setOnchainLimits] = useState<OnchainLimits | null>(null);
+  const [received, setReceived] = useState<{ amount?: number; visible: boolean } | null>(null);
+  const mintBalances = useWalletStore((s) => s.mintBalances);
+  const availableBalance = mintBalances[mintUrl] || 0;
+  const { transactions } = useHistory();
+  const { paying: bitcoinPaying, requesting: bitcoinRequesting, payInvoice, receiveLightning, receiveOnChain, estimateOnChain, executeOnChain } = useBitcoin(mintUrl);
+
+  const send = useBitcoinSend({
+    active: activeTab === 'send', mintUrl, availableBalance,
+    busy: bitcoinPaying || bitcoinRequesting, limits: onchainLimits, initialInvoice, initialAmountSats,
+    // Read on an action, after the live validation hook below has rendered.
+    readClipboard: readClipboardText,
+    readValidation: destination => destination === parsedInput.addressOrInvoice ? lnurlValidation : null,
+    resolveLnurl: validateLnurlPay, fetchInvoice: fetchLnurlPayInvoice,
+    payInvoice: (invoice, mint, onError) => payInvoice(invoice, mint, { silent: true, onError }),
+    estimate: (destination, amount, mint, onError) => estimateOnChain(destination, amount, mint, { silent: true, onError }),
+    execute: (estimate, destination, mint, onError) => executeOnChain(estimate, destination, mint, { silent: true, onError }),
+    onError: message => toast.error(message),
+    recordSuccessfulUse: (type, destination) => useAddressBookStore.getState().recordSuccessfulUse(type, destination),
+  });
+  const {
+    destination: destinationInput, amount: lnurlSendAmount, step: sendStep, parsedInput, isLnurlInput, isInsufficient,
+    changeDestination: setDestinationInput, changeAmount: setLnurlSendAmount, paste: handlePasteDestination,
+    estimate: onchainEstimate, fetching: isFetchingLnurl,
+    payLightning: handlePayLightning, nextInput: handleNextFromInput, nextAmount: handleNextFromAmount,
+    confirm: handleConfirmOnchain, cancel: cancelSend,
+  } = send;
+  const lnurlValidation = useLnurlValidation(isLnurlInput ? parsedInput.addressOrInvoice : null);
+  const isLnurlBlocked = isLnurlInput && lnurlValidation.status !== 'valid';
+  const receive = useBitcoinReceive({
+    active: activeTab === 'receive', mintUrl, busy: bitcoinRequesting,
+    limits: onchainLimits, transactions,
+    receiveLightning: (amount, mint, onError) => receiveLightning(amount, mint, { silent: true, onError }),
+    receiveOnChain: (amount, mint, onError) => receiveOnChain(amount, mint, { silent: true, onError }),
+    copyText: writeClipboardText,
+    onCopied: type => toast.success(type === 'uri' ? 'Copied Payment URI (auto-fills amount in Sparrow)!' : 'Copied to clipboard!'),
+    onCopyError: () => toast.error('Failed to copy'),
+    onRequestError: error => toast.error(error instanceof Error ? error.message : String(error)),
+    onReceived: amount => setReceived({ amount, visible: true }),
+    onReset: () => setReceived(null),
+  });
+  const {
+    mode: receiveMode, amount: receiveAmount, amountSats: parsedReceiveAmount,
+    invoice: receiveInvoice, address: boardingAddress, depositSats,
+    feeEstimateSats: receiveFeeEstimateSats, success: receiveSuccess, copied, copiedType,
+    requestDisabled: isReceiveDisabled, minOnchainSats: minReceiveOnchain, maxOnchainSats: maxReceiveOnchain,
+    request: handleRequestInvoice, copy: handleCopy, cancel: cancelReceive,
+  } = receive;
+  const paying = bitcoinPaying || send.paying;
+  const requesting = bitcoinRequesting || receive.requesting || send.estimating;
+  const payment = activeTab === 'send' ? send.payment : {
+    status: received?.visible ? 'success' as const : null, amountSats: received?.amount, title: 'Payment received',
+    error: '', recipient: undefined, txid: undefined,
+  };
+  const { status: paymentStatus, error: paymentErrorMessage, amountSats: paymentAmount,
+    recipient: paymentRecipient, title: paymentTitle, txid: onchainTxid } = payment;
+  const handleClose = () => { cancelSend(); cancelReceive(); onClose(); };
+  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation, isClosing } = useBottomSheet({ onClose: handleClose, modal: !page });
+  useLayoutEffect(() => {
+    if (isClosing) { cancelSend(); cancelReceive(); }
+  }, [isClosing, cancelSend, cancelReceive]);
   useEffect(() => {
     if (!page) {
+      cancelSend(); cancelReceive();
       navigate(initialTab === 'send' ? '/send-bitcoin' : '/receive-bitcoin', {
         state: { mintUrl: initialMintUrl, invoice: initialInvoice, amountSats: initialAmountSats },
       });
       onClose();
     }
-  }, [page, initialTab, initialMintUrl, initialInvoice, initialAmountSats, navigate, onClose]);
-  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
-  const [mintUrl, setMintUrl] = useState(initialMintUrl);
-  // Send state
-  const initialParsed = parseBitcoinInput(initialInvoice);
-  const [destinationInput, setDestinationInput] = useState(
-    initialParsed.type === 'onchain' ? initialParsed.addressOrInvoice : initialInvoice
-  );
-  const [showScanner, setShowScanner] = useState(false);
-  const [showAddressBook, setShowAddressBook] = useState(false);
-  const parsedInput = parseBitcoinInput(destinationInput);
-  const isLnurlInput = parsedInput.type === 'lnurl' || parsedInput.type === 'lnurl-pay';
-  // Live, debounced check that the Lightning Address / LNURL actually resolves
-  const lnurlValidation = useLnurlValidation(isLnurlInput ? parsedInput.addressOrInvoice : null);
-  const isLnurlBlocked = isLnurlInput && lnurlValidation.status !== 'valid';
+  }, [page, initialTab, initialMintUrl, initialInvoice, initialAmountSats, navigate, onClose, cancelSend, cancelReceive]);
 
-  const [lnurlParams, setLnurlParams] = useState<any | null>(null);
-
-  const [lnurlSendAmount, setLnurlSendAmount] = useState(() => {
-    const prefill = initialAmountSats ?? initialParsed.amountSats;
-    return prefill && prefill > 0 ? prefill.toString() : '';
-  });
-  const [isFetchingLnurl, setIsFetchingLnurl] = useState(false);
-  const [sendStep, setSendStep] = useState<SendStep>(() =>
-    initialParsed.type === 'onchain' ? 'amount' : 'input'
-  );
-  const [onchainEstimate, setOnchainEstimate] = useState<OnchainSendEstimate | null>(null);
-  const [onchainLimits, setOnchainLimits] = useState<OnchainLimits | null>(null);
-
-  // Receive state
-  const [receiveMode, setReceiveMode] = useState<ReceiveMode>('lightning');
-  const [receiveAmount, setReceiveAmount] = useState('');
-  const parsedReceiveAmount = parseInt(receiveAmount) || 0;
-  const [quoteId, setQuoteId] = useState<string | null>(null);
-  const [receiveInvoice, setReceiveInvoice] = useState<string | null>(null);
-  const [boardingAddress, setBoardingAddress] = useState<string | null>(null);
-  const [depositSats, setDepositSats] = useState<number | null>(null);
-  const [receiveFeeEstimateSats, setReceiveFeeEstimateSats] = useState<number | null>(null);
-  const [copied, setCopied] = useState(false);
-
-
-  const mintBalances = useWalletStore((s) => s.mintBalances);
-  const availableBalance = mintBalances[mintUrl] || 0;
-
-  const { transactions } = useHistory();
-  const { paying, requesting, payInvoice, receiveLightning, receiveOnChain, estimateOnChain, executeOnChain } = useBitcoin(mintUrl);
-
-  const minReceiveOnchain = onchainLimits?.min_sats ?? 2500;
-  const maxReceiveOnchain = onchainLimits?.max_sats ?? 100000000;
-
-  const isReceiveDisabled =
-    requesting ||
-    parsedReceiveAmount <= 0 ||
-    (receiveMode === 'onchain' && (parsedReceiveAmount < minReceiveOnchain || parsedReceiveAmount > maxReceiveOnchain));
-
-
-  const currentTx = quoteId ? transactions.find(t => t.id === quoteId) : null;
-  const receiveSuccess = currentTx?.status === 'Success';
-
-  const [paymentStatus, setPaymentStatus] = useState<StampPaymentStatus | null>(null);
-  const [paymentErrorMessage, setPaymentErrorMessage] = useState('');
-  const [paymentAmount, setPaymentAmount] = useState<number | undefined>(undefined);
-  const [paymentRecipient, setPaymentRecipient] = useState<string | undefined>(undefined);
-  const [paymentTitle, setPaymentTitle] = useState<string | undefined>(undefined);
-  const [onchainTxid, setOnchainTxid] = useState<string | null>(null);
-  const [lastPayAction, setLastPayAction] = useState<(() => void) | undefined>(undefined);
-  const [hasTriggeredReceiveCelebration, setHasTriggeredReceiveCelebration] = useState(false);
-
-  // Preload on-chain limits when an on-chain address or on-chain receive mode is active
+  // The two flows share limit data; only the active prefetch may publish a result.
   useEffect(() => {
+    let retired = false;
     if ((parsedInput.type === 'onchain' || receiveMode === 'onchain') && !onchainLimits) {
-      getOnchainSendLimits().then(setOnchainLimits).catch(console.error);
+      getOnchainSendLimits().then(limits => { if (!retired) setOnchainLimits(limits); })
+        .catch(error => { if (!retired) console.error(error); });
     }
+    return () => { retired = true; };
   }, [parsedInput.type, receiveMode, onchainLimits]);
-
-  // Trigger sovereign stamp celebration when an incoming invoice is settled
-  useEffect(() => {
-    if (receiveSuccess && !hasTriggeredReceiveCelebration) {
-      setHasTriggeredReceiveCelebration(true);
-      setPaymentTitle('Payment received');
-      setPaymentAmount(parsedReceiveAmount || currentTx?.amount);
-      setPaymentStatus('success');
-    }
-  }, [receiveSuccess, hasTriggeredReceiveCelebration, parsedReceiveAmount, currentTx]);
-
-  const isInsufficient = (parsedInput.type === 'lightning' && parsedInput.amountSats !== null)
-    ? parsedInput.amountSats > availableBalance
-    : false;
-
-  const handlePayLightning = async () => {
-    if (parsedInput.type !== 'lightning' || !parsedInput.addressOrInvoice || isInsufficient) return;
-    setPaymentErrorMessage('');
-    setPaymentAmount(parsedInput.amountSats || undefined);
-    setPaymentTitle('Payment sent');
-    setLastPayAction(() => handlePayLightning);
-    let mintErr = '';
-    const success = await payInvoice(parsedInput.addressOrInvoice, undefined, {
-      silent: true,
-      onError: (msg) => { mintErr = msg; }
-    });
-    if (success) {
-      setPaymentStatus('success');
-      if (destinationInput && (isLnurlInput || destinationInput.includes('@'))) {
-        try {
-          useAddressBookStore.getState().recordSuccessfulUse('lightning', destinationInput);
-        } catch (e) {
-          console.warn('Failed to record lightning contact:', e);
-        }
-      }
-    } else {
-      setPaymentErrorMessage(mintErr || 'The mint could not complete this payment.');
-      setPaymentStatus('failed');
-    }
-  };
-
-  const handleNextFromInput = async () => {
-    if (parsedInput.type === 'onchain') {
-      if (!onchainLimits) {
-        getOnchainSendLimits().then(setOnchainLimits).catch(console.error);
-      }
-      setSendStep('amount');
-    } else if (isLnurlInput) {
-      try {
-        setIsFetchingLnurl(true);
-        // Reuse the already-validated params (cached) instead of re-fetching
-        const entry = lnurlValidation.status === 'valid' && lnurlValidation.params
-          ? { params: lnurlValidation.params, error: null }
-          : await validateLnurlPay(parsedInput.addressOrInvoice);
-        if (entry.error || !entry.params) {
-          toast.error(entry.error || 'Invalid Lightning address');
-          return;
-        }
-        const params = entry.params;
-        setLnurlParams(params);
-        if (params.minSendable === params.maxSendable) {
-          setLnurlSendAmount(Math.floor(params.minSendable / 1000).toString());
-        }
-        setSendStep('amount');
-      } finally {
-        setIsFetchingLnurl(false);
-      }
-    }
-  };
-
-  const handleNextFromAmount = async () => {
-    const amt = parseInt(lnurlSendAmount) || 0;
-    if (amt <= 0) return;
-
-    if (amt > availableBalance) {
-      toast.error('Insufficient balance to send this amount');
-      return;
-    }
-
-    if (parsedInput.type === 'onchain' && parsedInput.addressOrInvoice) {
-      const minLimit = onchainLimits?.min_sats ?? 2500;
-      const maxLimit = onchainLimits?.max_sats ?? 100000000;
-      if (amt < minLimit) {
-        toast.error(`Minimum on-chain send is ${minLimit.toLocaleString()} sats`);
-        return;
-      }
-      if (amt > maxLimit) {
-        toast.error(`Maximum on-chain send is ${maxLimit.toLocaleString()} sats`);
-        return;
-      }
-      const estimate = await estimateOnChain(parsedInput.addressOrInvoice, amt);
-      if (estimate) {
-        setOnchainEstimate(estimate);
-        setSendStep('confirm');
-      }
-      return;
-    }
-
-    if (lnurlParams) {
-      setIsFetchingLnurl(true);
-      setPaymentErrorMessage('');
-      setPaymentAmount(amt);
-      setPaymentRecipient(parsedInput.addressOrInvoice);
-      setPaymentTitle('Payment sent');
-      setLastPayAction(() => handleNextFromAmount);
-      try {
-        const invoiceData = await fetchLnurlPayInvoice(lnurlParams.callback, amt * 1000);
-        let mintErr = '';
-        const success = await payInvoice(invoiceData.pr, undefined, {
-          silent: true,
-          onError: (msg) => { mintErr = msg; }
-        });
-        if (success) {
-          setPaymentStatus('success');
-          if (destinationInput) {
-            try {
-              useAddressBookStore.getState().recordSuccessfulUse('lightning', destinationInput);
-            } catch (e) {
-              console.warn('Failed to record lightning contact:', e);
-            }
-          }
-        } else {
-          setPaymentErrorMessage(mintErr || 'The mint could not complete this payment.');
-          setPaymentStatus('failed');
-        }
-      } catch (e: any) {
-        setPaymentErrorMessage(e?.message || 'LNURL payment failed.');
-        setPaymentStatus('failed');
-      } finally {
-        setIsFetchingLnurl(false);
-      }
-      return;
-    }
-  };
-
-  const handleConfirmOnchain = async () => {
-    if (!onchainEstimate || !parsedInput.addressOrInvoice) return;
-    setPaymentErrorMessage('');
-    setPaymentAmount(onchainEstimate.amount);
-    setPaymentRecipient(parsedInput.addressOrInvoice);
-    setPaymentTitle('Payment sent');
-    setOnchainTxid(null);
-    setLastPayAction(() => handleConfirmOnchain);
-    try {
-      const res = await executeOnChain(onchainEstimate, parsedInput.addressOrInvoice);
-      if (res && res.txid) {
-        setOnchainTxid(res.txid);
-        setPaymentStatus('success');
-        if (parsedInput.addressOrInvoice) {
-          try {
-            useAddressBookStore.getState().recordSuccessfulUse('onchain', parsedInput.addressOrInvoice);
-          } catch (e) {
-            console.warn('Failed to record onchain contact:', e);
-          }
-        }
-      } else {
-        setPaymentErrorMessage('On-chain transaction execution failed.');
-        setPaymentStatus('failed');
-      }
-    } catch (e: any) {
-      setPaymentErrorMessage(e?.message || 'On-chain transaction failed.');
-      setPaymentStatus('failed');
-    }
-  };
-
-  const handleRequestInvoice = async () => {
-    if (receiveMode === 'onchain') {
-      if (parsedReceiveAmount < minReceiveOnchain || parsedReceiveAmount > maxReceiveOnchain) return;
-      const res = await receiveOnChain(parsedReceiveAmount, mintUrl);
-      if (res) {
-        setBoardingAddress(res.boardingAddress);
-        setDepositSats(res.amountSats || parsedReceiveAmount);
-        setReceiveFeeEstimateSats(res.estimatedFeeSats ?? null);
-        if (res.quoteId) {
-          setQuoteId(res.quoteId);
-        }
-      }
-      return;
-    }
-
-    if (parsedReceiveAmount <= 0) return;
-    const res = await receiveLightning(parsedReceiveAmount, mintUrl);
-    if (res) {
-      setQuoteId(res.quoteId);
-      setReceiveInvoice(res.receiveInvoice);
-    }
-  };
-
-  const [copiedType, setCopiedType] = useState<string | null>(null);
-
-  const handleCopy = async (text: string, type: string = 'text') => {
-    if (!text) return;
-    try {
-      await writeClipboardText(text);
-      setCopied(true);
-      setCopiedType(type);
-      toast.success(type === 'uri' ? 'Copied Payment URI (auto-fills amount in Sparrow)!' : 'Copied to clipboard!');
-      setTimeout(() => {
-        setCopied(false);
-        setCopiedType(null);
-      }, 2000);
-    } catch {
-      toast.error('Failed to copy');
-    }
-  };
 
   const switchTab = (tab: Tab) => {
     setActiveTab(tab);
-    if (tab === 'send') {
-      setDestinationInput('');
-      setShowScanner(false);
-      setSendStep('input');
-    } else {
-      setReceiveAmount('');
-      setQuoteId(null);
-      setReceiveInvoice(null);
-      setBoardingAddress(null);
-    }
+    if (tab === 'send') { cancelReceive(); send.reset(); setShowScanner(false); }
+    else { cancelSend(); receive.reset(); }
   };
 
-  const confirmAction = (
-                      <button
-                        onClick={handleConfirmOnchain}
-                        disabled={paying}
-                        className="bitcoin-primary w-full bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary py-4 rounded-2xl font-bold text-[16px] tracking-wide transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] shadow-lg cursor-pointer"
-                      >
-                        {paying ? (
-                          <>
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            <span>Sending On-Chain...</span>
-                          </>
-                        ) : (
-                          <span>Confirm & Send</span>
-                        )}
-                      </button>
-  );
+  const confirmAction = <BitcoinSendConfirmation paying={paying} onConfirm={handleConfirmOnchain} />;
 
   const receiveEntry = activeTab === 'receive' && !receiveSuccess && !receiveInvoice && !boardingAddress;
   const amountEntry = activeTab === 'send' && sendStep === 'amount';
   const back = () => {
-    if (activeTab === 'send' && sendStep !== 'input') setSendStep(sendStep === 'confirm' ? 'amount' : 'input');
-    else onClose();
+    if (activeTab === 'send' && sendStep !== 'input') send.back();
+    else handleClose();
   };
   const renderContent = (content: React.ReactNode) => page ? (
     <PaymentPageLayout
@@ -489,12 +257,7 @@ export const BitcoinPaymentView: React.FC<BitcoinPaymentViewProps> = ({ mintUrl:
             <MintBalancePicker
               mintUrl={mintUrl}
               balances={mintBalances}
-              onSelect={async mint => {
-                setMintUrl(mint);
-                if (activeTab === 'receive' && receiveMode === 'onchain' && boardingAddress) {
-                  await receiveOnChain(parsedReceiveAmount || 10000, mint);
-                }
-              }}
+              onSelect={setMintUrl}
             />
           </div>
           </>}
@@ -508,175 +271,27 @@ export const BitcoinPaymentView: React.FC<BitcoinPaymentViewProps> = ({ mintUrl:
               /* ─── SEND TAB ──────────────────────────────── */
               <div className="bitcoin-send-form flex flex-col gap-4">
                 {sendStep === 'input' && (
-                  <div className="bitcoin-destination-form relative flex flex-col gap-2">
-                    {showScanner ? (
-                      <div className="relative rounded-xl overflow-hidden border border-outline-variant/30 aspect-square">
-                        <Scanner
-                          onScan={(result) => {
-                            if (result && result.length > 0) {
-                              setDestinationInput(result[0].rawValue);
-                              setShowScanner(false);
-                            }
-                          }}
-                          onError={(e) => toast.error(e.message)}
-                        />
-                        <button onClick={() => setShowScanner(false)} className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-highest px-4 py-2 rounded-full text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface">Cancel Scanner</button>
-                      </div>
-                    ) : (
-                      <div className="bitcoin-payment-input flex flex-col gap-1.5">
-                        {page && <button
-                          type="button"
-                          aria-label="Scan Bitcoin payment"
-                          onClick={() => setShowScanner(true)}
-                          disabled={paying}
-                          className="bitcoin-scan-button rounded-lg border-2 border-dashed border-outline-variant/50 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-3 group relative bg-surface-container-lowest/50 text-primary cursor-pointer disabled:opacity-40"
-                        >
-                          <div className="relative w-16 h-16 flex items-center justify-center shrink-0">
-                            <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-primary rounded-tl-sm" />
-                            <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-primary rounded-tr-sm" />
-                            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-primary rounded-bl-sm" />
-                            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-primary rounded-br-sm" />
-                            <QrCode className="w-10 h-10 text-primary opacity-80 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                          <span className="text-label-caps font-label-caps">Tap to Scan QR Code</span>
-                        </button>}
-                        <FormField
-                          label="Pay to:"
-                          className="bitcoin-destination-field gap-1.5"
-                          labelClassName="text-body-md font-body-md text-on-surface-variant"
-                        >
-                          {control => (
-                            <div className={`relative glow-effect transition-all duration-300 rounded-xl bg-[#0c1b14] border overflow-hidden ${
-                              isInsufficient || lnurlValidation.status === 'invalid'
-                                ? 'border-error/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
-                                : lnurlValidation.status === 'valid'
-                                ? 'border-emerald-500/40'
-                                : 'border-[#142d20] focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/40'
-                            }`}>
-                              <textarea
-                                {...control}
-                                value={destinationInput}
-                                onChange={(e) => setDestinationInput(e.target.value)}
-                                className="w-full bg-transparent text-on-surface font-label-caps text-label-caps p-3.5 pb-2 border-none focus:outline-none resize-none placeholder:text-on-surface-variant/50 min-h-[76px]"
-                                placeholder="Lightning, LNURL, or On-Chain..."
-                                rows={3}
-                                spellCheck={false}
-                              />
-
-                              {/* Action Toolbar */}
-                              <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-[#142d20]">
-                                <div>
-                                  {destinationInput ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setDestinationInput('')}
-                                      className="text-[12px] font-bold text-on-surface-variant hover:text-error transition-colors cursor-pointer"
-                                    >
-                                      Clear
-                                    </button>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={async () => {
-                                        try {
-                                          const text = await readClipboardText();
-                                          if (text) setDestinationInput(text.trim());
-                                        } catch (e) {
-                                          console.warn('Clipboard read failed', e);
-                                        }
-                                      }}
-                                      className="text-[12px] font-bold text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-                                    >
-                                      Paste
-                                    </button>
-                                  )}
-                                </div>
-
-                                <div className="flex items-center gap-1.5">
-                                  <IconButton
-                                    type="button"
-                                    onClick={() => setShowAddressBook(true)}
-                                    className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all border border-outline-variant/20 shadow-sm"
-                                    aria-label="Open Address Book"
-                                    title="Open Address Book"
-                                  >
-                                    <BookUser size={15} aria-hidden="true" />
-                                  </IconButton>
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowScanner(true)}
-                                    className="p-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-primary transition-all cursor-pointer border border-outline-variant/20 shadow-sm flex items-center justify-center"
-                                    title="Scan QR Code"
-                                    hidden={page}
-                                  >
-                                    <QrCode size={15} />
-                                  </button>
-                                </div>
-                              </div>
-
-                              <AddressBookAutocomplete
-                                type="bitcoin"
-                                query={destinationInput}
-                                visible={destinationInput.length >= 2 && !destinationInput.startsWith('lnbc')}
-                                onSelect={(c) => {
-                                  setDestinationInput(c.value);
-                                }}
-                                onClose={() => {}}
-                              />
-                            </div>
-                          )}
-                        </FormField>
-                      </div>
-                    )}
-                    {parsedInput.type === 'lightning' && parsedInput.amountSats !== null && !showScanner && (
-                      <div className={`text-[12px] font-label-caps px-1 ${isInsufficient ? 'text-error' : 'text-on-surface-variant'}`}>
-                        Invoice Amount: ₿{parsedInput.amountSats.toLocaleString()}
-                        {isInsufficient && ' (Insufficient balance)'}
-                      </div>
-                    )}
-                    {parsedInput.type === 'onchain' && destinationInput.length > 0 && !showScanner && (
-                      <div className="flex items-center justify-between text-[12px] font-mono px-3 py-2 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-on-surface-variant">
-                        <span>On-Chain Bitcoin Address</span>
-                        <span className="text-primary font-semibold">
-                          Min: {(onchainLimits?.min_sats ?? 2500).toLocaleString()} sats
-                        </span>
-                      </div>
-                    )}
-                    {parsedInput.type === 'invalid' && destinationInput.length > 0 && !showScanner && (
-                      <div className="text-[12px] font-label-caps px-1 text-error">
-                        Invalid invoice or address
-                      </div>
-                    )}
-                    {isLnurlInput && !showScanner && (
-                      <LnurlValidationStatus input={parsedInput.addressOrInvoice} validation={lnurlValidation} />
-                    )}
-
-                    {!showScanner && (parsedInput.type === 'lightning' ? (
-                      <button
-                        onClick={handlePayLightning}
-                        disabled={paying || !destinationInput || isInsufficient}
-                        className={`bitcoin-primary mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${paying || !destinationInput || isInsufficient ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
-                          }`}
-                      >
-                        {paying ? <Loader2 className="animate-spin w-6 h-6" /> : <><Zap className="w-5 h-5 mr-2" /> Pay Invoice</>}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleNextFromInput}
-                        disabled={(!isLnurlInput && parsedInput.type !== 'onchain') || isLnurlBlocked || isFetchingLnurl}
-                        className={`bitcoin-primary mt-2 bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[18px] w-full py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center cursor-pointer ${((!isLnurlInput && parsedInput.type !== 'onchain') || isLnurlBlocked || isFetchingLnurl) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'
-                          }`}
-                      >
-                        {isFetchingLnurl || (isLnurlInput && lnurlValidation.status === 'checking') ? (
-                          <Loader2 className="animate-spin w-6 h-6" />
-                        ) : isLnurlInput && lnurlValidation.status === 'invalid' ? (
-                          'Invalid Address'
-                        ) : (
-                          'Next'
-                        )}
-                      </button>
-                    ))}
-                  </div>
+                  <BitcoinDestinationEntry
+                    page={page} value={destinationInput} scannerVisible={showScanner}
+                    parsedInput={parsedInput} lnurlValidation={lnurlValidation}
+                    insufficientBalance={isInsufficient} lnurlInput={isLnurlInput} lnurlBlocked={isLnurlBlocked}
+                    paying={paying} fetchingInvoice={isFetchingLnurl} minOnchainSats={onchainLimits?.min_sats ?? 2500}
+                    onChange={setDestinationInput} onPaste={handlePasteDestination}
+                    onOpenScanner={() => setShowScanner(true)} onCloseScanner={() => setShowScanner(false)}
+                    onOpenAddressBook={() => setShowAddressBook(true)}
+                    onPayInvoice={handlePayLightning} onNext={handleNextFromInput}
+                    scanner={
+                      <Scanner
+                        onScan={(result) => {
+                          if (result && result.length > 0) {
+                            setDestinationInput(result[0].rawValue);
+                            setShowScanner(false);
+                          }
+                        }}
+                        onError={(e) => toast.error(e.message)}
+                      />
+                    }
+                  />
                 )}
 
                 {sendStep === 'amount' && (() => {
@@ -692,7 +307,7 @@ export const BitcoinPaymentView: React.FC<BitcoinPaymentViewProps> = ({ mintUrl:
                   return (
                     <div className="bitcoin-send-amount-form flex flex-col gap-4 animate-fade-in">
                       <div className="bitcoin-step-caption flex items-center justify-between mb-1">
-                        <button onClick={() => setSendStep('input')} className="text-on-surface-variant hover:text-on-surface text-sm font-bold cursor-pointer">← Back</button>
+                        <button onClick={send.back} className="text-on-surface-variant hover:text-on-surface text-sm font-bold cursor-pointer">← Back</button>
                         <p className="text-label-caps font-label-caps text-on-surface-variant">
                           {isOnchain ? 'SEND ON-CHAIN' : 'SEND AMOUNT'}
                         </p>
@@ -764,266 +379,29 @@ export const BitcoinPaymentView: React.FC<BitcoinPaymentViewProps> = ({ mintUrl:
                 })()}
 
                 {sendStep === 'confirm' && onchainEstimate && (
-                  <section className="bitcoin-review" aria-label="Review on-chain Bitcoin payment">
-                    {!page && <button type="button" onClick={() => setSendStep('amount')} className="text-primary text-sm self-start">Back to amount</button>}
-                    <div className="bitcoin-review-amount">
-                      <p className="text-sm text-on-surface-variant">Sending</p>
-                      <p className="bitcoin-review-value text-primary">₿{onchainEstimate.amount.toLocaleString()}</p>
-                    </div>
-                    <dl className="bitcoin-review-details">
-                      <div className="bitcoin-review-row">
-                        <dt>From</dt>
-                        <dd className="flex items-center gap-2 min-w-0">
-                          <MintIcon mintUrl={mintUrl} className="w-6 h-6 shrink-0 rounded-full" textClassName="text-primary text-[10px]" />
-                          <MintName mintUrl={mintUrl} className="truncate text-on-surface" />
-                        </dd>
-                      </div>
-                      <div className="bitcoin-review-destination">
-                        <dt>To</dt>
-                        <dd className="text-on-surface font-mono">{parsedInput.addressOrInvoice}</dd>
-                      </div>
-                      <div className="bitcoin-review-row"><dt>Network &amp; bridge fee</dt><dd>{onchainEstimate.ark_fee.toLocaleString()} sats</dd></div>
-                      <div className="bitcoin-review-row"><dt>Lightning &amp; mint fee</dt><dd>{onchainEstimate.cashu_fee.toLocaleString()} sats</dd></div>
-                      <div className="bitcoin-review-row bitcoin-review-total"><dt>Total deducted</dt><dd>{onchainEstimate.total_cost.toLocaleString()} sats</dd></div>
-                    </dl>
-                    {!page && confirmAction}
-                  </section>
+                  <BitcoinSendReview
+                    page={page} mintUrl={mintUrl} destination={parsedInput.addressOrInvoice}
+                    amountSats={onchainEstimate.amount} networkFeeSats={onchainEstimate.ark_fee}
+                    mintFeeSats={onchainEstimate.cashu_fee} totalSats={onchainEstimate.total_cost}
+                    onBack={send.back} confirmation={confirmAction}
+                  />
                 )}
               </div>
             ) : (
               /* ─── RECEIVE TAB ─────────────────────────────── */
-              receiveSuccess ? (
-                <div className="flex flex-col items-center gap-5">
-                  <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                    <Check size={32} className="text-emerald-400" />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-label-caps font-label-caps text-on-surface-variant mb-1">RECEIVED</p>
-                    <p className="text-[28px] font-display-lg text-emerald-400">₿{parsedReceiveAmount.toLocaleString()}</p>
-                  </div>
-                  <button
-                    onClick={onClose}
-                    className="w-full py-3.5 sm:py-4 rounded-2xl bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20 cursor-pointer"
-                  >
-                    Done
-                  </button>
-                </div>
-              ) : receiveInvoice ? (
-                /* Show invoice QR */
-                <div className="flex flex-col items-center gap-5">
-                  <div className="relative">
-                    <div className="bg-white p-4 rounded-xl shadow-lg">
-                      <QRCode value={receiveInvoice} size={200} />
-                    </div>
-                    <div className="absolute inset-0 bg-primary/20 rounded-xl blur-xl -z-10 animate-pulse"></div>
-                  </div>
-
-                  <div className="w-full flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-2 min-w-0"><MintIcon mintUrl={mintUrl} className="w-6 h-6 shrink-0 rounded-full" textClassName="text-primary text-[10px]" /><MintName mintUrl={mintUrl} className="text-sm text-on-surface truncate" /></div>
-                    <p className="text-xl text-primary shrink-0">₿{parsedReceiveAmount.toLocaleString()}</p>
-                  </div>
-                  <div className="w-full flex flex-col gap-2">
-                    <div
-                      onClick={() => handleCopy(receiveInvoice)}
-                      className="w-full bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30 shadow-inner cursor-pointer hover:border-primary/30 transition-colors"
-                    >
-                      <p className="text-[11px] font-mono text-on-surface-variant break-all line-clamp-3 select-all">{receiveInvoice}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleCopy(receiveInvoice)}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-primary/15 text-primary font-bold text-[15px] hover:bg-primary/25 transition-colors border border-primary/20 cursor-pointer"
-                      >
-                        {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> Copy Invoice</>}
-                      </button>
-                      <button
-                        onClick={() => setReceiveInvoice(null)}
-                        className="px-6 py-3 rounded-2xl bg-surface-container-highest text-on-surface-variant font-bold text-[15px] hover:bg-surface-bright transition-colors border border-outline-variant/20 cursor-pointer"
-                      >
-                        Back
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-on-surface-variant text-[13px]">
-                    <Loader2 className="animate-spin w-4 h-4" />
-                    <span>Waiting for payment...</span>
-                  </div>
-                </div>
-              ) : boardingAddress ? (
-                /* Show ASP Boarding QR */
-                <div className="flex flex-col items-center gap-5">
-                  <div className="relative">
-                    <div className="bg-white p-4 rounded-xl shadow-lg">
-                      <QRCode
-                        value={
-                          depositSats
-                            ? `bitcoin:${boardingAddress}?amount=${(depositSats / 100_000_000).toFixed(8)}`
-                            : `bitcoin:${boardingAddress}`
-                        }
-                        size={200}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="w-full flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-2 min-w-0"><MintIcon mintUrl={mintUrl} className="w-6 h-6 shrink-0 rounded-full" textClassName="text-primary text-[10px]" /><MintName mintUrl={mintUrl} className="text-sm text-on-surface truncate" /></div>
-                    <p className="text-sm text-on-surface-variant shrink-0">Receive ₿{parsedReceiveAmount.toLocaleString()}</p>
-                  </div>
-
-                  <dl className="w-full text-sm text-on-surface-variant">
-                    <div className="flex items-center justify-between gap-4">
-                      <dt>Fees</dt>
-                      <dd>{receiveFeeEstimateSats === null ? '—' : `≈ ₿${receiveFeeEstimateSats.toLocaleString()}`}</dd>
-                    </div>
-                  </dl>
-
-                  {(() => {
-                    const bip21Uri = depositSats
-                      ? `bitcoin:${boardingAddress}?amount=${(depositSats / 100_000_000).toFixed(8)}`
-                      : `bitcoin:${boardingAddress}`;
-                    return (
-                      <div className="w-full flex flex-col gap-2.5">
-                        <div
-                          onClick={() => handleCopy(bip21Uri, 'uri')}
-                          className="w-full bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/30 shadow-inner cursor-pointer hover:border-primary/40 transition-colors text-center group"
-                          title="Click to copy Payment URI"
-                        >
-                          <p className="text-[11px] font-mono text-on-surface-variant break-all group-hover:text-primary transition-colors">
-                            {bip21Uri}
-                          </p>
-                          <p className="text-[10px] text-primary/80 mt-1 font-medium">
-                            (BIP-21 URI &bull; Click to copy with amount)
-                          </p>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(bip21Uri, 'uri')}
-                            className="flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-primary text-on-primary font-bold text-[13px] hover:opacity-95 transition-all shadow-md cursor-pointer"
-                          >
-                            {copiedType === 'uri' ? <><Check size={16} /> Copied URI!</> : <><Copy size={16} /> Copy URI (For Sparrow)</>}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(boardingAddress, 'address')}
-                            className="flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-primary/15 text-primary font-bold text-[13px] hover:bg-primary/25 transition-colors border border-primary/20 cursor-pointer"
-                          >
-                            {copiedType === 'address' ? <><Check size={16} /> Copied Address!</> : <><Copy size={16} /> Copy Address Only</>}
-                          </button>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openMempoolAddress(boardingAddress)}
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-surface-container-highest/80 hover:bg-surface-bright text-primary font-semibold text-[13px] transition-colors border border-outline-variant/20 cursor-pointer"
-                          >
-                            <svg className="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                            <span>Track on Mempool</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setBoardingAddress(null)}
-                            className="px-6 py-2.5 rounded-xl bg-surface-container-highest text-on-surface-variant font-bold text-[13px] hover:bg-surface-bright transition-colors border border-outline-variant/20 cursor-pointer"
-                          >
-                            Back
-                          </button>
-                        </div>
-
-                        <p className="text-[11px] text-center text-on-surface-variant/80 mt-0.5">
-                          💡 Tip: Pasting the <strong>Payment URI</strong> into Sparrow or Electrum automatically fills both the address and exact satoshi amount.
-                        </p>
-                      </div>
-                    );
-                  })()}
-
-                  <div className="flex items-center gap-2 text-on-surface-variant text-[13px] bg-surface-container-highest p-3 rounded-lg border border-outline-variant/10">
-                    <Loader2 className="animate-spin w-4 h-4 text-primary" />
-                    <span>Waiting for Bitcoin deposit...</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="bitcoin-receive-form flex flex-col gap-3.5 sm:gap-4">
-                  {/* Mode Toggle */}
-                  <div className="bitcoin-receive-mode"><SlidingSegmentedControl<ReceiveMode>
-                    value={receiveMode}
-                    onChange={(mode) => {
-                      setReceiveMode(mode);
-                      setReceiveAmount('');
-                    }}
-                    options={[
-                      { id: 'lightning', label: 'Lightning', icon: <Zap size={15} /> },
-                      { id: 'onchain', label: 'On-Chain', icon: <Bitcoin size={20} /> },
-                    ]}
-                  /></div>
-
-                  <div className="bitcoin-receive-fields flex flex-col gap-2.5 sm:gap-3">
-                    <div key={receiveMode} className="bitcoin-receive-inputs flex flex-col gap-2.5 sm:gap-3 animate-fade-in">
-                      <div className="bitcoin-amount-display"><AmountDisplay amount={receiveAmount} compact /></div>
-
-                      <div className="bitcoin-keypad" role="group" aria-label="Receive amount keypad"><NumberPad
-                        value={receiveAmount}
-                        disabled={requesting}
-                        onChange={(val) => {
-                          setReceiveAmount(val);
-                          setReceiveInvoice(null);
-                          setQuoteId(null);
-                          setBoardingAddress(null);
-                          setDepositSats(null);
-                          setReceiveFeeEstimateSats(null);
-                        }}
-                        compact
-                      /></div>
-
-                      {/* On-Chain Receive Limits & Real-Time Feedback */}
-                      {receiveMode === 'onchain' && (
-                        (parsedReceiveAmount > 0 && parsedReceiveAmount < minReceiveOnchain) || parsedReceiveAmount > maxReceiveOnchain
-                      ) && (
-                        <div className="bitcoin-receive-limits flex flex-col items-center gap-1.5 w-full">
-                          {parsedReceiveAmount > 0 && parsedReceiveAmount < minReceiveOnchain && (
-                            <div className="text-[12px] font-medium text-amber-400 bg-amber-500/15 px-3 py-1.5 rounded-lg border border-amber-500/30 text-center animate-fade-in shadow-sm">
-                              ⚠️ Minimum on-chain deposit is {minReceiveOnchain.toLocaleString()} sats ({(minReceiveOnchain - parsedReceiveAmount).toLocaleString()} more needed)
-                            </div>
-                          )}
-                          {parsedReceiveAmount > maxReceiveOnchain && (
-                            <div className="text-[12px] font-medium text-error bg-error/15 px-3 py-1.5 rounded-lg border border-error/30 text-center animate-fade-in shadow-sm">
-                              ⚠️ Maximum on-chain deposit is {maxReceiveOnchain.toLocaleString()} sats
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={handleRequestInvoice}
-                      disabled={isReceiveDisabled}
-                      className={`bitcoin-primary bg-gradient-to-r from-primary to-primary hover:from-primary/80 hover:to-primary text-on-primary font-headline-lg-mobile text-[16px] sm:text-[18px] w-full py-3.5 sm:py-4 rounded-2xl shadow-lg transition-all duration-200 flex justify-center items-center mt-1 cursor-pointer ${
-                        isReceiveDisabled
-                          ? 'opacity-50 cursor-not-allowed'
-                          : 'hover:opacity-90 active:scale-[0.98]'
-                      }`}
-                    >
-                      {requesting ? (
-                        <Loader2 className="animate-spin w-6 h-6" />
-                      ) : receiveMode === 'onchain' ? (
-                        parsedReceiveAmount > 0 && parsedReceiveAmount < minReceiveOnchain ? (
-                          `Min Deposit is ${minReceiveOnchain.toLocaleString()} sats`
-                        ) : parsedReceiveAmount > maxReceiveOnchain ? (
-                          `Exceeds ${maxReceiveOnchain.toLocaleString()} sats limit`
-                        ) : (
-                          'Get Bitcoin Address'
-                        )
-                      ) : (
-                        'Create Invoice'
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )
+              <BitcoinReceive
+                success={receiveSuccess} invoice={receiveInvoice} address={boardingAddress}
+                mode={receiveMode} amount={receiveAmount} amountSats={parsedReceiveAmount}
+                mintUrl={mintUrl} depositSats={depositSats} feeEstimateSats={receiveFeeEstimateSats}
+                copied={copied} copiedType={copiedType} requesting={requesting}
+                requestDisabled={isReceiveDisabled} minOnchainSats={minReceiveOnchain} maxOnchainSats={maxReceiveOnchain}
+                onDone={handleClose} onCopy={handleCopy} onRequest={handleRequestInvoice}
+                onInvoiceBack={cancelReceive}
+                onAddressBack={cancelReceive}
+                onTrackAddress={openMempoolAddress}
+                onModeChange={receive.changeMode}
+                onAmountChange={receive.changeAmount}
+              />
             )}
           </div>
         </div>
@@ -1045,10 +423,11 @@ export const BitcoinPaymentView: React.FC<BitcoinPaymentViewProps> = ({ mintUrl:
           onViewMempool={onchainTxid ? () => openMempoolTx(onchainTxid) : undefined}
           errorMessage={paymentErrorMessage}
           onDismiss={() => {
-            setPaymentStatus(null);
-            if (paymentStatus === 'success' && !page) onClose();
+            if (activeTab === 'send') send.dismissPayment();
+            else setReceived(previous => previous ? { ...previous, visible: false } : null);
+            if (paymentStatus === 'success' && !page) handleClose();
           }}
-          onRetry={lastPayAction}
+          onRetry={activeTab === 'send' ? send.retry : undefined}
         />
           </div>
       )}

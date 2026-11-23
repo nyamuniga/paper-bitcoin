@@ -9,6 +9,16 @@ import {
   OnchainSendEstimate,
 } from '../services/sparkService';
 
+interface BitcoinErrorOptions {
+  silent?: boolean;
+  onError?: (message: string) => void;
+}
+
+function reportBitcoinError(message: string, options?: BitcoinErrorOptions) {
+  if (!options?.silent) toast.error(message);
+  options?.onError?.(message);
+}
+
 export const useBitcoin = (mintUrl?: string) => {
   const [paying, setPaying] = useState(false);
   const [requesting, setRequesting] = useState(false);
@@ -47,11 +57,11 @@ export const useBitcoin = (mintUrl?: string) => {
     }
   };
 
-  const receiveLightning = async (amount: number, overrideMintUrl?: string) => {
+  const receiveLightning = async (amount: number, overrideMintUrl?: string, options?: BitcoinErrorOptions) => {
     if (isRequestingRef.current) return null;
     const targetMint = overrideMintUrl || mintUrl;
     if (!targetMint) {
-      toast.error('No mint specified for receiving');
+      reportBitcoinError('No mint specified for receiving', options);
       return null;
     }
 
@@ -62,7 +72,7 @@ export const useBitcoin = (mintUrl?: string) => {
       await refreshWallet();
       return { quoteId: res.quote_id as string, receiveInvoice: res.invoice as string };
     } catch (e: any) {
-      toast.error(`Failed to create invoice: ${e}`);
+      reportBitcoinError(`Failed to create invoice: ${e}`, options);
       return null;
     } finally {
       setRequesting(false);
@@ -70,11 +80,11 @@ export const useBitcoin = (mintUrl?: string) => {
     }
   };
 
-  const receiveOnChain = async (amountSats?: number, overrideMintUrl?: string) => {
+  const receiveOnChain = async (amountSats?: number, overrideMintUrl?: string, options?: BitcoinErrorOptions) => {
     if (isRequestingRef.current) return null;
     const targetMint = overrideMintUrl || mintUrl;
     if (!targetMint) {
-      toast.error('No mint specified for on-chain deposit');
+      reportBitcoinError('No mint specified for on-chain deposit', options);
       return null;
     }
     const amount = amountSats && amountSats > 0 ? amountSats : 10000;
@@ -93,7 +103,7 @@ export const useBitcoin = (mintUrl?: string) => {
         orderId: res.order_id,
       };
     } catch (e: any) {
-      toast.error(`Failed to get Bitcoin deposit address: ${e.message || e}`);
+      reportBitcoinError(`Failed to get Bitcoin deposit address: ${e.message || e}`, options);
       return null;
     } finally {
       setRequesting(false);
@@ -101,11 +111,11 @@ export const useBitcoin = (mintUrl?: string) => {
     }
   };
 
-  const estimateOnChain = async (address: string, amount: number, overrideMintUrl?: string): Promise<OnchainSendEstimate | null> => {
+  const estimateOnChain = async (address: string, amount: number, overrideMintUrl?: string, options?: BitcoinErrorOptions): Promise<OnchainSendEstimate | null> => {
     if (isRequestingRef.current) return null;
     const targetMint = overrideMintUrl || mintUrl;
     if (!targetMint) {
-      toast.error('No mint specified for on-chain send');
+      reportBitcoinError('No mint specified for on-chain send', options);
       return null;
     }
 
@@ -114,7 +124,7 @@ export const useBitcoin = (mintUrl?: string) => {
     try {
       return await estimateOnChainSendSpark(address, amount, targetMint);
     } catch (e: any) {
-      toast.error(`Estimation failed: ${e.message || e}`);
+      reportBitcoinError(`Estimation failed: ${e.message || e}`, options);
       return null;
     } finally {
       setRequesting(false);
@@ -122,11 +132,11 @@ export const useBitcoin = (mintUrl?: string) => {
     }
   };
 
-  const executeOnChain = async (estimate: OnchainSendEstimate, address: string, overrideMintUrl?: string) => {
+  const executeOnChain = async (estimate: OnchainSendEstimate, address: string, overrideMintUrl?: string, options?: BitcoinErrorOptions) => {
     if (isPayingRef.current) return null;
     const targetMint = overrideMintUrl || mintUrl;
     if (!targetMint) {
-      toast.error('No mint specified for on-chain send');
+      reportBitcoinError('No mint specified for on-chain send', options);
       return null;
     }
 
@@ -143,7 +153,7 @@ export const useBitcoin = (mintUrl?: string) => {
       await refreshWallet();
       return { txid };
     } catch (e: any) {
-      toast.error(`On-Chain send failed: ${e.message || e}`);
+      reportBitcoinError(`On-Chain send failed: ${e.message || e}`, options);
       await refreshWallet();
       return null;
     } finally {

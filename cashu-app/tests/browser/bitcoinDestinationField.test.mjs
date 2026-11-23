@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createBrowserFixture, wait } from './browserFixture.mjs';
 
@@ -16,6 +16,7 @@ const scan='[aria-label="Scan Bitcoin payment"],button[title="Scan QR Code"]';
 
 test('Bitcoin destination field preserves its page and legacy workflows', {timeout:60000}, async t=>{
   const {call,evaluate,key,open}=await createBrowserFixture(t,new URL('./bitcoinDestinationField.fixture.tsx',import.meta.url),textarea,[boundaries]);
+  await call('Emulation.setFocusEmulationEnabled',{enabled:true});
   await call('Page.addScriptToEvaluateOnNewDocument',{source:`window.fixtureErrors=[];addEventListener('error',e=>fixtureErrors.push(e.message));addEventListener('unhandledrejection',e=>fixtureErrors.push(String(e.reason)));`});
   const click=async(selector,text)=>{
     const p=await evaluate(`(()=>{const e=${text ? `[...document.querySelectorAll('${selector}')].find(e=>e.textContent.trim()===${JSON.stringify(text)})` : `document.querySelector(${JSON.stringify(selector)})`};e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
@@ -24,7 +25,7 @@ test('Bitcoin destination field preserves its page and legacy workflows', {timeo
   };
   const load=async(legacy=false,query='',width=390,height=844)=>{
     await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<600});
-    await open(`${legacy?'legacy&':''}${query}`);await wait(400);
+    await open(`${legacy?'legacy&':''}${query}`);await call('Page.bringToFront');await wait(400);
   };
   const type=async text=>{await click(textarea);await evaluate(`document.querySelector('${textarea}').select()`);await call('Input.insertText',{text});await wait(220);};
   const noPayment=async()=>{
@@ -38,6 +39,10 @@ test('Bitcoin destination field preserves its page and legacy workflows', {timeo
       const presentation=await evaluate(`(()=>{const measure=e=>{if(!e)return null;const s=getComputedStyle(e),r=e.getBoundingClientRect();return Object.fromEntries(['fontSize','fontWeight','lineHeight','color','backgroundColor','padding','borderRadius','borderWidth','borderColor','boxShadow','gap'].map(k=>[k,s[k]]).concat([['x',r.x],['y',r.y],['width',r.width],['height',r.height]]))};return {caption:measure(document.querySelector('${caption}')),control:measure(document.querySelector('${textarea}')),shell:measure(document.querySelector('${textarea}').parentElement),book:measure(document.querySelector('[title="Open Address Book"]')),scanner:measure(document.querySelector('${scan}')),action:measure(document.querySelector('.bitcoin-primary'))}})()`);
       assert.deepEqual(await evaluate(`(()=>{const e=document.querySelector('${textarea}');return [e.placeholder,e.rows,e.spellcheck,e.value]})()`),['Lightning, LNURL, or On-Chain...',3,false,'']);
       assert.equal(await evaluate('document.querySelector(".bitcoin-primary").disabled'),true);
+      if(process.env.BITCOIN_FIELD_COMPARE){
+        const name=`${legacy?'legacy':'page'}-${theme}-${width}-${height}`;
+        assert.deepEqual(presentation,JSON.parse(await readFile(join(process.env.BITCOIN_FIELD_COMPARE,name+'.json'),'utf8')));
+      }
       if(process.env.BITCOIN_FIELD_SNAPSHOT_DIR){
         const name=`${legacy?'legacy':'page'}-${theme}-${width}-${height}`;
         await writeFile(join(process.env.BITCOIN_FIELD_SNAPSHOT_DIR,name+'.json'),JSON.stringify(presentation));

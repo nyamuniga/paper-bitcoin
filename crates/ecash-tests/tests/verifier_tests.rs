@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use ecash_verifier::{OfflineVerifier, VerificationResult};
 use ecash_core::types::{PublicNoteData, PublicTokenEntry, PublicProof};
 use ecash_core::dhke::{MintKeypair, BlindingSession, compute_validation_hash};
@@ -10,7 +9,7 @@ fn create_valid_note(mint_url: &str) -> (OfflineVerifier, PublicNoteData) {
     let mut keys = std::collections::HashMap::new();
     keys.insert(64u64, mint_key.public_key_hex());
     let mut keysets = std::collections::HashMap::new();
-    keysets.insert("<keyset_id>".to_string(), keys);
+    keysets.insert(mint_key.keyset_id(), keys);
     verifier.trust_mint(mint_url, "Test Mint", keysets);
 
     let session = BlindingSession::new("test-secret");
@@ -123,7 +122,7 @@ fn test_verify_untrusted_with_online_keys_and_forged_face_value() {
     let mut keys = std::collections::HashMap::new();
     keys.insert(64u64, mint_key.public_key_hex());
     let mut keysets = std::collections::HashMap::new();
-    keysets.insert("<keyset_id>".to_string(), keys);
+    keysets.insert(mint_key.keyset_id(), keys);
     verifier.add_untrusted_mint_keys(url, keysets);
     
 

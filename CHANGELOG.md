@@ -2,6 +2,12 @@
 
 All notable changes to the Bitnotes / Physical Ecash project will be documented in this file.
 
+## [0.1.20] - Source metadata alignment
+
+### Fixed
+
+- Aligned app, Tauri, workspace, lockfile and website release metadata at 0.1.20. This records source preparation; it does not establish publication or availability of the corresponding app artifacts.
+
 ## [0.1.19] - 2026-11-13
 
 ## Changed

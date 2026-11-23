@@ -1,0 +1,52 @@
+[
+  {
+    "stage": "quoted",
+    "active": true,
+    "next": ["cancelled", "converting"]
+  },
+  {
+    "stage": "funding",
+    "active": true,
+    "next": []
+  },
+  {
+    "stage": "funded",
+    "active": true,
+    "next": ["converting", "returnQuoted"]
+  },
+  {
+    "stage": "converting",
+    "active": true,
+    "next": ["settling", "refunded", "complete"]
+  },
+  {
+    "stage": "settling",
+    "active": true,
+    "next": ["complete"]
+  },
+  {
+    "stage": "returnQuoted",
+    "active": true,
+    "next": ["funded", "returning"]
+  },
+  {
+    "stage": "returning",
+    "active": true,
+    "next": ["complete"]
+  },
+  {
+    "stage": "complete",
+    "active": false,
+    "next": []
+  },
+  {
+    "stage": "cancelled",
+    "active": false,
+    "next": []
+  },
+  {
+    "stage": "refunded",
+    "active": false,
+    "next": []
+  }
+]

@@ -25,3 +25,31 @@ test('invalid phone, non-integer or out-of-range RWF amounts, and missing rates 
     assert.throws(() => buildMomoReview({...input,...change}));
   }
 });
+
+test('cash-in reviews floor fractional sats at both RWF limits without adding the cash-out reserve',()=>{
+  for(const [amount,rate,sats] of [[100,1,97],[200000,1,195800],[1000,1.0005,979],[1000,1.002,980]]){
+    const review=buildMomoReview({...input,amount,rate});
+    assert.equal(review.sats,sats);
+    assert.equal(review.fundingSats,sats);
+    assert.equal(review.feeRwf,amount*input.spread);
+  }
+});
+test('cash-in review rejects a positive rate that floors to zero sats',()=>{
+  assert.throws(()=>buildMomoReview({...input,rate:1e-12}),/cannot be converted/i);
+});
+
+
+test('cash-out review rounds spread and funding upward before adding the reserve once',()=>{
+  for(const [amount,rate,feeRwf,fundingSats,sats] of [
+    [100,1,123,223,233],[200000,1,4320,204320,204330],
+    [101,0.7,123,157,167],[1000,1.0005,141,1142,1152],
+  ]){
+    const review=buildMomoReview({...input,direction:'SATS_TO_RWF',amount,rate});
+    assert.equal(review.feeRwf,feeRwf);assert.equal(review.fundingSats,fundingSats);assert.equal(review.sats,sats);
+  }
+});
+test('cash-out approval compares rounded funding plus reserve rather than raw rates or funding alone',()=>{
+  const approved=buildMomoReview({...input,direction:'SATS_TO_RWF',rate:1.0005});
+  assert.doesNotThrow(()=>assertMomoReviewApproved(approved,buildMomoReview({...approved,rate:1.0006})));
+  assert.throws(()=>assertMomoReviewApproved(approved,buildMomoReview({...approved,networkReserve:11})),/rate changed/i);
+});

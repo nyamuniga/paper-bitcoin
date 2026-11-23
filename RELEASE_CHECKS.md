@@ -1,3 +1,19 @@
+# 0.1.20 source metadata verification
+
+Checked on 2026-11-18. The selected version is 0.1.20, preserving the highest existing workspace version. App/npm lockfile versions, Tauri metadata, all seven workspace package versions, the Cargo lockfile's native app entry, website labels/download URLs and release documentation agree.
+
+- The normal release check and extended `--history` check pass; the ten previously recorded version errors are resolved.
+- Both npm and Cargo dependency resolutions are unchanged. Only local package version metadata changed in the lockfiles.
+- All 211 frontend/payment tests and the TypeScript/production build pass.
+- The full Rust workspace passes all 91 tests with `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` and local mock-server port access; none failed, were ignored or were filtered out.
+- A7 removed the verifier-test unused import. All four verifier integration tests passed again without compiler warnings after the full workspace run above.
+- Vite import/chunk-size warnings remain tracked as H4a–H4e in [the code-review roadmap](code_review.md).
+- No release binaries were built or uploaded. Download-asset availability and native-device behavior were not verified by this metadata correction.
+
+The local `v0.1.20` tag already exists and predates the current working tree. It was not moved or replaced. Publishing newer code requires a new release version and tag; this report does not establish release readiness or update the historical credential-rotation evidence below. Dependency audits were not rerun for this metadata-only change.
+
+---
+
 # Release 0.1.18 preparation
 
 Prepared on 2026-11-10. This update synchronizes source and website versions and includes the responsive payment-page changes. No 0.1.18 APK or macOS artifact has been built or uploaded; website download URLs require those assets before they will resolve.

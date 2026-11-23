@@ -9,6 +9,7 @@ import {
   initiateAndVerifyPayout,
   checkMomoRecovery,
 } from '../services/flowServices';
+import { timeoutScheduler } from '../services/scheduler';
 import { subscribeToSparkEvents, syncAndSweepSpark } from '../services/sparkService';
 
 const POLLING_INTERVAL = 2000;
@@ -18,6 +19,7 @@ export const TransactionProcessor = () => {
   const { activeTransaction } = useTransactionStore();
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
+  // These timer refs belong to payout verification; cash-in owns its cleanup.
   const momoPollingRef = useRef<any>(null);
   const momoTimeoutRef = useRef<any>(null);
   const backendPollingRef = useRef<any>(null);
@@ -39,11 +41,12 @@ export const TransactionProcessor = () => {
 
     const phase = activeTransaction.currentPhase;
     let cancelled = false;
+    let stopCashInVerification: (() => void) | undefined;
     const isCurrent = () => !cancelled && useTransactionStore.getState().activeTransaction?.id === activeTransaction.id;
 
     // MoMo specific phases
     if (phase === AppPhase.PENDING_PAYMENT || phase === AppPhase.VERIFYING_PAYMENT) {
-      startPaymentVerification(stopPolling, momoPollingRef, momoTimeoutRef, isCurrent);
+      stopCashInVerification = startPaymentVerification({ scheduler: timeoutScheduler, isCurrent });
     } else if (phase === AppPhase.AWAITING_INVOICE_PAYMENT) {
       executeSendPayment();
     } else if (phase === AppPhase.INITIATING_PAYOUT || phase === AppPhase.VERIFYING_PAYOUT) {
@@ -55,7 +58,7 @@ export const TransactionProcessor = () => {
       refreshWallet();
     }
 
-    return () => { cancelled = true; stopPolling(); };
+    return () => { cancelled = true; stopCashInVerification?.(); stopPolling(); };
   }, [activeTransaction?.id, activeTransaction?.currentPhase, refreshWallet]);
 
   // Saved transfers continue reconciling by ID without taking over a new form.
