@@ -4,10 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { X, Loader2, Copy, Check, Coins, ArrowUp, ArrowDown, QrCode } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { toast } from 'react-hot-toast';
+import { nip19 } from 'nostr-tools';
 import { useWalletStore } from '../../store/wallet';
 import { useEcash } from '../../hooks/useEcash';
 import { SafeQRCode } from '../shared/SafeQRCode';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import { LazyQrScanner as Scanner } from '../shared/LazyQrScanner';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
 import { useUrDecoder } from '../../hooks/useUrDecoder';
 import { AmountDisplay } from '../shared/AmountDisplay';
@@ -139,7 +140,6 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
     if (targetPubkey) {
       if (targetPubkey.startsWith('npub')) {
         try {
-          const { nip19 } = await import('nostr-tools');
           const decoded = nip19.decode(targetPubkey);
           if (decoded.type === 'npub') {
             targetPubkey = decoded.data as string;
@@ -272,16 +272,14 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                         onChange={(e) => {
                           let val = e.target.value.trim();
                           if (val.startsWith('npub')) {
-                            import('nostr-tools').then(({ nip19 }) => {
-                              try {
-                                const decoded = nip19.decode(val);
-                                if (decoded.type === 'npub') {
-                                  let hex = decoded.data as string;
-                                  if (hex.length === 64) hex = `02${hex}`;
-                                  setPubkey(hex);
-                                }
-                              } catch (err) { }
-                            });
+                            try {
+                              const decoded = nip19.decode(val);
+                              if (decoded.type === 'npub') {
+                                let hex = decoded.data as string;
+                                if (hex.length === 64) hex = `02${hex}`;
+                                val = hex;
+                              }
+                            } catch (err) { }
                           } else if (val.length === 64) {
                             val = `02${val}`;
                           }
@@ -306,7 +304,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
 
   const content = (
     <div
-      className={page ? `ecash-send-page ${activeTab === 'receive' ? 'ecash-receive-page' : !token && !requestBusy ? "is-entry" : ""}` : "fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"}
+      className={page ? `ecash-send-page ${activeTab === 'receive' ? 'ecash-receive-page' : !token && !requestBusy && !showScanner ? "is-entry" : ""}` : "fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"}
       style={page ? undefined : backdropStyle}
       onClick={page ? undefined : closeWithAnimation}
     >
@@ -385,6 +383,16 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
             <div className="flex-1 min-w-0">
               <MintBalancePicker mintUrl={mintUrl} balances={mintBalances} onSelect={setMintUrl} />
             </div>
+            {activeTab === 'send' && !token && !requestBusy && <button
+              type="button"
+              onClick={() => { urDecoder.reset(); setShowScanner(true); }}
+              disabled={sending || showScanner}
+              aria-label="Scan ecash invoice"
+              title="Scan ecash invoice"
+              className="w-12 min-h-11 shrink-0 rounded-xl bg-surface-container-highest hover:bg-surface-bright text-primary border border-outline-variant/20 flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-default"
+            >
+              <QrCode size={20} />
+            </button>}
             {activeTab === 'receive' && receivedAmount === null && <button
               type="button"
               onClick={() => { urDecoder.reset(); setShowScanner(true); }}
@@ -397,7 +405,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
             </button>}
             </div>
           </div>}
-          {page && activeTab === 'send' && !token && !requestBusy && pubkeyField}
+          {page && activeTab === 'send' && !token && !requestBusy && !showScanner && pubkeyField}
 
           <div
             key={activeTab}
@@ -436,6 +444,55 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
             />}
             {activeTab === 'send' ? (
             /* ─── SEND TAB ────────────────────────────────────────────── */
+            showScanner ? (
+              <div className="relative rounded-xl overflow-hidden border border-outline-variant/30 aspect-square shrink-0 w-[min(100%,calc(100dvh-220px))] mx-auto">
+                <Scanner
+                  onScan={(result) => {
+                    if (!result || result.length === 0) return;
+                    const text = result[0].rawValue?.trim();
+                    if (!text) return;
+                    if (isCashuRequest(text)) {
+                      resetSend();
+                      setScannedRequest(text);
+                      setShowScanner(false);
+                      return;
+                    }
+                    if (text.startsWith('npub')) {
+                      try {
+                        const decoded = nip19.decode(text);
+                        if (decoded.type === 'npub') {
+                          let hex = decoded.data as string;
+                          if (hex.length === 64) hex = `02${hex}`;
+                          setPubkey(hex);
+                          setShowScanner(false);
+                          return;
+                        }
+                      } catch {
+                        // Fall through to invalid invoice/request toast.
+                      }
+                    }
+                    if (/^(?:0[23])?[0-9a-fA-F]{64}$/.test(text)) {
+                      setPubkey(text.length === 64 ? `02${text}` : text);
+                      setShowScanner(false);
+                      return;
+                    }
+                    toast.error('Invalid ecash invoice or request');
+                    setShowScanner(false);
+                  }}
+                  onError={(e) => toast.error(e.message)}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowScanner(false);
+                    urDecoder.reset();
+                  }}
+                  className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-highest px-4 py-2 rounded-full text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface whitespace-nowrap"
+                >
+                  Cancel Scanner
+                </button>
+              </div>
+            ) : (
             <div className="ecash-send-entry flex flex-col gap-3 sm:gap-4">
               {/* Amount input */}
               <div className="flex flex-col gap-2.5 sm:gap-3">
@@ -541,6 +598,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                 </div>
               )}
             </div>
+            )
           ) : (
             /* ─── RECEIVE TAB ─────────────────────────────────────────── */
             receivedAmount !== null ? (
@@ -565,7 +623,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
               <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-4">
                   {showScanner ? (
-                    <div className="relative rounded-xl overflow-hidden border border-outline-variant/30 aspect-square">
+                    <div className="relative rounded-xl overflow-hidden border border-outline-variant/30 aspect-square shrink-0 w-[min(100%,calc(100dvh-220px))] mx-auto">
                       <Scanner
                         onScan={(result) => {
                           if (result && result.length > 0) {
@@ -587,16 +645,17 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                         onError={(e) => toast.error(e.message)}
                       />
                       {urDecoder.progress > 0 && !urDecoder.isSuccess && (
-                        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface-container-highest/80 px-4 py-2 rounded-full text-label-caps font-label-caps text-primary backdrop-blur-md">
+                        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface-container-highest/80 px-4 py-2 rounded-full text-label-caps font-label-caps text-primary backdrop-blur-md whitespace-nowrap">
                           Scanning: {Math.round(urDecoder.progress * 100)}%
                         </div>
                       )}
                       <button
+                        type="button"
                         onClick={() => {
                           setShowScanner(false);
                           urDecoder.reset();
                         }}
-                        className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-highest px-4 py-2 rounded-full text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface"
+                        className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-highest px-4 py-2 rounded-full text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface whitespace-nowrap"
                       >
                         Cancel Scanner
                       </button>
@@ -646,7 +705,7 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
                     </div>
                   )}
 
-                  {!page && receiveAction}
+                  {!page && !showScanner && receiveAction}
                 </div>
               </div>
             ) : null
@@ -662,11 +721,11 @@ export const EcashModal: React.FC<EcashModalProps> = ({ mintUrl: initialMintUrl,
             catch { toast.error('Could not read clipboard'); }
           }} className="w-full text-sm text-primary cursor-pointer">Paste token</button>}
         </div>}
-        {page && activeTab === 'send' && !token && !requestBusy && <div className="ecash-page-amount">
+        {page && activeTab === 'send' && !token && !requestBusy && !showScanner && <div className="ecash-page-amount">
           <AmountDisplay amount={amount} compact />
           {isInsufficient && <p role="alert" className="text-error text-xs text-center">Insufficient balance</p>}
         </div>}
-        {page && activeTab === 'send' && !token && !requestBusy && <div className="ecash-controls">
+        {page && activeTab === 'send' && !token && !requestBusy && !showScanner && <div className="ecash-controls">
           <div className="ecash-number-pad" role="group" aria-label="Amount keypad">
             <NumberPad value={amount} onChange={setAmount} compact />
           </div>

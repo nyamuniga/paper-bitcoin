@@ -39,6 +39,10 @@ For a concrete Lightning invoice payment, follow `pages/Bitcoin.tsx` → `featur
 From the repository root:
 
 ```sh
+sh scripts/check-migrated-rust-format.sh
+npm --prefix cashu-app run check:format
+npm --prefix cashu-app run check:boundaries
+npm --prefix cashu-app run check:no-any
 npm --prefix cashu-app run test:payments
 npm --prefix cashu-app run check:release
 npm --prefix cashu-app run build

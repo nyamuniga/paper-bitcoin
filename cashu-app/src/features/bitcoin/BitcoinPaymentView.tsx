@@ -24,7 +24,7 @@ import { FullScreenLoader } from '../../components/shared/FullScreenLoader';
 import { createPortal } from 'react-dom';
 import { AmountDisplay } from '../../components/shared/AmountDisplay';
 import { NumberPad } from '../../components/shared/NumberPad';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import { LazyQrScanner as Scanner } from '../../components/shared/LazyQrScanner';
 import { readClipboardText, writeClipboardText } from '../../utils/clipboard';
 import { fetchLnurlPayInvoice } from '../../services/lnurlService';
 import { useLnurlValidation, validateLnurlPay } from '../../hooks/useLnurlValidation';

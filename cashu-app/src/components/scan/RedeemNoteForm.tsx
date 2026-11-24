@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Loader2, Zap, Wallet, QrCode } from 'lucide-react';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import { LazyQrScanner as Scanner } from '../shared/LazyQrScanner';
 import { readClipboardText } from '../../utils/clipboard';
 import { getInvoiceAmountSats } from '../../services/lnurlService';
 

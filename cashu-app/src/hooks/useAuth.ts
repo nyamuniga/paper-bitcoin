@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { useWalletStore } from '../store/wallet';
 import { useNostrStore } from '../store/nostrStore';
 import { useTransactionStore } from '../store/transactionStore';
@@ -18,21 +19,19 @@ export const useAuth = () => {
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
     let isMounted = true;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('restore-progress', (event) => {
-        if (!isMounted) return;
-        setRestoreProgress(prev => {
-          const next = [...prev, event.payload as string];
-          if (next.length > 50) return next.slice(next.length - 50); // Keep last 50 logs
-          return next;
-        });
-      }).then((unlisten) => {
-        if (isMounted) {
-          unlistenFn = unlisten;
-        } else {
-          unlisten();
-        }
+    listen('restore-progress', (event) => {
+      if (!isMounted) return;
+      setRestoreProgress(prev => {
+        const next = [...prev, event.payload as string];
+        if (next.length > 50) return next.slice(next.length - 50); // Keep last 50 logs
+        return next;
       });
+    }).then((unlisten) => {
+      if (isMounted) {
+        unlistenFn = unlisten;
+      } else {
+        unlisten();
+      }
     });
     return () => {
       isMounted = false;

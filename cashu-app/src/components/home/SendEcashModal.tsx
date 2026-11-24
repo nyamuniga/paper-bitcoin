@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Loader2, Copy, Check, Coins } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet';
 import { toast } from 'react-hot-toast';
+import { nip19 } from 'nostr-tools';
 import { useEcash } from '../../hooks/useEcash';
 import { SafeQRCode } from '../shared/SafeQRCode';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
@@ -48,7 +49,6 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
     if (targetPubkey) {
       if (targetPubkey.startsWith('npub')) {
         try {
-          const { nip19 } = await import('nostr-tools');
           const decoded = nip19.decode(targetPubkey);
           if (decoded.type === 'npub') {
             targetPubkey = decoded.data as string;
@@ -227,16 +227,14 @@ export const SendEcashModal: React.FC<SendEcashModalProps> = ({ mintUrl, onClose
                       onChange={(e) => {
                         let val = e.target.value.trim();
                         if (val.startsWith('npub')) {
-                          import('nostr-tools').then(({ nip19 }) => {
-                            try {
-                              const decoded = nip19.decode(val);
-                              if (decoded.type === 'npub') {
-                                let hex = decoded.data as string;
-                                if (hex.length === 64) hex = `02${hex}`;
-                                setPubkey(hex);
-                              }
-                            } catch (err) {}
-                          });
+                          try {
+                            const decoded = nip19.decode(val);
+                            if (decoded.type === 'npub') {
+                              let hex = decoded.data as string;
+                              if (hex.length === 64) hex = `02${hex}`;
+                              val = hex;
+                            }
+                          } catch (err) {}
                         } else if (val.length === 64) {
                           val = `02${val}`;
                         }

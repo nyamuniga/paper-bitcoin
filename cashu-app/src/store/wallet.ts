@@ -85,7 +85,7 @@ export const useWalletStore = create<WalletState>()((set, get) => ({
     set((state) => ({ isLoading: state.lastUpdate === 0 }));
     try {
       const res = await invoke<WalletInfoResponse>('wallet_info');
-      
+
       let pendingCount = 0;
       let hasUnread = false;
       let newestTxId: string | null = null;

@@ -54,18 +54,18 @@ class SafeQRCodeBoundary extends React.Component<SafeQRCodeBoundaryProps, SafeQR
   }
 }
 
-export const SafeQRCode: React.FC<SafeQRCodeProps> = ({ 
-  value, 
-  size = 180, 
+export const SafeQRCode: React.FC<SafeQRCodeProps> = ({
+  value,
+  size = 180,
   className,
-  fallbackText = "Use the Copy button below to share this token" 
+  fallbackText = "Use the Copy button below to share this token"
 }) => {
   // Keep the existing conservative limit in UTF-8 bytes, not JavaScript string length.
   const byteLength = typeof value === 'string' ? new Blob([value]).size : 0;
-  
+
   if (!value || byteLength > 2000) {
     return (
-      <div 
+      <div
         style={{ width: size, height: size }}
         className={`flex flex-col items-center justify-center p-3 text-center bg-surface-container-lowest/60 rounded-xl border border-outline-variant/30 ${className || ''}`}
       >
@@ -80,7 +80,7 @@ export const SafeQRCode: React.FC<SafeQRCodeProps> = ({
     <SafeQRCodeBoundary
       value={value}
       fallback={
-        <div 
+        <div
           style={{ width: size, height: size }}
           className={`flex flex-col items-center justify-center p-3 text-center bg-surface-container-lowest/60 rounded-xl border border-outline-variant/30 ${className || ''}`}
         >

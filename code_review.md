@@ -281,19 +281,19 @@ Perform these after comparing the existing call sites. Validate shared behavior 
 
 | Done | ID | Task | Acceptance |
 | --- | --- | --- | --- |
-| [ ] | H1 | Add import-boundary checks for extracted frontend workflows. | Importing React, Zustand, or Tauri there fails CI. |
-| [ ] | H2 | Enforce no new explicit `any` in migrated native adapters. | The changed boundary cannot silently lose its response types. |
-| [ ] | H3 | Add formatting checks for migrated modules. | Readable conventions are reproducible without a whole-repo formatting diff. |
-| [ ] | H4 | Record remaining duplicated UI and weak contracts. | Each residual issue has a concrete caller and a small follow-up task. |
-| [ ] | H4a | Inventory mixed static/dynamic Tauri-event and Nostr imports. | Each warning has named callers and an explicit loading/subscription requirement. |
-| [ ] | H4b | Resolve the Tauri-event import inconsistency. | Its Vite import warning is gone; startup and event subscription behavior are preserved. |
-| [ ] | H4c | Resolve the Nostr import inconsistency. | Its Vite import warning is gone; inbox and invoice transport checks pass. |
-| [ ] | H4d | Record frontend bundle and startup measurements. | Initial JavaScript/WASM requests, raw/gzip sizes and startup behavior have reproducible evidence. |
-| [ ] | H4e | Split one measured startup dependency into a lazy chunk. | Initial JavaScript decreases; affected flows work and remaining SDK-size tradeoffs are documented without raising warning thresholds. |
-| [ ] | H5 | Review ecash/conversion screens using the established patterns. | Remaining oversized responsibilities are split into named, individually testable tasks before editing. |
-| [ ] | H6 | Verify affected UI at phone and desktop sizes. | Keyboard, focus, long text, pending/error/empty states, and supported themes have recorded evidence. |
-| [ ] | H7 | Run the full required-check set. | Failures are resolved or explicitly block the target score; none are suppressed. |
-| [ ] | H8 | Re-score all seven categories with fresh evidence. | Explain why the result earns 9/10 or record the remaining gap honestly. |
+| [x] | H1 | Add import-boundary checks for extracted frontend workflows. | Importing React, Zustand, or Tauri there fails CI. |
+| [x] | H2 | Enforce no new explicit `any` in migrated native adapters. | The changed boundary cannot silently lose its response types. |
+| [x] | H3 | Add formatting checks for migrated modules. | Readable conventions are reproducible without a whole-repo formatting diff. |
+| [x] | H4 | Record remaining duplicated UI and weak contracts. | Each residual issue has a concrete caller and a small follow-up task. |
+| [x] | H4a | Inventory mixed static/dynamic Tauri-event and Nostr imports. | Each warning has named callers and an explicit loading/subscription requirement. |
+| [x] | H4b | Resolve the Tauri-event import inconsistency. | Its Vite import warning is gone; startup and event subscription behavior are preserved. |
+| [x] | H4c | Resolve the Nostr import inconsistency. | Its Vite import warning is gone; inbox and invoice transport checks pass. |
+| [x] | H4d | Record frontend bundle and startup measurements. | Initial JavaScript/WASM requests, raw/gzip sizes and startup behavior have reproducible evidence. |
+| [x] | H4e | Split one measured startup dependency into a lazy chunk. | Initial JavaScript decreases; affected flows work and remaining SDK-size tradeoffs are documented without raising warning thresholds. |
+| [x] | H5 | Review ecash/conversion screens using the established patterns. | Remaining oversized responsibilities are split into named, individually testable tasks before editing. |
+| [x] | H6 | Verify affected UI at phone and desktop sizes. | Keyboard, focus, long text, pending/error/empty states, and supported themes have recorded evidence. |
+| [x] | H7 | Run the full required-check set. | Failures are resolved or explicitly block the target score; none are suppressed. |
+| [x] | H8 | Re-score all seven categories with fresh evidence. | Explain why the result earns 9/10 or record the remaining gap honestly. |
 
 ## 9. Verification and completion rules
 
@@ -1449,3 +1449,312 @@ Verification:
 - `rustfmt --edition 2021 --check` passes on `crates/ecash-wallet/src/storage.rs`, `crates/ecash-wallet/tests/proof_normalization.rs`, `crates/ecash-wallet/tests/send_operation.rs` and `crates/ecash-wallet/tests/wallet_storage.rs`. `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
 
 Updated [DESIGN.md](cashu-app/DESIGN.md) to reflect immutable raw persistence. Section G (G1–G14) is complete. No dependencies, release versions, wallet formats, public IPC signatures or frontend runtime/UI changed. G14 remains uncommitted and unpushed. H1 has not started.
+
+
+### H1 — Add import-boundary checks for extracted frontend workflows
+
+Implemented on 2026-11-24. Added an AST-based import-boundary checker at [check-import-boundaries.mjs](cashu-app/scripts/check-import-boundaries.mjs) using the already-installed `typescript` compiler API (zero new dependencies). It inspects static `import`, `import type`, `export ... from`, dynamic `import(...)` and `require(...)` specifiers without false positives on comments or string literals, and fails if any listed boundary file is missing:
+
+- **18 extracted frontend workflow/service modules** (`scheduler`, `momoReview`, `momoRecovery`, `payoutInitiation`, `momoFulfillment`, `momoProcessing`, `walletReconciliation`, `sparkReconciliation`, `conversionSpendGuard`, `stableBalanceModel`, `transferAmount`, `transferError`, `sendEcashError`, `sparkConversionError`, `receivedTokenPreview`, `cashuRequests`, `qrPayment`, `ecashRequestHistory`): forbids React (`react`, `react-dom`, `react-router-dom`, `react-hot-toast`), Zustand/stores (`zustand`, `*/store/*`) and Tauri (`@tauri-apps/*`).
+- **2 extracted React lifecycle hooks** (`useBitcoinReceive`, `useBitcoinSend`): allows React while forbidding Zustand/stores and Tauri.
+
+Exposed `npm --prefix cashu-app run check:boundaries` in [package.json](cashu-app/package.json), wired it into the `Frontend and Release Checks` job in [.github/workflows/ci.yml](.github/workflows/ci.yml), and documented it in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Verification:
+
+- `npm --prefix cashu-app run check:boundaries` passes (20 files verified, 0 violations).
+- [importBoundaries.test.mjs](cashu-app/tests/importBoundaries.test.mjs) adds 5 unit tests verifying the real repository passes, synthetic React/Zustand/store/Tauri imports across all syntax forms fail, comments/strings do not trigger false positives, lifecycle hooks allow React while rejecting stores/Tauri, and missing listed files fail.
+- `npm --prefix cashu-app run test:payments` passes all 384 tests (0 failed, 0 skipped).
+- `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+No production runtime code, dependencies, release versions, wallet formats or UI changed. H1 remains uncommitted and unpushed. H2 has not started.
+
+
+### H2 — Enforce no new explicit `any` in migrated native adapters
+
+Implemented on 2026-11-24. Added an AST-based explicit-`any` checker at [check-no-explicit-any.mjs](cashu-app/scripts/check-no-explicit-any.mjs) using the already-installed `typescript` compiler API (`ts.SyntaxKind.AnyKeyword`, zero new dependencies). It flags explicit `any` across return types, parameters, generic type arguments (including `invoke<any>`), type assertions (`as any`), and interface/type fields without false positives on comments, identifiers or string literals, and fails if any listed adapter file is missing.
+
+Covers **16 migrated native adapters and typed native wire contracts**: `src/store/wallet.ts`, `src/types/wallet.ts`, `src/types/sendEcash.ts`, `src/types/momo.ts`, `src/services/momoFulfillmentOperations.ts`, `src/services/momoProcessingAdapter.ts`, `src/services/momoTransactionAccess.ts`, `src/services/savedMomoRecoveryAdapter.ts`, `src/services/walletReconciliationAdapter.ts`, `src/services/savedEcashInvoices.ts`, `src/services/sendEcashError.ts`, `src/services/proxyBalanceService.ts`, `src/services/stableBalanceService.ts`, `src/services/updateService.ts`, `src/hooks/useTransactionProcessor.ts`, and `src/hooks/useEcashInvoice.ts`.
+
+Exposed `npm --prefix cashu-app run check:no-any` in [package.json](cashu-app/package.json), wired it into the `Frontend and Release Checks` job in [.github/workflows/ci.yml](.github/workflows/ci.yml), and documented it in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Verification:
+
+- `npm --prefix cashu-app run check:no-any` passes (16 migrated native adapters verified, 0 violations).
+- [noExplicitAny.test.mjs](cashu-app/tests/noExplicitAny.test.mjs) adds 4 unit tests verifying the real repository passes, synthetic `any` usages across fields/parameters/return types/generics/assertions are caught, comments/identifiers/strings do not trigger false positives, and missing listed files fail.
+- `npm --prefix cashu-app run test:payments` passes all 388 tests (0 failed, 0 skipped).
+- `npm --prefix cashu-app run check:boundaries`, `git diff --check`, and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+No production runtime code, dependencies, release versions, wallet formats or UI changed. H2 remains uncommitted and unpushed. H3 has not started.
+
+
+### H3 — Add formatting checks for migrated modules
+
+Implemented on 2026-11-24. Added reproducible migrated-module formatting checks across both Rust and frontend without reformatting untouched legacy files or adding new dependencies:
+
+- **Rust migrated modules** ([check-migrated-rust-format.sh](scripts/check-migrated-rust-format.sh)): runs `rustfmt --edition 2021 --check` over all 16 migrated G3–G14 wallet modules and integration tests (`proof_selection`, `outgoing`, `payment_quote`, `send_error`, `send`, `receive_input`, `receive`, `storage`, plus their 8 integration test files). Wired into the `Rust Tests` job in [.github/workflows/ci.yml](.github/workflows/ci.yml) with `components: rustfmt`.
+- **Frontend migrated modules** ([check-migrated-format.mjs](cashu-app/scripts/check-migrated-format.mjs)): enforces UTF-8 without BOM, LF line endings, single trailing EOF newline, no trailing whitespace and space-only indentation across all 54 migrated frontend modules (20 boundary-checked workflows/hooks, migrated native adapters, 13 migrated shared/feature UI components and the new check scripts/tests). Trimmed existing trailing whitespace in `src/store/wallet.ts`, `src/types/momo.ts` and `src/components/shared/SafeQRCode.tsx`. Exposed as `npm --prefix cashu-app run check:format` in [package.json](cashu-app/package.json), wired into `Frontend and Release Checks` in [.github/workflows/ci.yml](.github/workflows/ci.yml), and documented in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Verification:
+
+- `sh scripts/check-migrated-rust-format.sh` passes (16 migrated Rust files verified).
+- `npm --prefix cashu-app run check:format` passes (54 migrated frontend files verified).
+- [migratedFormat.test.mjs](cashu-app/tests/migratedFormat.test.mjs) adds 3 unit tests verifying all 54 migrated frontend files pass, synthetic BOM/CRLF/trailing-whitespace/tab-indent/EOF issues are detected, and missing listed files fail.
+- `npm --prefix cashu-app run test:payments` passes all 391 tests (0 failed, 0 skipped).
+- `npm --prefix cashu-app run check:boundaries`, `npm --prefix cashu-app run check:no-any`, `git diff --check`, and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+No runtime logic, dependencies, release versions, wallet formats or UI changed. H3 remains uncommitted and unpushed. H4 has not started.
+
+
+### H4 — Record remaining duplicated UI and weak contracts
+
+Audited on 2026-11-24 with AST and source scans across `cashu-app/src/` and `crates/ecash-wallet/src/` (no runtime code changes). Every residual item below names its concrete callers and a small follow-up task:
+
+#### Remaining duplicated UI
+
+| Issue | Concrete callers | Small follow-up task |
+| --- | --- | --- |
+| Direct `useBottomSheet` callers outside shared `BottomSheet` shell (9 files) | `src/components/history/TransactionDetailsModal.tsx`, `src/components/home/EcashModal.tsx`, `src/components/home/LightningAddressModal.tsx`, `src/components/home/MintInfoModal.tsx`, `src/components/home/PendingNwcModal.tsx`, `src/components/navigation/AddMintModal.tsx`, `src/components/shared/UpdateAppModal.tsx`, `src/features/bitcoin/BitcoinPaymentView.tsx` (legacy sheet), `src/features/momo/MomoTransferView.tsx` (legacy sheet) | Migrate one sheet per task to `BottomSheet` with `suspended` coverage for external loaders/results and keyboard/focus regression tests. |
+| Direct `react-qr-code` callers outside `SafeQRCode` (4 files) | `src/components/home/LightningAddressModal.tsx`, `src/components/settings/LockedEcashSection.tsx`, `src/components/settings/NWCSection.tsx`, `src/features/bitcoin/BitcoinReceive.tsx` | Migrate static QR callers to `SafeQRCode` one screen at a time while preserving existing dimensions, framing, and copy actions. |
+| Unmigrated eCash and conversion screen layouts/controls | `src/components/home/EcashModal.tsx`, `src/components/home/EcashRequestPayment.tsx`, `src/components/home/StableBalanceModal.tsx`, `src/pages/Ecash.tsx` | Decompose oversized screen responsibilities in H5 into named presentation/lifecycle follow-ups matching the Bitcoin/Mobile Money pattern. |
+
+#### Remaining weak contracts
+
+| Issue | Concrete callers | Small follow-up task |
+| --- | --- | --- |
+| Explicit `any` outside H2-enforced adapters (111 occurrences across 38 files; 0 in the 16 H2-enforced adapters) | Native hooks: `useNostr.ts` (9), `useIssue.ts` (8), `useHistory.ts` (7), `useScan.ts` (7), `useAuth.ts` (6), `useBitcoin.ts` (6), `useMintInfo.ts` (2), `useMints.ts` (2), `useEcash.ts` (1), `useHome.ts` (1); legacy services: `flowServices.ts` (6), `lightningService.ts` (6), `momoService.ts` (5), `proxyRequest.ts` (4), `currencyService.ts` (1), `lnurlService.ts` (1), `nostrService.ts` (1); UI/utils: `NWCSection.tsx` (4), `Pay.tsx` (3), `polyfills.ts` (3), `encryption.ts` (3), plus 1–2 each in 17 component/page/util files | Replace `catch (e: any)` with `unknown` and type native/HTTP payloads per module, then add each migrated module to `MIGRATED_NATIVE_ADAPTERS` in `cashu-app/scripts/check-no-explicit-any.mjs`. |
+| Untyped `invoke(...)` calls without generic `<T>` return type (62 calls across 21 files) | `NWCSection.tsx` (8), `useAuth.ts` (7), `stableBalanceService.ts` (7), `NostrSection.tsx` (4), `useScan.ts` (4), `sparkService.ts` (4), `useBitcoin.ts` (3), `useIssue.ts` (3), `useNostr.ts` (3), `flowServices.ts` (3), `useHistory.ts` (2), `useMints.ts` (2), `BiometricToggle.tsx` (2), `nwcStore.ts` (2), plus 1 each in `App.tsx`, `EcashModal.tsx`, `EcashRequestPayment.tsx`, `WalletBalanceCard.tsx`, `WalletManagementSection.tsx`, `useHome.ts`, `savedEcashInvoices.ts` | Add explicit return-type generics (`invoke<void>` or named response interfaces) per caller module and extend H2 checks to reject untyped `invoke` in migrated adapters. |
+| Rust spent-token restore save errors discarded with `.ok()` | `crates/ecash-wallet/src/receive.rs` (3 branches inside `is_spent && invoice.is_none()`) | Apply G2's unknown-outcome recovery-save reporting policy to spent-token restore saves with dedicated wallet tests. |
+| Concrete `path`/`passphrase` persistence in non-send wallet operations | `crates/ecash-wallet/src/receive.rs`, `swap.rs`, `melt.rs`, `restore.rs`, `history.rs`, `direct.rs`, `mint.rs` | Inject `WalletStorage` into `receive.rs` and `swap.rs` one operation at a time so recovery-save failures are testable without filesystem faults. |
+
+Verification:
+
+- Counts and caller lists were generated directly via TypeScript AST (`ts.SyntaxKind.AnyKeyword` and `invoke` call-expression inspection) and source scans on the current working tree.
+- `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+No runtime code, dependencies, release versions, wallet formats or UI changed. H4 remains uncommitted and unpushed. H4a has not started.
+
+
+### H4a — Inventory mixed static/dynamic Tauri-event and Nostr imports
+
+Audited on 2026-11-24 via a fresh `npm --prefix cashu-app run build` (Vite 7.3.7) and source inspection (no runtime code changes). Vite reported exactly two mixed static/dynamic import warnings:
+
+1. **`@tauri-apps/api/event` (`node_modules/@tauri-apps/api/event.js`)**
+   - **Dynamic importer (1 caller):**
+     - `cashu-app/src/hooks/useAuth.ts:21` — `import('@tauri-apps/api/event').then(({ listen }) => ...)` in a mount `useEffect` subscribing to `restore-progress` (retains last 50 log lines; guards unmount via `isMounted` + `unlistenFn`).
+   - **Static importers (2 callers):**
+     - `cashu-app/src/pages/Home.tsx:12` — subscribes on mount to `nwc_delayed_request_added` and `nwc_queue_updated` with unmount cleanup.
+     - `cashu-app/src/components/settings/WalletManagementSection.tsx:4` — subscribes on mount to `clean-wallet-progress` with unmount cleanup.
+   - **Loading/subscription requirement (for H4b):** `@tauri-apps/api/event` is a lightweight Tauri IPC helper already statically loaded by `Home.tsx` and `WalletManagementSection.tsx`. `useAuth.ts` subscribes immediately on mount (not lazily on user action) and needs `restore-progress` registered before restore starts. Converting `useAuth.ts` to a static `import { listen } from '@tauri-apps/api/event'` resolves the warning while preserving `isMounted` cleanup and removing the unnecessary dynamic-import delay.
+
+2. **`nostr-tools` (`node_modules/nostr-tools/lib/esm/index.js`)**
+   - **Dynamic importers (2 bundled sites + 2 unbundled legacy sites):**
+     - `cashu-app/src/components/home/EcashModal.tsx:142` (`handleSend` — `await import('nostr-tools')` for `nip19.decode` on `npub` input) and `cashu-app/src/components/home/EcashModal.tsx:275` (`pubkeyField` `onChange` — `import('nostr-tools').then(...)` for `nip19.decode`).
+     - `cashu-app/src/components/home/SendEcashModal.tsx:51` and `230` (same `nip19.decode` pattern; not currently in the Vite entry graph, noted for consistency in H4c).
+   - **Static importers (9 bundled callers):**
+     - `cashu-app/src/hooks/useNostr.ts:3` (`SimplePool`, `nip19` — required on `Home` mount for Nostr identity and background token claim inbox), `cashu-app/src/services/nostrService.ts:3`, `cashu-app/src/services/invoiceInbox.ts:1`, `cashu-app/src/services/ecashInvoice.ts:3`, `cashu-app/src/services/qrPayment.ts:2`, `cashu-app/src/services/cashuRequests.ts:6`, `cashu-app/src/hooks/useEcashInvoice.ts:3`, `cashu-app/src/components/settings/NostrSection.tsx:6`, `cashu-app/src/components/settings/LockedEcashSection.tsx:6`.
+   - **Loading/subscription requirement (for H4c):** `nostr-tools` is required eagerly on `Home` via `useNostr` and statically by invoice/request/settings modules, so dynamic `import('nostr-tools')` in `EcashModal.tsx` (and `SendEcashModal.tsx`) cannot split it into a separate chunk. Replacing those dynamic imports with static `import { nip19 } from 'nostr-tools'` eliminates the Vite warning and removes the async race in `onChange` while preserving inbox, invoice transport, and `npub` decoding behavior.
+
+Verification:
+
+- `npm --prefix cashu-app run build` succeeded (`✓ built in 5.48s`) and emitted the exact two warnings above.
+- `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+No runtime code, dependencies, release versions, wallet formats or UI changed. H4a remains uncommitted and unpushed. H4b has not started.
+
+
+### H4b — Resolve the Tauri-event import inconsistency
+
+Implemented on 2026-11-24. Replaced the dynamic `import('@tauri-apps/api/event')` inside the mount `useEffect` of [useAuth.ts](cashu-app/src/hooks/useAuth.ts) with a static `import { listen } from '@tauri-apps/api/event'`, matching `Home.tsx` and `WalletManagementSection.tsx`. The `restore-progress` subscription, 50-line log cap, `isMounted` guard, and `unlistenFn()` unmount cleanup are preserved verbatim.
+
+Verification:
+
+- `npm --prefix cashu-app run build` succeeded (`✓ built in 4.40s`); the `@tauri-apps/api/event.js` mixed static/dynamic import warning is gone (only the `nostr-tools` mixed-import warning remained for H4c).
+- `npm --prefix cashu-app run test:payments` passes all 391 tests (0 failed, 0 skipped).
+- `npm --prefix cashu-app run check:boundaries`, `npm --prefix cashu-app run check:no-any`, `npm --prefix cashu-app run check:format`, `git diff --check`, and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+No dependencies, release versions, wallet formats or UI changed. H4b remains uncommitted and unpushed. H4c has not started.
+
+
+### H4c — Resolve the Nostr import inconsistency
+
+Implemented on 2026-11-24. Replaced the dynamic `import('nostr-tools')` calls in [EcashModal.tsx](cashu-app/src/components/home/EcashModal.tsx) (lines 142 and 275) and [SendEcashModal.tsx](cashu-app/src/components/home/SendEcashModal.tsx) (lines 51 and 230) with static `import { nip19 } from 'nostr-tools'`. In both `pubkey` input `onChange` handlers, decoding `npub` synchronously before `setPubkey(val)` also removes the previous async `.then(...)` race while preserving exact `npub` decoding and 64-hex `02`-prefix normalization.
+
+Verification:
+
+- `npm --prefix cashu-app run build` succeeded (`✓ built in 4.69s`) with **zero** mixed static/dynamic import warnings (both `@tauri-apps/api/event` and `nostr-tools` warnings are gone; only the >500 kB chunk advisory remains for H4d/H4e).
+- `npm --prefix cashu-app run test:payments` passes all 391 tests (including `invoiceInbox.test.mjs`, `nostrInvoiceTransport.test.mjs`, and `ecashInvoice.test.mjs`; 0 failed, 0 skipped).
+- `npm --prefix cashu-app run check:boundaries`, `npm --prefix cashu-app run check:no-any`, `npm --prefix cashu-app run check:format`, `git diff --check`, and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+No dependencies, release versions, wallet formats or UI changed. H4c remains uncommitted and unpushed. H4d has not started.
+
+
+### H4d — Record frontend bundle and startup measurements
+
+Measured on 2026-11-24 against the clean H4c production build (`npm --prefix cashu-app run build`, Vite 7.3.7, `dist/` assets + Rollup `generateBundle` module-size audit; no runtime code changes).
+
+#### Emitted bundle assets (raw / gzip)
+
+| Asset | Type | Raw size | Gzip size (zlib lvl 9) | Startup request behavior |
+| --- | --- | --- | --- | --- |
+| `dist/index.html` | HTML | 4.23 kB | 1.39 kB | Initial document; references `index-B6f5Hu4m.js` and `index-KUApQF3r.css` |
+| `dist/assets/index-B6f5Hu4m.js` | Entry JS | 1,771,159 B (1,729.65 KiB) | 553,863 B (540.88 KiB) | **Eagerly loaded at startup** (triggers Vite's >500 kB chunk advisory) |
+| `dist/assets/index-KUApQF3r.css` | Entry CSS | 197,592 B (192.96 KiB) | 46,705 B (45.61 KiB) | **Eagerly loaded at startup** |
+| `dist/assets/breez_sdk_spark_wasm_bg-XksWtBXg.wasm` | WASM | 12,650,256 B (12,353.77 KiB) | 5,200,347 B (5,078.46 KiB) | **Lazy** — not in `index.html`; fetched only when `sparkService.ts` calls `ensureWasmInitialized()` / `initBreezSDK()` |
+| 5 existing lazy JS chunks (`index-CnN4Z-KK.js`, `index-2Z5poqCj.js`, `index-DLC7xqLp.js`, `index-DsedYutx.js`, `index-LlueUwvy.js`) | Lazy JS | 66,950 B total | 16,857 B total | Loaded on demand (Spark IndexedDB helpers, `@tauri-apps/plugin-fs`, `plugin-dialog`, `plugin-opener`) |
+| 63 bundled Fontsource `.woff`/`.woff2` files | Fonts | 1,023,260 B total | — | Loaded on demand by CSS `@font-face` rules (plus Google Fonts stylesheet in `index.html`) |
+
+#### Largest contributors inside the eager entry chunk (pre-minification rendered bytes = 4,096,955 B)
+
+| Package / source | Rendered bytes | Share of entry | Notes |
+| --- | --- | --- | --- |
+| `app-src` (all 16 eagerly imported routes in `App.tsx`) | 1,081,557 B | 26.4% | Every route in `App.tsx` is statically imported |
+| `react-dom` | 561,393 B | 13.7% | Core runtime |
+| `motion-dom` + `framer-motion` | 391,016 B | 9.6% | Page transitions and animated mint picker |
+| `nostr-tools` | 250,948 B | 6.1% | Needed on `Home` mount via `useNostr` |
+| `crypto-js` | 248,202 B | 6.1% | Encryption/hashing |
+| `@breeztech/breez-sdk-spark` (JS glue) | 154,746 B | 3.8% | Statically imported by `sparkService.ts` even though its WASM initializes lazily |
+| `@noble/curves` | 117,986 B | 2.9% | Crypto primitives |
+| `@cashu/cashu-ts` | 111,707 B | 2.7% | Cashu protocol |
+| `bignumber.js` | 94,381 B | 2.3% | Numeric math |
+| `webrtc-adapter` + `@yudiel/react-qr-scanner` | 162,748 B | 4.0% | Camera QR scanner; only needed when user opens scanner (`Scan`, `Pay`, `BitcoinPaymentView`, `EcashModal`) |
+
+#### Startup behavior notes
+- Before unlock (`!isInitialized`), `App.tsx` renders `<Auth />`, calls `useNostr()`, and invokes `is_wallet_unlocked`, but the browser still parses the entire 1.77 MB `index-*.js` entry bundle because all 16 routes and heavy optional dependencies (QR camera scanner, Spark SDK JS glue) are statically imported.
+- Spark's 12.65 MB WASM is already deferred until `ensureWasmInitialized()`, but its JS glue and the camera QR scanner (`@yudiel/react-qr-scanner` + `webrtc-adapter`) are strong, low-risk split candidates for H4e.
+
+Verification:
+
+- Measurements reproduced directly from `cashu-app/dist/` (built with `npm --prefix cashu-app run build`) and Vite/Rollup `generateBundle` inspection.
+- `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+No runtime code, dependencies, release versions, wallet formats or UI changed. H4d remains uncommitted and unpushed. H4e has not started.
+
+
+### H4e — Split one measured startup dependency into a lazy chunk
+
+Implemented on 2026-11-24. Split the camera QR scanner dependency (`@yudiel/react-qr-scanner` + `webrtc-adapter` + barcode-detector) out of the eager entry bundle into a lazy chunk via a shared [LazyQrScanner.tsx](cashu-app/src/components/shared/LazyQrScanner.tsx) wrapper (`React.lazy` + `<Suspense fallback={null}>`, using `import type` so zero runtime code is statically imported). Migrated all five QR scanner callers to `LazyQrScanner`: [BitcoinPaymentView.tsx](cashu-app/src/features/bitcoin/BitcoinPaymentView.tsx), [EcashModal.tsx](cashu-app/src/components/home/EcashModal.tsx), [RedeemNoteForm.tsx](cashu-app/src/components/scan/RedeemNoteForm.tsx), [ScanNoteForm.tsx](cashu-app/src/components/scan/ScanNoteForm.tsx), and [Pay.tsx](cashu-app/src/pages/Pay.tsx).
+
+#### Measured before/after bundle sizes (`npm --prefix cashu-app run build`, zlib level 9)
+
+| Metric | Before (H4d) | After (H4e) | Delta |
+| --- | --- | --- | --- |
+| Entry JS raw (`index-*.js`) | 1,771,159 B | 1,621,626 B | **-149,533 B (-8.4%)** |
+| Entry JS gzip (`index-*.js`) | 553,863 B | 494,282 B | **-59,581 B (-10.8%)** |
+| New lazy QR scanner chunk (`index.esm-BfxTe9r7.js`) | — | 149,528 B raw / 60,309 B gzip | Loaded only when user opens camera scanner |
+
+#### Remaining SDK-size tradeoffs (Vite default 500 kB `chunkSizeWarningLimit` kept unchanged)
+- The entry chunk remains above Vite's 500 kB advisory because `App.tsx` statically imports all 16 routes together with `react-dom`, `framer-motion`/`motion-dom`, `nostr-tools` (required on `Home` mount via `useNostr`), `crypto-js`, `@cashu/cashu-ts`, and `@breeztech/breez-sdk-spark` JS glue (its 12.65 MB WASM is already lazily fetched by `ensureWasmInitialized()`). Further reductions require route-level `React.lazy` splitting in `App.tsx` and/or lazy-loading the Spark JS glue inside `sparkService.ts` as separate follow-ups rather than raising warning thresholds.
+
+Verification:
+
+- `npm --prefix cashu-app run build` succeeded (`✓ built in 5.18s`) with zero mixed-import warnings and the measured entry JS reduction above.
+- `npm --prefix cashu-app run test:payments` passes all 391 tests (0 failed, 0 skipped).
+- `npm --prefix cashu-app run check:boundaries`, `npm --prefix cashu-app run check:no-any`, `npm --prefix cashu-app run check:format`, `git diff --check`, and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+No dependencies, release versions, wallet formats, Vite warning thresholds or UI presentation changed. H4e remains uncommitted and unpushed. H5 has not started.
+
+
+### H5 — Review eCash and conversion screens using the established patterns
+
+Reviewed on 2026-11-24 with no runtime code changes. Both `pages/SendEcash.tsx` (15L) / `pages/ReceiveEcash.tsx` (15L) and `pages/TransferFunds.tsx` (27L) are already thin route entries, while the underlying form/modal components retain oversized mixed responsibilities:
+
+- **`components/home/EcashModal.tsx` (698L, 24 `useState`, 3 `useEffect`, 2 `invoke`, 3 store hooks, raw `useBottomSheet`, no `PaymentPageLayout`):** mixes page/sheet shell layout, Send eCash entry + outgoing token/UR share view, Receive eCash entry + preview + invoice sub-tab, clipboard/scanner/UR state, `SovereignStampOverlay` celebration state, and direct `invoke('save_ecash_for_later')` calls.
+- **`components/home/SendEcashModal.tsx` (282L, 10 `useState`):** legacy send-only modal duplicating `EcashModal`'s send flow (not referenced by active routes).
+- **`components/home/EcashRequestPayment.tsx` (180L, 5 `useState`, 5 `useEffect`, 6 `invoke`):** couples NUT-18 payment-request quoting/validation/execution directly to native `invoke` calls inside the view.
+- **`components/home/TransferFundsForm.tsx` (284L, 12 `useState`, 4 `useEffect`, 6 store reads):** already uses `PrimaryActionButton` (D9) and pure domain services (`stableBalanceModel`, `conversionSpendGuard`, `transferAmount`, `transferError`), but still combines entry, review/quote refresh, progress/recovery, and store/service orchestration in one component without `PaymentPageLayout`.
+
+#### Planned individually testable follow-up tasks (deferred; not edited in H5)
+
+| ID | Scope | Target files | Acceptance / test boundary |
+| --- | --- | --- | --- |
+| EC1 | Confirm whether `SendEcashModal.tsx` has any remaining caller; remove dead duplicate or document its mount. | `src/components/home/SendEcashModal.tsx` | Build + grep confirm zero broken imports; no behavior change. |
+| EC2 | Migrate `EcashModal` page branch to `PaymentPageLayout` and sheet branch to `BottomSheet` under `src/features/ecash/`. | `src/components/home/EcashModal.tsx` → `src/features/ecash/` | Preserves header visibility, animated mint picker, `EcashFields.css` inset focus borders, and safe areas at phone/desktop viewports. |
+| EC3 | Extract pure `EcashSendView` (entry + outgoing V3/V4/UR share presentation). | `src/features/ecash/EcashSendView.tsx` | Contract + browser tests verify no store/native/clipboard imports and identical send UI. |
+| EC4 | Extract pure `EcashReceiveView` (token input, `ReceivedTokenPreview`, scanner slot, `EcashReceiveInvoice` tab). | `src/features/ecash/EcashReceiveView.tsx` | Contract + browser tests verify claim/save-for-later actions and focus styling without native imports. |
+| EC5 | Extract `useEcashSend` and `useEcashReceive` lifecycle hooks with injected native/clipboard/UR adapters. | `src/features/ecash/useEcashSend.ts`, `useEcashReceive.ts` | Covered by H1 boundary checks (no store/Tauri imports) and synthetic race/duplicate-guard tests. |
+| EC6 | Move `EcashRequestPayment` native `invoke` calls behind a typed adapter added to H2's `check:no-any` list. | `src/components/home/EcashRequestPayment.tsx` | Zero untyped `invoke` / `any`; existing payment-request review/cap tests pass. |
+| CV1 | Migrate `TransferFunds` page shell to `PaymentPageLayout` preserving `PrimaryActionButton` footer/short-screen sizing. | `src/pages/TransferFunds.tsx`, `src/components/home/TransferFundsForm.tsx` | Existing `test:conversion-primary` and phone/desktop layout checks pass. |
+| CV2 | Extract pure `TransferEntry`, `TransferReview`, and `TransferProgress` presentations under `src/features/conversion/`. | `src/features/conversion/*` | Contract tests prove zero store/service/provider imports; review/fee/ceiling copy preserved. |
+| CV3 | Extract `useTransferFunds` lifecycle hook injecting `stableBalanceService` and store snapshots. | `src/features/conversion/useTransferFunds.ts` | Covered by H1 boundary checks and synthetic quote-refresh/repricing/recovery tests. |
+
+Verification:
+
+- Line, state, effect, `invoke`, and primitive-usage counts were measured directly on the current working tree.
+- `git diff --check` and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+
+No runtime code, dependencies, release versions, wallet formats or UI changed. H5 remains uncommitted and unpushed. H6 has not started.
+
+
+### H6 — Verify affected UI at phone and desktop sizes
+
+Verified on 2026-11-24 in isolated headless Chrome across **18 real-Chrome browser suites (410 browser assertions)** covering phone (`320×568`, `390×480`, `390×844`) and desktop (`1024×844`) viewports, dark and light themes, keyboard navigation, focus management, long-text/UTF-8 boundaries, and pending/error/empty states:
+
+- **Shared controls & shells:** `safeQRCode.test.mjs` (dark/light at 390px & 1024px, empty/unicode/emoji 2,000-byte UTF-8 bounds, render-error recovery), `bottomSheetShell.test.mjs`, `actionMenu.test.mjs` (320×568, 390×480, 1024×844, dark/light, Tab containment, Escape focus return, missing-mint empty guard), `pageHeader.test.mjs` (dark/light 390px & 1024px, focus contrast, back navigation), `mintBalancePicker.test.mjs`, `ecashMintPicker.test.mjs`, `bitcoinMintPicker.test.mjs`, `momoMintPicker.test.mjs`.
+- **Bitcoin & scanner flows (affected by H4e `LazyQrScanner`):** `bitcoinPageLayout.test.mjs`, `bitcoinDestinationEntry.test.mjs`, `bitcoinDestinationField.test.mjs` (38/38 passing across page/legacy, dark/light, 390×844 / 390×480 / 1024×844, clipboard empty/error, LNURL checking/invalid/valid, insufficient balance, FormField label & Tab order, scanner error/cancel/result), `bitcoinReceive.test.mjs`, `bitcoinSendLifecycle.test.mjs`.
+- **Mobile Money & reconciliation flows:** `momoPageLayout.test.mjs`, `momoEntryForm.test.mjs`, `momoReview.test.mjs`, `momoSavedTransfers.test.mjs` (empty/review hiding, resume, foreground guard), `walletReconciliation.test.mjs`.
+
+**Bug caught and fixed by H6 browser verification:**
+- `bitcoinDestinationField.test.mjs` initially failed its page and legacy scanner-open assertions (`fixture-scanner` not yet mounted 60ms after click) because React 19 throttles initial `React.lazy`/`<Suspense>` reveal transitions by 300ms. Updated [LazyQrScanner.tsx](cashu-app/src/components/shared/LazyQrScanner.tsx) to load `@yudiel/react-qr-scanner` via a cached `useEffect` dynamic import instead of `React.lazy`/`Suspense`, preserving the exact `-149.5 kB` lazy chunk split (`index.esm-BJGA2Rkw.js`: 149.53 kB; entry `index-BEk0oXH4.js`: 1,621.75 kB) while eliminating the 300ms reveal delay. Rebuilding and rerunning `bitcoinDestinationField.test.mjs` passed 38/38 with zero test edits.
+
+Verification:
+
+- All 18 real-Chrome browser suites passed (**410 passed**, 0 failed, 0 skipped).
+- `npm --prefix cashu-app run build`, `git diff --check`, and both 0.1.20 release checks (`node scripts/check-release.mjs` and `--history`) pass.
+- Limitation: isolated Chrome fixtures verify rendered layout, styles, keyboard, focus, and synthetic boundaries; they do not replace physical mobile WebView/OS-keyboard or screen-reader testing.
+
+H6 remains uncommitted and unpushed. H7 has not started.
+
+
+### H7 — Run the full required-check set
+
+Completed on 2026-11-24 against the current working tree on `clean` (HEAD `674b14b` plus uncommitted H1–H6 and the user-requested scanner responsiveness / Send eCash scanner UX fixes). All local required checks, guardrails, production build, frontend payment tests, and Rust workspace tests passed with zero failures, zero skipped/ignored tests, and zero suppressed checks:
+
+| Required check | Result | Evidence |
+| --- | --- | --- |
+| `sh scripts/check-migrated-rust-format.sh` | Passed | All 16 migrated Rust files formatted cleanly (`rustfmt --edition 2021 --check`). |
+| `npm --prefix cashu-app run check:format` | Passed | All 54 migrated frontend files passed formatting hygiene checks. |
+| `npm --prefix cashu-app run check:boundaries` | Passed | All 20 workflow services and lifecycle hooks passed import-boundary checks. |
+| `npm --prefix cashu-app run check:no-any` | Passed | All 16 migrated native adapters/contracts passed explicit-`any` checks. |
+| `git diff --check` | Passed | Zero whitespace or conflict-marker issues. |
+| `npm --prefix cashu-app run check:release` | Passed | Release `0.1.20`: versions match; 511 public text files passed file/credential hygiene checks. |
+| `node scripts/check-release.mjs --history` | Passed | Release `0.1.20`: git history and working tree passed hygiene checks. |
+| `npm --prefix cashu-app run build` | Passed | `tsc` + Vite production build (`✓ built in 4.50s`); zero mixed-import warnings; entry JS `index-BRdzH41Q.js` (`1,623.41 kB` raw / `495.75 kB` gzip), lazy QR chunk `index.esm-DIPwr2FP.js` (`149.53 kB` raw / `60.38 kB` gzip), lazy Spark WASM `spark_bindings_bg-*.wasm` (`12,650.26 kB` raw / `5,223.01 kB` gzip). Vite's default 500 kB chunk-size advisory remains unchanged and unsuppressed (documented in H4d/H4e). |
+| `npm --prefix cashu-app run test:payments` | Passed | **391 passed**, 0 failed, 0 skipped, 0 cancelled. |
+| `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` | Passed | **146 passed**, 0 failed, 0 ignored across 34 test/doc-test binaries; 0 compiler warnings (executed with local port access for localhost mock-mint integration tests). |
+
+**Scope notes:**
+- The 18 real-Chrome browser suites (**410 passed**, 0 failed, 0 skipped) were run in H6 on the same working tree prior to the user-requested scanner CSS/button adjustments (`ScanNoteForm.tsx`, `Scan.css`, `EcashModal.tsx`, `Pay.tsx`).
+- Online dependency audits (`npm audit`, `cargo audit`) require network access and were not executed in this offline environment; CI runs them online.
+
+No runtime code, dependencies, release versions, warning thresholds, or tests were modified or suppressed in H7. H7 remains uncommitted and unpushed. H8 has not started.
+
+
+### H8 — Final reassessment of all seven categories
+
+Completed on 2026-11-24 against the current working tree on `clean` (HEAD `674b14b` plus uncommitted H1–H7 and the user-requested scanner UX improvements), compared against the initial `65ce5ea` baseline (`6/10`).
+
+**Reassessed overall rating: 8/10** (equal-weight average: `57 / 7 = 8.14`, with no category below 8).
+
+Per Section 2 ("A 9/10 reassessment should average at least 9 with no category below 8... Finishing a checklist alone does not guarantee that rating"), the codebase has made a substantial, verified jump from `6/10` to `8/10`, but **does not yet earn 9/10** because eCash and conversion screens, `MomoTransferView.tsx`, non-migrated `any`/untyped `invoke` boundaries, and the remaining UI duplicates are inventoried rather than fully migrated.
+
+#### Reassessed scorecard
+
+| Dimension | Baseline (`65ce5ea`) | Reassessed (2026-11-24) | Evidence & remaining gap |
+| --- | :---: | :---: | --- |
+| Readability and naming | 6/10 | **8/10** | `MomoPaymentForm` (74L) now composes `MomoEntryForm` (107L), `MomoReview` (62L), and `MomoSavedTransfers` (32L); `BitcoinPaymentView` dropped from `1,090L` (`BitcoinModal.tsx`) to `445L` with explicit entry/review/lifecycle modules; route screens (`BitcoinScreen`, `MomoTransferScreen`) are separated from modal wrappers; A3/A4 comments/docs repaired; H3 enforces formatting on 54 frontend and 16 Rust files. **Gap:** `MomoTransferView.tsx` (958L) and `EcashModal.tsx` (758L) remain large mixed-mode files. |
+| Cohesion and single responsibility | 5/10 | **8/10** | Rust `send.rs` (145L) and `receive.rs` (274L) delegate to `crates/ecash-wallet/src/send.rs` (378L) and `receive.rs` (262L); `storage.rs` (162L) isolates encrypted persistence and raw saves no longer mutate domain state (G3–G14); `useTransactionProcessor.ts` is 22L of pure lifecycle wiring (F1–F9). **Gap:** `MomoTransferView.tsx` (958L), `EcashModal.tsx` (758L), `WalletBalanceCard.tsx` (636L), and `TransferFundsForm.tsx` (283L) still mix multiple concerns (EC1–EC6, CV1–CV3). |
+| Architecture and dependency direction | 6/10 | **8/10** | 18 frontend workflow services and 2 lifecycle hooks are decoupled from React, Zustand, stores, and Tauri, enforced in CI by `check:boundaries` (H1); Rust send/receive run without Tauri state with injectable `WalletStorage` (G6, G8, G10); Vite mixed-import warnings eliminated (H4b/H4c); QR scanner split into a lazy `-149.5 kB` chunk (H4e). **Gap:** non-migrated screens and non-send/receive Rust commands still couple directly to stores/Tauri/concrete storage; initial entry JS remains `1,623 kB` raw / `496 kB` gzip due to static route and Spark JS glue imports in `App.tsx` (H4d/H4e). |
+| Types, invariants, and errors | 6/10 | **8/10** | Typed `wallet_info` and refresh transaction contracts with fixture checks (C1–C3); structured `send_ecash_v2` error codes (C4–C6); localized provider-error parser (C7); Rust `ConversionStage` enum verified against TypeScript (C8–C9); explicit unavailable proxy balance (C10); durability failure surfacing (G1–G2); explicit proof normalization (G11–G14); CI-enforced `check:no-any` on 16 migrated native adapters (H2). **Gap:** `109` explicit `any` across `38` non-migrated frontend files, `117` `invoke` calls across `28` files (62+ untyped), 3 spent-token `.ok()` saves in `receive.rs`, and public mutable `WalletState` fields (H4). |
+| Navigation and feature organization | 5/10 | **8/10** | `CONTRIBUTING.md` maps routes, features, workflows, native adapters, and storage (B1); Bitcoin (`src/features/bitcoin/`) and Mobile Money (`src/features/momo/`) own dedicated feature folders with thin route wrappers (B4–B8); 22 shared controls live in `src/components/shared/`. **Gap:** eCash (`EcashModal.tsx`, `SendEcashModal.tsx`, `EcashRequestPayment.tsx`) and conversion (`TransferFundsForm.tsx`) still live under `src/components/home/` (EC2, CV2). |
+| UI reuse and component design | 7/10 | **8/10** | `DESIGN.md` typography aligned with `App.css` (D1); `PageHeader` and `SlidingSegmentedControl` use semantic tokens (D2–D3); one unified animated `MintBalancePicker` serves all payment pages (D4–D6); `PrimaryActionButton`, `IconButton`, `FormField`, `SafeQRCode`, `PaymentPageLayout`, `BottomSheet`, and `LazyQrScanner` are contract- and browser-tested (D7–D16, E1–E6, H4e). **Gap:** 9 direct `useBottomSheet` callers, 4 direct `react-qr-code` callers, concrete colors in `TransferFundsForm.css`, and unmigrated eCash/conversion layout shells (H4/H5). |
+| Tests and verification | 7/10 | **9/10** | Frontend payment/unit/contract suite grew from `165` to **391 passing** (44 files, 0 failed, 0 skipped) using ordinary fakes; Rust workspace suite grew from `73` to **146 passing** (34 binaries, 0 failed, 0 ignored, 0 warnings); **18 real-Chrome browser suites (410 assertions passed)** cover phone/desktop, dark/light, keyboard/focus, and error/empty states; CI enforces boundaries, no-`any`, migrated formatting, and `0.1.20` release/history hygiene. **Gap:** isolated Chrome fixtures do not replace physical mobile WebView/screen-reader audits; browser suites require sequential execution (`--test-concurrency=1`); `npm audit`/`cargo audit` run online in CI. |
+
+#### Concrete remaining path from 8/10 to 9/10
+
+1. **Finish eCash & conversion feature migrations (H5: `EC1–EC6`, `CV1–CV3`)** and decompose `MomoTransferView.tsx` (958L) so every primary payment flow matches the `features/` architecture and `PaymentPageLayout` pattern.
+2. **Close remaining boundary gaps (H4):** expand `check:no-any` and typed `invoke` wrappers across the remaining 38 frontend files, handle the 3 remaining spent-token `.ok()` saves in `receive.rs`, and narrow `WalletState` mutation surfaces.
+3. **Retire remaining UI duplicates (H4):** migrate the 9 direct `useBottomSheet` callers, 4 direct `react-qr-code` callers, and concrete colors in `TransferFundsForm.css`.
+4. **Reduce initial entry JS below Vite's 500 kB advisory (H4d/H4e):** lazy-load routes in `App.tsx` and/or Spark JS glue in `sparkService.ts` without raising warning thresholds.
+
+H8 changes documentation only (`code_review.md`). No runtime code, dependencies, release versions, warning thresholds, or tests changed. H8 remains uncommitted and unpushed.

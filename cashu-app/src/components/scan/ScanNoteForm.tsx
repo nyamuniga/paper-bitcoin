@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import { LazyQrScanner as Scanner } from '../shared/LazyQrScanner';
 import { QrCode, Loader2, BookUser } from 'lucide-react';
 import { useUrDecoder } from '../../hooks/useUrDecoder';
 import { readClipboardText } from '../../utils/clipboard';
@@ -34,9 +34,9 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
 
   return (
     <div className="scan-note-form">
-      <div className="scan-form-content">
+      <div className={`scan-form-content${showScanner ? ' scan-form-scanning' : ''}`}>
         {showScanner ? (
-          <div className="relative rounded-xl overflow-hidden border border-outline-variant/30 aspect-square">
+          <div className="scan-camera relative rounded-xl overflow-hidden border border-outline-variant/30 aspect-square">
             <Scanner
               formats={['qr_code']}
               onScan={(result) => {
@@ -57,18 +57,20 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
               }}
             />
             {urDecoder.progress > 0 && !urDecoder.isSuccess && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface-container-highest/80 px-4 py-2 rounded-full text-label-caps font-label-caps text-primary backdrop-blur-md">
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface-container-highest/80 px-4 py-2 rounded-full text-label-caps font-label-caps text-primary backdrop-blur-md whitespace-nowrap">
                 Scanning: {Math.round(urDecoder.progress * 100)}%
               </div>
             )}
             <button
+              type="button"
               onClick={() => {
                 setShowScanner(false);
                 urDecoder.reset();
               }}
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-highest px-4 py-2 rounded-full text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface">Cancel Scanner</button>
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-highest px-4 py-2 rounded-full text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface whitespace-nowrap">Cancel Scanner</button>
           </div>
         ) : (
+          <>
           <button
             type="button"
             aria-label="Scan QR code"
@@ -84,7 +86,6 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
             </div>
             <span className="text-label-caps font-label-caps text-primary relative z-10">Tap to Scan QR Code</span>
           </button>
-        )}
 
         <div className="scan-paste-fields flex flex-col gap-2">
           <label htmlFor="scan-data" className="text-body-md font-body-md text-on-surface-variant">Or paste:</label>
@@ -185,6 +186,8 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
             <span className="font-bold tracking-wide">Process</span>
           )}
         </button>
+          </>
+        )}
       </div>
 
       <AddressBookPickerModal

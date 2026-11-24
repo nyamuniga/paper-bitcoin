@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Loader2, Zap, QrCode, BookUser } from 'lucide-react';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import { LazyQrScanner as Scanner } from '../components/shared/LazyQrScanner';
 import { useWalletStore } from '../store/wallet';
 import { useBitcoin } from '../hooks/useBitcoin';
 import { useAddressBookStore } from '../store/addressBookStore';
@@ -203,7 +203,7 @@ export const Pay = () => {
 
           <div className="flex flex-col gap-4">
             {showScanner ? (
-              <div className="rounded-xl overflow-hidden border-2 border-primary">
+              <div className="relative rounded-xl overflow-hidden border-2 border-primary aspect-square shrink-0 w-full max-w-[320px] mx-auto">
                 <Scanner
                   formats={['qr_code']}
                   onScan={(result) => {

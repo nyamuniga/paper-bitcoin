@@ -4,25 +4,25 @@ export enum AppPhase {
   IDLE = "IDLE",
   FETCHING_RATE = "FETCHING_RATE",
   INITIATING_PAYMENT = "INITIATING_PAYMENT",
-  PENDING_PAYMENT = "PENDING_PAYMENT", 
-  VERIFYING_PAYMENT = "VERIFYING_PAYMENT", 
-  PAYMENT_FAILED = "PAYMENT_FAILED", 
-  FULFILLING = "FULFILLING", 
-  PAYING_INVOICE = "PAYING_INVOICE", 
-  MINTING = "MINTING", 
-  READY_TO_CLAIM = "READY_TO_CLAIM", 
-  AWAITING_USER_INVOICE = "AWAITING_USER_INVOICE", 
-  SENDING_SATS = "SENDING_SATS", 
-  SATS_SENT = "SATS_SENT", 
-  GENERATING_INVOICE = "GENERATING_INVOICE", 
-  AWAITING_INVOICE_PAYMENT = "AWAITING_INVOICE_PAYMENT", 
-  INITIATING_PAYOUT = "INITIATING_PAYOUT", 
-  VERIFYING_PAYOUT = "VERIFYING_PAYOUT", 
-  PAYOUT_COMPLETE = "PAYOUT_COMPLETE", 
+  PENDING_PAYMENT = "PENDING_PAYMENT",
+  VERIFYING_PAYMENT = "VERIFYING_PAYMENT",
+  PAYMENT_FAILED = "PAYMENT_FAILED",
+  FULFILLING = "FULFILLING",
+  PAYING_INVOICE = "PAYING_INVOICE",
+  MINTING = "MINTING",
+  READY_TO_CLAIM = "READY_TO_CLAIM",
+  AWAITING_USER_INVOICE = "AWAITING_USER_INVOICE",
+  SENDING_SATS = "SENDING_SATS",
+  SATS_SENT = "SATS_SENT",
+  GENERATING_INVOICE = "GENERATING_INVOICE",
+  AWAITING_INVOICE_PAYMENT = "AWAITING_INVOICE_PAYMENT",
+  INITIATING_PAYOUT = "INITIATING_PAYOUT",
+  VERIFYING_PAYOUT = "VERIFYING_PAYOUT",
+  PAYOUT_COMPLETE = "PAYOUT_COMPLETE",
   PAYOUT_FAILED = "PAYOUT_FAILED",
-  RETRYABLE_ERROR = "RETRYABLE_ERROR", 
+  RETRYABLE_ERROR = "RETRYABLE_ERROR",
   RECOVERY_REQUIRED = "RECOVERY_REQUIRED",
-  EXPIRED = "EXPIRED", 
+  EXPIRED = "EXPIRED",
   // Ark Protocol Phases
   AWAITING_ASP_BOARDING = "AWAITING_ASP_BOARDING",
   LIFTING_VUTXO = "LIFTING_VUTXO",
@@ -37,11 +37,11 @@ export enum MomoStatus {
 
 export enum FulfillmentStep {
   NONE = "NONE",
-  AWAITING_MINT_PAYMENT = "AWAITING_MINT_PAYMENT", 
-  AWAITING_MINT_TOKENS = "AWAITING_MINT_TOKENS", 
-  AWAITING_FULFILLMENT = "AWAITING_FULFILLMENT", 
-  AWAITING_USER_INVOICE = "AWAITING_USER_INVOICE", 
-  AWAITING_PAYOUT = "AWAITING_PAYOUT", 
+  AWAITING_MINT_PAYMENT = "AWAITING_MINT_PAYMENT",
+  AWAITING_MINT_TOKENS = "AWAITING_MINT_TOKENS",
+  AWAITING_FULFILLMENT = "AWAITING_FULFILLMENT",
+  AWAITING_USER_INVOICE = "AWAITING_USER_INVOICE",
+  AWAITING_PAYOUT = "AWAITING_PAYOUT",
   COMPLETED = "COMPLETED",
 }
 
@@ -55,21 +55,21 @@ export interface TransactionDetails {
   satsAmount: number;
   fee: number;
   rate: number;
-  invoice: string; 
+  invoice: string;
   momoPhoneNumber: string;
-  momoReferenceId: string | null; 
-  mintQuoteId: string | null; 
-  ecashToken: string | null; 
-  paymentHash: string | null; 
-  payoutReferenceId: string | null; 
+  momoReferenceId: string | null;
+  mintQuoteId: string | null;
+  ecashToken: string | null;
+  paymentHash: string | null;
+  payoutReferenceId: string | null;
   invoicePaid?: boolean;
   momoSubmission?: 'not_started' | 'submitting' | 'accepted' | 'rejected';
   recoveryMessage?: string;
-  status?: TransactionStatus; 
-  timestamp?: number; 
-  fulfillmentStep?: FulfillmentStep; 
-  currentPhase?: AppPhase; 
-  currentTab?: "ecash" | "lightning" | "receive"; 
+  status?: TransactionStatus;
+  timestamp?: number;
+  fulfillmentStep?: FulfillmentStep;
+  currentPhase?: AppPhase;
+  currentTab?: "ecash" | "lightning" | "receive";
   mintUrl?: string;
   // Ark Protocol fields
   boardingAddress?: string;

@@ -45,6 +45,9 @@
     "test:bitcoin-send-review": "npm run build && node --test --test-concurrency=1 tests/bitcoinSendReviewContracts.test.mjs tests/browser/bitcoinSendReview.test.mjs tests/browser/bitcoinSendReviewView.test.mjs",
     "test:bitcoin-destination-entry": "npm run build && node --test --test-concurrency=1 tests/bitcoinDestinationEntryContracts.test.mjs tests/browser/bitcoinDestinationEntry.test.mjs tests/browser/bitcoinDestinationField.test.mjs",
     "test:bitcoin-receive-lifecycle": "npm run build && node --test --test-concurrency=1 tests/bitcoinReceiveLifecycleContracts.test.mjs tests/browser/bitcoinReceiveLifecycle.test.mjs",
+    "check:boundaries": "node scripts/check-import-boundaries.mjs",
+    "check:no-any": "node scripts/check-no-explicit-any.mjs",
+    "check:format": "node scripts/check-migrated-format.mjs",
     "check:release": "node ../scripts/check-release.mjs"
   },
   "dependencies": {
