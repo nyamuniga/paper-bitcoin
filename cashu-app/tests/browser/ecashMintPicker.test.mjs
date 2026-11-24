@@ -140,7 +140,7 @@ test('Ecash text fields have one unclipped focus indicator', { timeout: 60000 },
   const { call, evaluate, key, load, click, assertNoOperations } = await createEcashFixture(t);
   const fields = [
     { name: 'description', query: 'receive', selector: '.ecash-invoice-entry input', anchor: '[aria-label="Scan ecash token"]' },
-    { name: 'pubkey', query: '', selector: '#ecash-lock-pubkey', anchor: '[aria-label="Choose mint"]' },
+    { name: 'pubkey', query: '', selector: '#ecash-lock-pubkey', anchor: '[aria-label="Scan ecash invoice"]' },
     { name: 'token', query: 'receive&invalid-token', selector: 'textarea', anchor: '[aria-label="Scan ecash token"]' },
   ];
   const appearance = selector => evaluate(`(()=>{

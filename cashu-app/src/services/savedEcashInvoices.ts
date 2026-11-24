@@ -16,7 +16,7 @@ export interface SavedEcashInvoice extends EcashInvoiceSummary, EcashInvoice {
 export const listEcashInvoices = () => invoke<EcashInvoiceSummary[]>('ecash_invoices');
 export const loadEcashInvoice = (id: string) => invoke<SavedEcashInvoice>('ecash_invoice', { id });
 export async function saveEcashInvoice(invoice: EcashInvoice, description: string, secret: Uint8Array, relays: string[]): Promise<void> {
-    await invoke('ecash_save_invoice', { invoice: { ...invoice, description, secret_hex: Array.from(secret, b => b.toString(16).padStart(2, '0')).join(''), relays, created_at: 0, pending_token: null } });
+    await invoke<void>('ecash_save_invoice', { invoice: { ...invoice, description, secret_hex: Array.from(secret, b => b.toString(16).padStart(2, '0')).join(''), relays, created_at: 0, pending_token: null } });
 }
 export const saveInvoicePayment = (id: string, token: string) => invoke<void>('ecash_invoice_payment', { id, token });
 export function invoiceSecret(saved: SavedEcashInvoice): Uint8Array {

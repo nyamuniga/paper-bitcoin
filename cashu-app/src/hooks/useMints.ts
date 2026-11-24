@@ -10,12 +10,12 @@ export const useMints = () => {
   const addMint = async (mintUrl: string) => {
     setLoading(true);
     try {
-      await invoke('add_mint', { mintUrl });
+      await invoke<void>('add_mint', { mintUrl });
       toast.success('Mint added successfully');
       await refreshWallet();
       return true;
-    } catch (e: any) {
-      toast.error(e.toString());
+    } catch (e: unknown) {
+      toast.error(String(e));
       return false;
     } finally {
       setLoading(false);
@@ -25,12 +25,12 @@ export const useMints = () => {
   const removeMint = async (mintUrl: string) => {
     setLoading(true);
     try {
-      await invoke('remove_mint', { mintUrl });
+      await invoke<void>('remove_mint', { mintUrl });
       toast.success('Mint removed successfully');
       await refreshWallet();
       return true;
-    } catch (e: any) {
-      toast.error(e.toString());
+    } catch (e: unknown) {
+      toast.error(String(e));
       return false;
     } finally {
       setLoading(false);

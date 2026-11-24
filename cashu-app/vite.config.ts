@@ -13,6 +13,44 @@ export default defineConfig(async () => ({
     exclude: ["@breeztech/breez-sdk-spark"],
   },
 
+  build: {
+    cssCodeSplit: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("/react-dom/") || id.includes("/react/") || id.includes("/scheduler/")) {
+            return "vendor-react";
+          }
+          if (id.includes("/react-router")) {
+            return "vendor-router";
+          }
+          if (id.includes("/framer-motion/") || id.includes("/motion-dom/") || id.includes("/motion-utils/")) {
+            return "vendor-motion";
+          }
+          if (id.includes("/@cashu/") || id.includes("/@noble/") || id.includes("/@scure/")) {
+            return "vendor-crypto";
+          }
+          if (id.includes("/nostr-tools/")) {
+            return "vendor-nostr";
+          }
+          if (id.includes("/lucide-react/")) {
+            return "vendor-icons";
+          }
+          if (id.includes("/crypto-js/")) {
+            return "vendor-cryptojs";
+          }
+          if (id.includes("/@breeztech/")) {
+            return undefined;
+          }
+          if (id.includes("/@yudiel/")) {
+            return undefined;
+          }
+          return undefined;
+        },
+      },
+    },
+  },
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

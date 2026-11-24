@@ -27,7 +27,7 @@ export async function createBrowserFixture(t, entry, readySelector, plugins = []
     try { await access(candidate); executable = candidate; break; } catch {}
   }
   assert(executable, 'Chrome is required; set CHROME_BIN to its executable.');
-  const css = (await readdir(assets)).find(name => /^index-.*\.css$/.test(name));
+  const css = (await readdir(assets)).find(name => /^(?:index|style)-.*\.css$/.test(name));
   assert(css, 'Build the app before running the browser fixture.');
 
   const directory = await mkdtemp(join(tmpdir(), 'bitnotes-browser-fixture-'));

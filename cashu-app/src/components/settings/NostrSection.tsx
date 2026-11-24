@@ -135,8 +135,8 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
       useNostrStore.getState().setNpub('');
       useNostrStore.getState().setLightningAddress('');
 
-      await invoke('set_custom_nostr_key', { key: hex });
-      await invoke('lock_wallet');
+      await invoke<void>('set_custom_nostr_key', { key: hex });
+      await invoke<void>('lock_wallet');
       toast.success('Custom Nostr key saved! Restarting to apply...');
 
       setTimeout(() => {
@@ -144,8 +144,8 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
         window.location.reload();
       }, 1500);
 
-    } catch (e: any) {
-      toast.error('Invalid nsec: ' + e.message);
+    } catch (e: unknown) {
+      toast.error('Invalid nsec: ' + (e instanceof Error ? e.message : String(e)));
       setIsSaving(false);
     }
   };
@@ -158,15 +158,15 @@ export const NostrSection: React.FC<NostrSectionProps> = ({
       useNostrStore.getState().setNpub('');
       useNostrStore.getState().setLightningAddress('');
 
-      await invoke('set_custom_nostr_key', { key: null });
-      await invoke('lock_wallet');
+      await invoke<void>('set_custom_nostr_key', { key: null });
+      await invoke<void>('lock_wallet');
       toast.success('Reverted to wallet key! Restarting...');
       setTimeout(() => {
         window.history.replaceState(null, '', '/');
         window.location.reload();
       }, 1500);
-    } catch (e: any) {
-      toast.error('Failed to revert key: ' + e.message);
+    } catch (e: unknown) {
+      toast.error('Failed to revert key: ' + (e instanceof Error ? e.message : String(e)));
       setIsReverting(false);
     }
   };

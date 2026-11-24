@@ -22,7 +22,7 @@ function reportBitcoinError(message: string, options?: BitcoinErrorOptions) {
 export const useBitcoin = (mintUrl?: string) => {
   const [paying, setPaying] = useState(false);
   const [requesting, setRequesting] = useState(false);
-  
+
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const isPayingRef = useRef(false);
   const isRequestingRef = useRef(false);
@@ -34,20 +34,20 @@ export const useBitcoin = (mintUrl?: string) => {
   ) => {
     if (isPayingRef.current) return false;
     const targetMint = overrideMintUrl || mintUrl;
-    
+
     isPayingRef.current = true;
     setPaying(true);
     try {
       if (targetMint) {
-        await invoke('pay_invoice', { invoice, mintUrl: targetMint });
+        await invoke<void>('pay_invoice', { invoice, mintUrl: targetMint });
       } else {
-        await invoke('pay_invoice', { invoice });
+        await invoke<void>('pay_invoice', { invoice });
       }
       if (!opts?.silent) toast.success('Invoice paid successfully!');
       await refreshWallet();
       return true;
-    } catch (e: any) {
-      const message = String(e?.message ?? e);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
       if (!opts?.silent) toast.error(`Payment failed: ${message}`);
       opts?.onError?.(message);
       return false;
@@ -68,10 +68,10 @@ export const useBitcoin = (mintUrl?: string) => {
     isRequestingRef.current = true;
     setRequesting(true);
     try {
-      const res: any = await invoke('receive_lightning', { mintUrl: targetMint, amount });
+      const res = await invoke<{ quote_id: string; invoice: string; amount: number }>('receive_lightning', { mintUrl: targetMint, amount });
       await refreshWallet();
       return { quoteId: res.quote_id as string, receiveInvoice: res.invoice as string };
-    } catch (e: any) {
+    } catch (e: unknown) {
       reportBitcoinError(`Failed to create invoice: ${e}`, options);
       return null;
     } finally {
@@ -102,8 +102,8 @@ export const useBitcoin = (mintUrl?: string) => {
         quoteId: res.quote_id,
         orderId: res.order_id,
       };
-    } catch (e: any) {
-      reportBitcoinError(`Failed to get Bitcoin deposit address: ${e.message || e}`, options);
+    } catch (e: unknown) {
+      reportBitcoinError(`Failed to get Bitcoin deposit address: ${e instanceof Error ? e.message : String(e)}`, options);
       return null;
     } finally {
       setRequesting(false);
@@ -123,8 +123,8 @@ export const useBitcoin = (mintUrl?: string) => {
     setRequesting(true);
     try {
       return await estimateOnChainSendSpark(address, amount, targetMint);
-    } catch (e: any) {
-      reportBitcoinError(`Estimation failed: ${e.message || e}`, options);
+    } catch (e: unknown) {
+      reportBitcoinError(`Estimation failed: ${e instanceof Error ? e.message : String(e)}`, options);
       return null;
     } finally {
       setRequesting(false);
@@ -152,8 +152,8 @@ export const useBitcoin = (mintUrl?: string) => {
       );
       await refreshWallet();
       return { txid };
-    } catch (e: any) {
-      reportBitcoinError(`On-Chain send failed: ${e.message || e}`, options);
+    } catch (e: unknown) {
+      reportBitcoinError(`On-Chain send failed: ${e instanceof Error ? e.message : String(e)}`, options);
       await refreshWallet();
       return null;
     } finally {

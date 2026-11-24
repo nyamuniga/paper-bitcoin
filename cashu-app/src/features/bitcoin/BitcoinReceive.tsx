@@ -1,5 +1,5 @@
 import { Bitcoin, Check, Copy, Loader2, Zap } from 'lucide-react';
-import QRCode from 'react-qr-code';
+import { SafeQRCode } from '../../components/shared/SafeQRCode';
 import { AmountDisplay } from '../../components/shared/AmountDisplay';
 import { MintIcon } from '../../components/shared/MintIcon';
 import { MintName } from '../../components/shared/MintName';
@@ -63,7 +63,7 @@ export function BitcoinReceive({
     <div className="flex flex-col items-center gap-5">
       <div className="relative">
         <div className="bg-white p-4 rounded-xl shadow-lg">
-          <QRCode value={invoice} size={200} />
+          <SafeQRCode value={invoice} size={200} fallbackText="Use the Copy Invoice button below" />
         </div>
         <div className="absolute inset-0 bg-primary/20 rounded-xl blur-xl -z-10 animate-pulse"></div>
       </div>
@@ -107,13 +107,14 @@ export function BitcoinReceive({
     <div className="flex flex-col items-center gap-5">
       <div className="relative">
         <div className="bg-white p-4 rounded-xl shadow-lg">
-          <QRCode
+          <SafeQRCode
             value={
               depositSats
                 ? `bitcoin:${address}?amount=${(depositSats / 100_000_000).toFixed(8)}`
                 : `bitcoin:${address}`
             }
             size={200}
+            fallbackText="Use the Copy URI button below"
           />
         </div>
       </div>

@@ -1,10 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
-import initBreezSDK, {
-  SdkBuilder,
-  defaultConfig,
-  type BreezSdk,
-  type SdkEvent,
-  type PrepareSendPaymentResponse,
+import type {
+  BreezSdk,
+  SdkEvent,
+  PrepareSendPaymentResponse,
 } from '@breeztech/breez-sdk-spark/web';
 import { BREEZ_API_KEY } from '../constants.local';
 import { guardConversionPayments } from './conversionSpendGuard';
@@ -86,10 +84,25 @@ export const subscribeToSparkEvents = (cb: SparkEventCallback): (() => void) => 
   };
 };
 
-async function ensureWasmInitialized(): Promise<void> {
-  if (wasmInitialized) return;
+type BreezSdkModule = typeof import('@breeztech/breez-sdk-spark/web');
+let breezModulePromise: Promise<BreezSdkModule> | null = null;
+
+function loadBreezSdkModule(): Promise<BreezSdkModule> {
+  if (!breezModulePromise) {
+    breezModulePromise = import('@breeztech/breez-sdk-spark/web').catch((err) => {
+      breezModulePromise = null;
+      throw err;
+    });
+  }
+  return breezModulePromise;
+}
+
+async function ensureWasmInitialized(): Promise<BreezSdkModule> {
+  const breez = await loadBreezSdkModule();
+  if (wasmInitialized) return breez;
   if (!wasmInitPromise) {
-    wasmInitPromise = initBreezSDK()
+    wasmInitPromise = breez
+      .default()
       .then(() => {
         wasmInitialized = true;
       })
@@ -99,10 +112,11 @@ async function ensureWasmInitialized(): Promise<void> {
       });
   }
   await wasmInitPromise;
+  return breez;
 }
 
 export async function getSparkSdk(): Promise<BreezSdk> {
-  await ensureWasmInitialized();
+  const breez = await ensureWasmInitialized();
 
   const cfg = await invoke<SparkConfigResponse>('spark_get_config');
   if (sdkInstance && sdkWalletId === cfg.wallet_id) {
@@ -133,7 +147,7 @@ export async function getSparkSdk(): Promise<BreezSdk> {
       }
 
       const network = cfg.network === 'regtest' ? 'regtest' : 'mainnet';
-      const sdkConfig = defaultConfig(network);
+      const sdkConfig = breez.defaultConfig(network);
       sdkConfig.apiKey = resolvedApiKey;
       sdkConfig.maxDepositClaimFee = {
         onchain: {
@@ -143,7 +157,7 @@ export async function getSparkSdk(): Promise<BreezSdk> {
         proportionalPpm: 15000,
       };
 
-      const builder = await SdkBuilder.new(sdkConfig, {type:'mnemonic', mnemonic:cfg.mnemonic})
+      const builder = await breez.SdkBuilder.new(sdkConfig, {type:'mnemonic', mnemonic:cfg.mnemonic})
         .withDefaultStorage(`bitnotes_spark_${cfg.wallet_id}`);
       const sdk = await builder.withPaymentObserver({
         beforeSend: guardConversionPayments,
@@ -221,7 +235,7 @@ export const getCredentialsStatus = async (): Promise<boolean> => {
 };
 
 export const setCredentials = async (apiKey: string): Promise<void> => {
-  await invoke('spark_set_credentials', { apiKey });
+  await invoke<void>('spark_set_credentials', { apiKey });
   await disconnectSparkSdk();
 };
 
@@ -468,7 +482,7 @@ export const executeOnChainSendSpark = async (
 
     const actualSparkFee = Number(payment.fees);
 
-    await invoke('spark_finalize_onchain_send', {
+    await invoke<void>('spark_finalize_onchain_send', {
       txId: meltRes.tx_id,
       txid: l1Txid,
       finalSparkFeeSats: actualSparkFee,
@@ -483,7 +497,7 @@ export const executeOnChainSendSpark = async (
     return l1Txid;
   } catch (err) {
     console.error('Spark L1 broadcast failed after Cashu melt; initiating self-healing sweep back to Cashu:', err);
-    await invoke('spark_finalize_onchain_send', {
+    await invoke<void>('spark_finalize_onchain_send', {
       txId: meltRes.tx_id,
       txid: null,
       finalSparkFeeSats: null,
@@ -662,7 +676,7 @@ async function sweepSparkToCashuLocked(preferredMintUrl?: string): Promise<boole
         prepareResponse: sendPrep,
       });
     } catch (payErr) {
-      await invoke('spark_abort_unpaid_mint_from_spark', {
+      await invoke<void>('spark_abort_unpaid_mint_from_spark', {
         txId: mintPrep.tx_id,
       }).catch(() => {});
       throw payErr;

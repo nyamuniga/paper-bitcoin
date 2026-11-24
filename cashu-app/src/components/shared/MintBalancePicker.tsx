@@ -20,7 +20,7 @@ const pickerClasses = {
   menu: 'shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] flex flex-col max-h-[250px]',
   row: 'shrink-0 border-b border-outline-variant/10 last:border-b-0 transition-colors',
   rowIcon: 'w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0',
-  rowName: 'text-body-sm font-body-sm text-on-surface truncate',
+  rowName: 'text-body-sm font-body-sm text-on-surface truncate min-w-0',
   rowBalance: 'text-body-sm font-body-sm font-bold text-on-surface flex-shrink-0',
 };
 
@@ -93,11 +93,11 @@ export function MintBalancePicker({ mintUrl, balances, onSelect, disabled = fals
     </button>
     {open && createPortal(<>
       <div className="fixed inset-0 z-[110]" onClick={() => close()} />
-      <div ref={menu} style={position} data-mint-picker-menu aria-label="Available mints" className={`overflow-y-auto overscroll-contain bg-surface-container-highest border border-outline-variant/20 rounded-2xl ${pickerClasses.menu} ${menuAnimation}`}>
+      <div ref={menu} style={position} data-mint-picker-menu aria-label="Available mints" className={`overflow-y-auto overflow-x-hidden overscroll-contain bg-surface-container-highest border border-outline-variant/20 rounded-2xl ${pickerClasses.menu} ${menuAnimation}`}>
         {Object.keys(balances).map((mint, index) => <button key={mint} type="button" aria-current={mint === mintUrl}
           style={{ animationDelay: `${index * 30}ms` }}
           onClick={() => { if (!closing) { onSelect(mint); close(); } }} className={`w-full min-h-11 flex items-center justify-between p-3 hover:bg-surface-bright text-left cursor-pointer focus-visible:outline-2 focus-visible:outline-primary ${pickerClasses.row} animate-dropdown-item`}>
-          <span className={`flex items-center gap-2 min-w-0 pr-2`}><MintIcon mintUrl={mint} className={pickerClasses.rowIcon} textClassName={pickerClasses.iconText} /><MintName mintUrl={mint} className={pickerClasses.rowName} />{mint === mintUrl && <Check size={14} className="text-primary shrink-0" />}</span>
+          <span className={`flex items-center gap-2 min-w-0 flex-1 pr-2`}><MintIcon mintUrl={mint} className={pickerClasses.rowIcon} textClassName={pickerClasses.iconText} /><MintName mintUrl={mint} className={pickerClasses.rowName} />{mint === mintUrl && <Check size={14} className="text-primary shrink-0" />}</span>
           <span className={pickerClasses.rowBalance}>₿{balances[mint].toLocaleString()}</span>
         </button>)}
       </div>

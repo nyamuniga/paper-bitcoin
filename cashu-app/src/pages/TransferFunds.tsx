@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TransferFundsForm } from '../components/home/TransferFundsForm';
+import { TransferFundsScreen } from '../features/conversion/TransferFundsScreen';
 import { useWalletStore } from '../store/wallet';
 import { useStableBalance } from '../hooks/useStableBalance';
 
@@ -14,7 +14,7 @@ export function TransferFundsPage() {
   const preferredMint = localStorage.getItem('preferred_mint_url');
   const mintUrl = preferredMint && mints.includes(preferredMint) ? preferredMint : mints[0] ?? '';
   useEffect(() => {void refreshWallet();}, [refreshWallet]);
-  return <TransferFundsForm
+  return <TransferFundsScreen
     initialDirection={balanceView === 'usd' ? 'toSats' : 'toUsd'}
     mintUrl={mintUrl}
     cashuBalance={mintBalances[mintUrl] ?? 0}

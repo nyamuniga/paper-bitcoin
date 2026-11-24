@@ -12,7 +12,7 @@ export const useEcash = (mintUrl?: string) => {
   const [receiving, setReceiving] = useState(false);
   const [isClaimed, setIsClaimed] = useState(false);
   const [currentTxId, setCurrentTxId] = useState<string | null>(null);
-  
+
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
   const isSendingRef = useRef(false);
   const isReceivingRef = useRef(false);
@@ -46,8 +46,8 @@ export const useEcash = (mintUrl?: string) => {
   }, [currentTxId, isClaimed]);
 
   const sendEcash = async (
-    amount: number, 
-    overrideMintUrl?: string, 
+    amount: number,
+    overrideMintUrl?: string,
     pubkey?: string,
     opts?: { silent?: boolean; onError?: (msg: string) => void }
   ) => {
@@ -61,7 +61,7 @@ export const useEcash = (mintUrl?: string) => {
     if (unresolvedSendRef.current) {
       return reportError(unresolvedSendRef.current.message);
     }
-    
+
     const targetMint = overrideMintUrl || mintUrl;
     if (!targetMint) {
       return reportError('No mint specified for sending');
@@ -126,15 +126,15 @@ export const useEcash = (mintUrl?: string) => {
         }
       }
 
-      const amount = await invoke<number>('receive_ecash', { 
+      const amount = await invoke<number>('receive_ecash', {
         tokenString: cleanToken,
         nostrKey: nostrKey || undefined,
       });
       await refreshWallet();
       if (!opts?.silent) toast.success(`Received ₿${amount.toLocaleString()} sats!`);
       return amount;
-    } catch (e: any) {
-      const err = String(e?.message ?? e);
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e.message : String(e);
       if (!opts?.silent) toast.error(`Receive failed: ${err}`);
       opts?.onError?.(err);
       return null;

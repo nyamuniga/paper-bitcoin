@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState } from 'react';
 import { X, ArrowDownLeft, ArrowUpRight, Banknote, CheckCircle, AlertCircle, XCircle, Copy, Check, Clock, Download, ExternalLink } from 'lucide-react';
 import { Transaction } from './TransactionCard';
 import { toast } from 'react-hot-toast';
 import { SafeQRCode } from '../shared/SafeQRCode';
 import { useUrEncoder } from '../../hooks/useUrEncoder';
-import { useBottomSheet } from '../../hooks/useBottomSheet';
+import { BottomSheet } from '../shared/BottomSheet';
 import { EcashReceiveInvoice } from '../home/EcashReceiveInvoice';
 import { MintName } from '../shared/MintName';
 import { MintIcon } from '../shared/MintIcon';
@@ -34,25 +33,6 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   onCheckIssue,
   onDownloadNote
 }) => {
-  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
-  const panel = useRef<HTMLDivElement>(null);
-  const close = useRef(closeWithAnimation);
-  close.current = closeWithAnimation;
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    panel.current?.querySelector<HTMLButtonElement>('button')?.focus();
-    const keyboard = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); close.current(); return; }
-      if (event.key !== 'Tab') return;
-      const controls = panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),summary,a[href],[tabindex="0"]');
-      if (!controls?.length) return;
-      const first = controls[0], last = controls[controls.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    document.addEventListener('keydown', keyboard);
-    return () => { document.removeEventListener('keydown', keyboard); if (previous?.isConnected) previous.focus(); };
-  }, []);
   const isRequest = 'EcashRequest' in tx.tx_type;
   const [invoiceActionsContainer, setInvoiceActionsContainer] = useState<HTMLDivElement | null>(null);
   const [requestStatus, setRequestStatus] = useState<'pending' | 'received' | 'paid'>(tx.tx_type.EcashRequest?.status ?? 'pending');
@@ -157,41 +137,36 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
     (status === 'Failed' && isReceiveEcash && onRetryReceiveEcash)
   );
 
-  return createPortal(
-    <div 
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
-      style={backdropStyle}
-      onClick={closeWithAnimation}
+  return (
+    <BottomSheet
+      onClose={onClose}
+      aria-label="Transaction details"
+      className="bg-surface-container-high/98 backdrop-blur-2xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] overflow-hidden flex flex-col relative max-h-[92vh]"
     >
-      <div 
-        ref={panel} role="dialog" aria-modal="true" aria-label="Transaction details"
-        onClick={(e) => e.stopPropagation()}
-        style={sheetStyle}
-        className="bg-surface-container-high/98 backdrop-blur-2xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] overflow-hidden flex flex-col relative max-h-[92vh]"
-      >
-        <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
+      {({ dragHandleProps, closeButtonProps }) => (
+        <>
+          <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
 
-        {/* Drag Handle for mobile */}
-        <div 
-          {...dragHandleProps}
-          className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
-        >
-          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
-        </div>
-        
-        {/* Top Control Bar (No name/title on top) */}
-        <div 
-          {...dragHandleProps}
-          className="flex items-center justify-end px-5 pt-2 pb-1 relative z-10"
-        >
-          <button 
-            onClick={closeWithAnimation}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container/70 text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors border border-outline-variant/20 cursor-pointer"
-            aria-label="Close"
+          {/* Drag Handle for mobile */}
+          <div
+            {...dragHandleProps}
+            className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
           >
-            <X size={18} />
-          </button>
-        </div>
+            <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
+          </div>
+
+          {/* Top Control Bar (No name/title on top) */}
+          <div
+            {...dragHandleProps}
+            className="flex items-center justify-end px-5 pt-2 pb-1 relative z-10"
+          >
+            <button
+              {...closeButtonProps}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container/70 text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors border border-outline-variant/20 cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
 
         {/* Scrollable Content */}
         <div className={`px-6 pt-1 flex-1 flex flex-col gap-5 relative z-10 overflow-y-auto ${hasActions ? 'pb-4' : 'pb-6 sm:pb-5'}`}>
@@ -569,8 +544,8 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             )}
           </div>
         )}
-      </div>
-    </div>,
-    document.body
+        </>
+      )}
+    </BottomSheet>
   );
 };

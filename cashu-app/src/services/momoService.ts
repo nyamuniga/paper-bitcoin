@@ -5,13 +5,22 @@ import { requestProxyJson, ProxyRequestError } from './proxyRequest';
 
 import { MOMO_API_BASE_URL } from '../constants.local';
 
+interface MomoProxyResponse {
+  status?: string;
+  message?: string;
+  data?: {
+    reference_id?: string;
+    status?: string;
+  };
+}
+
 export const initiateMomoPaymentRequest = async (
   txId: string,
   netSats: number,
   activeTab: string,
   amount: number,
   phoneNumber: string
-): Promise<any> => {
+): Promise<MomoPayoutSubmissionResult> => {
 
   const targetUrl = `${MOMO_API_BASE_URL}/payment/request/octoba`;
 
@@ -38,7 +47,7 @@ export const initiateMomoPaymentRequest = async (
       }
     };
 
-    const encrypted: any = await Encryption.encrypt(payload);
+    const encrypted = await Encryption.encrypt(payload);
 
     const requestData = {
       encrypted: encrypted.encrypted,
@@ -48,7 +57,7 @@ export const initiateMomoPaymentRequest = async (
     };
 
     submitted = true;
-    const responseData = await requestProxyJson(targetUrl, {
+    const responseData = await requestProxyJson<MomoProxyResponse>(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -67,8 +76,8 @@ export const initiateMomoPaymentRequest = async (
     } else {
       throw new Error(responseData.message || "Failed to initiate MoMo payment due to an unknown API error.");
     }
-  } catch (error: any) {
-    return { success: false, submission: !submitted ? 'rejected' : error instanceof ProxyRequestError ? error.submission : 'unknown', message: error.message || 'Could not confirm the payment request.' };
+  } catch (error: unknown) {
+    return { success: false, submission: !submitted ? 'rejected' : error instanceof ProxyRequestError ? error.submission : 'unknown', message: (error instanceof Error ? error.message : String(error)) || 'Could not confirm the payment request.' };
   }
 };
 
@@ -104,7 +113,7 @@ export const initiateMomoPayout = async (
       }
     };
 
-    const encrypted: any = await Encryption.encrypt(payload);
+    const encrypted = await Encryption.encrypt(payload);
 
     const requestData = {
       encrypted: encrypted.encrypted,
@@ -114,7 +123,7 @@ export const initiateMomoPayout = async (
     };
 
     submitted = true;
-    const responseData = await requestProxyJson(targetUrl, {
+    const responseData = await requestProxyJson<MomoProxyResponse>(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json', 'X-Encrypted': 'true',
@@ -132,8 +141,8 @@ export const initiateMomoPayout = async (
     } else {
       throw new Error(responseData.message || "Failed to initiate MoMo payout.");
     }
-  } catch (error: any) {
-    return { success: false, submission: !submitted ? 'rejected' : error instanceof ProxyRequestError ? error.submission : 'unknown', message: error.message || 'Could not confirm the payout request.' };
+  } catch (error: unknown) {
+    return { success: false, submission: !submitted ? 'rejected' : error instanceof ProxyRequestError ? error.submission : 'unknown', message: (error instanceof Error ? error.message : String(error)) || 'Could not confirm the payout request.' };
   }
 };
 
@@ -142,7 +151,7 @@ export const checkMomoPayoutStatus = (txId: string | null) => checkStatus('payou
 async function checkStatus(kind: 'request' | 'payout', txId: string | null): Promise<MomoPaymentStatusResult> {
   if (!txId) return {status:'UNKNOWN', message:'The saved transaction ID is missing. Contact support before retrying.'};
   try {
-    const data = await requestProxyJson(`${MOMO_API_BASE_URL}/payment/${kind}/octoba/status/${encodeURIComponent(txId)}`);
+    const data = await requestProxyJson<MomoProxyResponse>(`${MOMO_API_BASE_URL}/payment/${kind}/octoba/status/${encodeURIComponent(txId)}`);
     const status = data.status === 'success' && typeof data.data?.status === 'string' ? data.data.status.toUpperCase() : '';
     if (['SUCCESSFUL', 'SUCCESS', 'COMPLETED', 'APPROVED'].includes(status)) return {status:'SUCCESSFUL'};
     if (['FAILED', 'REJECTED'].includes(status)) return {status:'FAILED', message:'The Mobile Money provider reported that this transfer failed.'};

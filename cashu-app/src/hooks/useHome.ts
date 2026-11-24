@@ -17,10 +17,10 @@ export const useHome = () => {
     if (!invoice) return;
     setPaying(true);
     try {
-      await invoke('pay_invoice', { invoice });
+      await invoke<void>('pay_invoice', { invoice });
       toast.success('Invoice paid successfully!');
       setInvoice('');
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(`Payment failed: ${e}`);
     } finally {
       await refreshWallet();

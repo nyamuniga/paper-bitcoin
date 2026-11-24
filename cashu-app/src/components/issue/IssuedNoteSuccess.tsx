@@ -42,7 +42,7 @@ export const IssuedNoteSuccess: React.FC<IssuedNoteSuccessProps> = ({ issuedNote
         setSaving(false);
         return;
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       onError(`Failed to save PDF: ${e}`);
     } finally {
       setSaving(false);

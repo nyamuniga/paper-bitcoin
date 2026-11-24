@@ -58,6 +58,51 @@ impl WalletState {
         self.custom_nostr_key.as_deref().or(self.default_nostr_key.as_deref())
     }
 
+    /// Idempotently record the default Nostr private key if it differs from the current value.
+    pub fn set_default_nostr_key(&mut self, key: &str) {
+        if self.default_nostr_key.as_deref() != Some(key) {
+            self.default_nostr_key = Some(key.to_string());
+        }
+    }
+
+    /// Ensure a normalized mint URL is tracked in the wallet's known mints list.
+    pub fn ensure_mint(&mut self, mint_url: &str) -> String {
+        let clean_url = normalize_mint_url(mint_url);
+        if !self.mints.contains(&clean_url) {
+            self.mints.push(clean_url.clone());
+        }
+        clean_url
+    }
+
+    /// Credit newly received proofs to a normalized mint URL and ensure the mint is tracked.
+    pub fn credit_proofs(&mut self, mint_url: &str, new_proofs: Vec<Proof>) {
+        let clean_url = self.ensure_mint(mint_url);
+        self.proofs.entry(clean_url).or_default().extend(new_proofs);
+    }
+
+    /// Prepend a transaction record to the wallet journal.
+    pub fn record_transaction(&mut self, tx: Transaction) {
+        self.transactions.insert(0, tx);
+    }
+
+    /// Locate a mutable transaction record by ID.
+    pub fn find_transaction_mut(&mut self, id: &str) -> Option<&mut Transaction> {
+        self.transactions.iter_mut().find(|tx| tx.id == id)
+    }
+
+    /// Advance `derivation_index` past the highest derivation index present in stored proofs.
+    pub fn advance_derivation_index_past_proofs(&mut self) {
+        let max_proof_idx = self
+            .proofs
+            .values()
+            .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
+            .max()
+            .unwrap_or(0);
+        if max_proof_idx > 0 && self.derivation_index <= max_proof_idx {
+            self.derivation_index = max_proof_idx + 1;
+        }
+    }
+
     pub fn new(seed_hex: String, mnemonic: Option<String>) -> Self {
         Self { ecash_invoices: Vec::new(), stable_operations: Vec::new(), seed_hex, mnemonic, derivation_index: 0, proofs: HashMap::new(), mints: Vec::new(), trusted_keys: HashMap::new(), transactions: Vec::new(), custom_nostr_key: None, default_nostr_key: None }
     }

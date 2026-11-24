@@ -1,28 +1,31 @@
-import { useEffect, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { useWalletStore } from './store/wallet';
-import { Settings } from './pages/Settings';
-import { Issue } from './pages/Issue';
-import History from './pages/History';
 import { Auth } from './pages/Auth';
-import { Scan } from './pages/Scan';
 import { Home } from './pages/Home';
-import Mints from './pages/Mints';
-import DiscoverMints from './pages/DiscoverMints';
-import { Pay } from './pages/Pay';
-import { AddressBook } from './pages/AddressBook';
-import { TopUpPage, CashOutPage } from './pages/MobileMoney';
-import { SendBitcoinPage, ReceiveBitcoinPage } from './pages/Bitcoin';
-import { ReceiveEcashPage } from './pages/ReceiveEcash';
-import { SendEcashPage } from './pages/SendEcash';
-import { TransferFundsPage } from './pages/TransferFunds';
 import { TopNav } from './components/navigation/TopNav';
 import { PageTransition } from './components/navigation/PageTransition';
 import { TransactionProcessor } from './hooks/useTransactionProcessor';
 import { AppUpdatePrompt } from './components/shared/AppUpdatePrompt';
 import { useNostr } from './hooks/useNostr';
 import './App.css';
+
+const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
+const Issue = lazy(() => import('./pages/Issue').then((m) => ({ default: m.Issue })));
+const History = lazy(() => import('./pages/History'));
+const Scan = lazy(() => import('./pages/Scan').then((m) => ({ default: m.Scan })));
+const Mints = lazy(() => import('./pages/Mints'));
+const DiscoverMints = lazy(() => import('./pages/DiscoverMints'));
+const Pay = lazy(() => import('./pages/Pay').then((m) => ({ default: m.Pay })));
+const AddressBook = lazy(() => import('./pages/AddressBook').then((m) => ({ default: m.AddressBook })));
+const TopUpPage = lazy(() => import('./pages/MobileMoney').then((m) => ({ default: m.TopUpPage })));
+const CashOutPage = lazy(() => import('./pages/MobileMoney').then((m) => ({ default: m.CashOutPage })));
+const SendBitcoinPage = lazy(() => import('./pages/Bitcoin').then((m) => ({ default: m.SendBitcoinPage })));
+const ReceiveBitcoinPage = lazy(() => import('./pages/Bitcoin').then((m) => ({ default: m.ReceiveBitcoinPage })));
+const ReceiveEcashPage = lazy(() => import('./pages/ReceiveEcash').then((m) => ({ default: m.ReceiveEcashPage })));
+const SendEcashPage = lazy(() => import('./pages/SendEcash').then((m) => ({ default: m.SendEcashPage })));
+const TransferFundsPage = lazy(() => import('./pages/TransferFunds').then((m) => ({ default: m.TransferFundsPage })));
 
 
 function AppFrame({ children }: { children: ReactNode }) {
@@ -40,7 +43,7 @@ export default function App() {
   useNostr();
 
   useEffect(() => {
-    invoke('is_wallet_unlocked').then(async (unlocked) => {
+    invoke<boolean>('is_wallet_unlocked').then(async (unlocked) => {
       if (unlocked) {
         await refreshWallet();
       }
@@ -59,24 +62,26 @@ export default function App() {
       <AppFrame>
         <TopNav />
         <PageTransition>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/top-up" element={<TopUpPage />} />
-            <Route path="/cash-out" element={<CashOutPage />} />
-            <Route path="/send-bitcoin" element={<SendBitcoinPage />} />
-            <Route path="/receive-bitcoin" element={<ReceiveBitcoinPage />} />
-            <Route path="/receive-ecash" element={<ReceiveEcashPage />} />
-            <Route path="/send-ecash" element={<SendEcashPage />} />
-            <Route path="/convert" element={<TransferFundsPage />} />
-            <Route path="/scan" element={<Scan />} />
-            <Route path="/issue" element={<Issue />} />
-            <Route path="/history" element={<History />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/mints" element={<Mints />} />
-            <Route path="/discover" element={<DiscoverMints />} />
-            <Route path="/pay" element={<Pay />} />
-            <Route path="/address-book" element={<AddressBook />} />
-          </Routes>
+          <Suspense fallback={null}>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/top-up" element={<TopUpPage />} />
+              <Route path="/cash-out" element={<CashOutPage />} />
+              <Route path="/send-bitcoin" element={<SendBitcoinPage />} />
+              <Route path="/receive-bitcoin" element={<ReceiveBitcoinPage />} />
+              <Route path="/receive-ecash" element={<ReceiveEcashPage />} />
+              <Route path="/send-ecash" element={<SendEcashPage />} />
+              <Route path="/convert" element={<TransferFundsPage />} />
+              <Route path="/scan" element={<Scan />} />
+              <Route path="/issue" element={<Issue />} />
+              <Route path="/history" element={<History />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/mints" element={<Mints />} />
+              <Route path="/discover" element={<DiscoverMints />} />
+              <Route path="/pay" element={<Pay />} />
+              <Route path="/address-book" element={<AddressBook />} />
+            </Routes>
+          </Suspense>
         </PageTransition>
       </AppFrame>
     </BrowserRouter>

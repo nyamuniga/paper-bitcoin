@@ -12,7 +12,7 @@ export interface LnurlPayParams {
 
 export interface LnurlPayInvoice {
   pr: string; // BOLT11 payment request
-  routes: any[];
+  routes: unknown[];
 }
 
 /**
@@ -157,4 +157,3 @@ export const getInvoiceAmountSats = (inv: string): number | null => {
   }
   return null;
 };
-

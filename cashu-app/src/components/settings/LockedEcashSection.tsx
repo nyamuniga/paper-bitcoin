@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Lock, Copy, QrCode, Check, X, ChevronDown } from 'lucide-react';
 import { useNostrStore } from '../../store/nostrStore';
-import QRCode from 'react-qr-code';
+import { SafeQRCode } from '../shared/SafeQRCode';
 import toast from 'react-hot-toast';
 import { nip19 } from 'nostr-tools';
 import { writeClipboardText } from '../../utils/clipboard';
@@ -126,7 +126,7 @@ export const LockedEcashSection: React.FC<LockedEcashSectionProps> = ({
             <p className="text-sm text-on-surface-variant text-center mb-6">Scan to copy public key for locked ecash</p>
 
             <div className="bg-white p-4 rounded-xl border border-outline-variant mb-6">
-              <QRCode value={hexPubkey} size={200} />
+              <SafeQRCode value={hexPubkey} size={200} fallbackText="Use the Copy Hex Key button below" />
             </div>
 
             <button

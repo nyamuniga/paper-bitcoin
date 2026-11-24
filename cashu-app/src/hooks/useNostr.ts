@@ -66,7 +66,7 @@ function setupClaimLoop(npub: string, relays: string[]) {
 
         const toastId = toast.loading(`Claiming ${claimResult.count} token${claimResult.count > 1 ? 's' : ''}...`);
         try {
-          await invoke('receive_ecash', { tokenString: claimResult.token, nostrKey: globalPrivateKey });
+          await invoke<void>('receive_ecash', {tokenString: claimResult.token, nostrKey: globalPrivateKey });
           lastClaimedToken = claimResult.token;
           await refreshWallet();
           toast.success(`⚡ Received ${claimResult.count} token${claimResult.count > 1 ? 's' : ''} via Lightning Address!`, { id: toastId });
@@ -199,7 +199,7 @@ export const useNostr = () => {
           // Get the seed hex from the Rust backend
           const seedHex = await invoke<string>('get_seed_hex');
           keypair = deriveNostrKeypair(seedHex);
-          await invoke('set_default_nostr_key', { key: keypair.privateKey }).catch(console.warn);
+          await invoke<void>('set_default_nostr_key', { key: keypair.privateKey }).catch(console.warn);
         }
 
         privateKeyRef.current = keypair.privateKey;
@@ -243,9 +243,9 @@ export const useNostr = () => {
           }
         }
         setIsNostrReady(true);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Failed to initialize Nostr:', err);
-        toast.error('Nostr Init Error: ' + (err.message || err));
+        toast.error('Nostr Init Error: ' + (err instanceof Error ? err.message : String(err)));
       } finally {
         setIsInitializing(false);
       }
@@ -290,7 +290,7 @@ export const useNostr = () => {
           return;
         }
 
-        await invoke('receive_ecash', { 
+        await invoke<void>('receive_ecash', {
           tokenString: claimResult.token,
           nostrKey: globalPrivateKey || undefined,
         });
@@ -303,8 +303,8 @@ export const useNostr = () => {
         // Just silently refresh the wallet balance.
         await refreshWallet();
       }
-    } catch (e: any) {
-      toast.error(`Claim failed: ${e.message || e}`);
+    } catch (e: unknown) {
+      toast.error(`Claim failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       globalIsClaiming = false;
       setClaiming(false);
@@ -318,8 +318,8 @@ export const useNostr = () => {
       try {
         await registerWithNpubCash(mintUrl, privateKeyRef.current);
         toast.success('Preferred mint updated');
-      } catch (e: any) {
-        toast.error(`Failed to update mint: ${e.message}`);
+      } catch (e: unknown) {
+        toast.error(`Failed to update mint: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
   }, []);
@@ -339,8 +339,8 @@ export const useNostr = () => {
         toast.error(result.error || 'Failed to claim username');
         return false;
       }
-    } catch (e: any) {
-      toast.error(`Username claim failed: ${e.message}`);
+    } catch (e: unknown) {
+      toast.error(`Username claim failed: ${e instanceof Error ? e.message : String(e)}`);
       return false;
     } finally {
       setClaimingUsername(false);

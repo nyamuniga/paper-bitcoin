@@ -20,7 +20,7 @@ export function useUrDecoder() {
 
     try {
       decoderRef.current.receivePart(part);
-      
+
       if (decoderRef.current.isComplete()) {
         if (decoderRef.current.isSuccess()) {
           setIsSuccess(true);
@@ -37,8 +37,8 @@ export function useUrDecoder() {
         setProgress(decoderRef.current.estimatedPercentComplete());
         return null;
       }
-    } catch (e: any) {
-      setError(e.message || 'Error processing UR part');
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : String(e)) || 'Error processing UR part');
       return null;
     }
   }, [isSuccess, error]);

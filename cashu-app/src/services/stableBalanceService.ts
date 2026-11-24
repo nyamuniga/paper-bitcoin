@@ -61,7 +61,7 @@ function checkedEstimate(prep: PrepareSendPaymentResponse, direction: StableDire
   return estimate;
 }
 async function advance(op: StableOperation, stage: StableStage, paymentId?: string): Promise<StableOperation> {
-  return invoke('stable_advance', { id: op.id, expectedStage: op.stage, nextStage: stage, paymentId: paymentId ?? null });
+  return invoke<StableOperation>('stable_advance', { id: op.id, expectedStage: op.stage, nextStage: stage, paymentId: paymentId ?? null });
 }
 export async function cancelConversion(op: StableOperation): Promise<void> {
   await withSparkBalanceLock(() => advance(op, op.stage === 'returnQuoted' ? 'funded' : 'cancelled'));
@@ -215,14 +215,14 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
     if (mode?.preview) { previewContexts.set(best, {sdk, sourceBudget}); return best; }
     if (mode?.refresh) return persistRefreshedQuote(mode.refresh, best);
     const prior = await sdk.listPayments({limit: 1000});
-    return invoke('stable_begin', {operation: {...best, prior_payment_ids: prior.payments.map(p => p.id)}});
+    return invoke<StableOperation>('stable_begin', {operation: {...best, prior_payment_ids: prior.payments.map(p => p.id)}});
   };
   // Read-only previews must not queue behind a potentially slow background sweep.
   return mode?.preview ? prepare() : withSparkBalanceLock(prepare);
 }
 
 function persistRefreshedQuote(previous: StableOperation, next: StableOperation): Promise<StableOperation> {
-  return invoke('stable_refresh_quote', {
+  return invoke<StableOperation>('stable_refresh_quote', {
     operation: {...next, id: previous.id}, expectedQuoteJson: previous.quote_json, expectedExpiresAt: previous.expires_at,
   });
 }
@@ -275,7 +275,7 @@ export async function reviewStableTransfer(preview: StableOperation, sourceBudge
     const available = preview.direction === 'toUsd' ? BigInt(cashuBalance) : await getStableBalance(true);
     if (preview.expires_at * 1000 <= Date.now() || sourceBudget > available || BigInt(preview.max_debit) > sourceBudget) throw new Error('Amount or balance changed. Check the amount again.');
     const prior = await sdk.listPayments({limit:1000});
-    return invoke('stable_begin', {operation:{...preview, id:crypto.randomUUID(), prior_payment_ids:prior.payments.map(p=>p.id)}});
+    return invoke<StableOperation>('stable_begin', {operation:{...preview, id:crypto.randomUUID(), prior_payment_ids:prior.payments.map(p=>p.id)}});
   });
 }
 async function checkCashuReceipt(op: StableOperation, txId: string, nextStage: 'complete' | 'funded' = 'complete'): Promise<StableOperation> {
@@ -323,7 +323,7 @@ export async function executeStableConversion(id: string): Promise<StableOperati
       prep = await sdk.prepareSendPayment({paymentRequest: {type: 'input', input: prep.paymentMethod.invoiceDetails.invoice.bolt11}, amount: BigInt(op.output_amount), conversionOptions: prep.conversionEstimate!.options, feePolicy: 'feesExcluded'});
       if (conversionCost(checkedEstimate(prep, 'toSats')) > BigInt(op.max_debit)) throw new Error('The USD quote changed. Cancel it and request a fresh quote.');
       // Persist receive recovery outputs for the reviewed invoice before any send.
-      await invoke('stable_accept_mint_quote',{id:op.id});
+      await invoke<void>('stable_accept_mint_quote',{id:op.id});
     }
     op = await advance(op, 'converting');
     if (op.conversion_request_version !== 1) throw new Error('Restart the app to load the updated wallet backend before converting.');
@@ -338,7 +338,7 @@ export async function executeStableConversion(id: string): Promise<StableOperati
       if (error instanceof UnsubmittedConversionError) {
         // Only a live pre-broadcast rejection with zero source approvals can reset.
         // A crash, timeout or rejection after any approval retains the durable stage.
-        await invoke('stable_recover_unsubmitted_conversion', {id:op.id});
+        await invoke<void>('stable_recover_unsubmitted_conversion', {id:op.id});
         throw error;
       }
       // The durable converting stage already reserves the funds. A transport or sync
@@ -409,7 +409,7 @@ export async function quoteFundingReturn(id: string): Promise<StableOperation> {
     if (prep.paymentMethod.type !== 'bolt11Invoice') throw new Error('Unexpected ecash return payment method.');
     const fee = prep.paymentMethod.lightningFeeSats + (prep.paymentMethod.sparkTransferFeeSats ?? 0);
     if (BigInt(amount + fee) > BigInt(budget)) throw new Error('The return fee exceeds the available funding. Try again later.');
-    return invoke('stable_prepare_return', {id, quoteId: quote.quote_id, quoteJson: encodeQuote(prep), amount});
+    return invoke<StableOperation>('stable_prepare_return', {id, quoteId: quote.quote_id, quoteJson: encodeQuote(prep), amount});
   });
 }
 export async function executeFundingReturn(id: string): Promise<StableOperation> {

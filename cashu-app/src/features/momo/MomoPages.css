@@ -3,7 +3,6 @@
 /* The form reserves keypad/actions; review and progress retain their scroll regions. */
 .momo-page .momo-page-body { display:flex; flex-direction:column; overflow:hidden; }
 .momo-page .momo-sheet { height:100%; min-height:0; display:flex; flex-direction:column; position:relative; }
-.momo-page .momo-sheet > div:nth-child(2) { display:none; }
 .momo-page .momo-page-header { flex:none; margin:0 0 clamp(8px,2dvh,16px); }
 .momo-page .momo-progress-body { padding:0; min-height:0; overscroll-behavior:contain; }
 .momo-payment-form { flex:1; min-height:0; display:flex; flex-direction:column; gap:clamp(6px,1dvh,12px); }

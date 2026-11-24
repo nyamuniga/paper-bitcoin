@@ -53,11 +53,11 @@ export async function withDeadline<T>(
   }
 }
 
-export async function requestProxyJson(
+export async function requestProxyJson<T = Record<string, unknown>>(
   url: string,
   options: RequestInit = {},
   timeoutMs = DEFAULT_DEADLINE_MS
-): Promise<any> {
+): Promise<T> {
   try {
     return await withDeadline(async signal => {
       const response = await fetch(url, {
@@ -111,16 +111,16 @@ export async function withRetries<T>(
     maxAttempts = 5,
     baseDelayMs = 1500,
     maxDelayMs = 15000,
-    shouldRetry = (e: any) =>
+    shouldRetry = (e: unknown) =>
       e instanceof ProxyRequestError ? e.retryable : true,
   }: {
     maxAttempts?: number;
     baseDelayMs?: number;
     maxDelayMs?: number;
-    shouldRetry?: (e: any) => boolean;
+    shouldRetry?: (e: unknown) => boolean;
   } = {}
 ): Promise<T> {
-  let lastError: any;
+  let lastError: unknown;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await operation();

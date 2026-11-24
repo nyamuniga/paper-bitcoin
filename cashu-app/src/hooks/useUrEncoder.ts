@@ -61,7 +61,7 @@ export function useUrEncoder(dataStr: string | null, fragmentSize: number = 150,
     return () => clearInterval(interval);
   }, [encoder, intervalMs, dataStr, isTooLargeForStatic]);
 
-  const totalFrames = encoder ? (encoder as any).fragmentsLength || 1 : 1;
+  const totalFrames = encoder ? (encoder as unknown as { fragmentsLength?: number }).fragmentsLength || 1 : 1;
   const isAnimated = isTooLargeForStatic && totalFrames > 1;
 
   return {

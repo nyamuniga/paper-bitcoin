@@ -1,7 +1,12 @@
 import { Buffer } from 'buffer';
 
 if (typeof window !== 'undefined') {
-  (window as any).global = window;
-  (window as any).Buffer = Buffer;
-  (window as any).process = { env: {} };
+  const globalWindow = window as Window & {
+    global?: Window;
+    Buffer?: typeof Buffer;
+    process?: { env: Record<string, string> };
+  };
+  globalWindow.global = window;
+  globalWindow.Buffer = Buffer;
+  globalWindow.process = { env: {} };
 }

@@ -1,11 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { Copy, Check, Zap, X, Loader2, Edit2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import QRCode from 'react-qr-code';
+import { SafeQRCode } from '../shared/SafeQRCode';
 import { useNostr } from '../../hooks/useNostr';
 import { NPUB_DOMAIN } from '../../constants.local';
-import { useBottomSheet } from '../../hooks/useBottomSheet';
+import { BottomSheet } from '../shared/BottomSheet';
 import { writeClipboardText } from '../../utils/clipboard';
 
 interface LightningAddressModalProps {
@@ -19,8 +18,6 @@ export const LightningAddressModal: React.FC<LightningAddressModalProps> = ({ on
     claimingUsername,
     claimUsername,
   } = useNostr();
-
-  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
 
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -62,62 +59,59 @@ export const LightningAddressModal: React.FC<LightningAddressModalProps> = ({ on
     }
   };
 
-  return createPortal(
-    <div 
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
-      style={backdropStyle}
-      onClick={closeWithAnimation}
+  return (
+    <BottomSheet
+      onClose={onClose}
+      aria-label="Lightning Address"
+      className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md border-t border-x sm:border border-[#142d20] shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[92vh] pb-6 sm:pb-4"
     >
-      <div 
-        onClick={e => e.stopPropagation()}
-        style={sheetStyle}
-        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md border-t border-x sm:border border-[#142d20] shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative max-h-[92vh] pb-6 sm:pb-4"
-      >
-        <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
+      {({ dragHandleProps, closeButtonProps }) => (
+        <>
+          <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
 
-        {/* Drag Handle */}
-        <div 
-          {...dragHandleProps}
-          className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
-        >
-          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
-        </div>
-
-        {/* Header */}
-        <div 
-          {...dragHandleProps}
-          className="flex justify-between items-center px-6 py-4 border-b border-[rgba(247,244,235,0.04)] relative z-10 cursor-grab active:cursor-grabbing"
-        >
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[#12261d] border border-[#1e3c2e] flex items-center justify-center text-[#f2a93b]">
-              <Zap size={16} className="fill-current text-[#f2a93b]" />
-            </div>
-            <div>
-              <h2 className="font-display-hero text-headline-sm font-semibold text-on-surface">Lightning Address</h2>
-            </div>
-          </div>
-          <button
-            onClick={closeWithAnimation}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors border border-outline-variant/30 cursor-pointer"
+          {/* Drag Handle */}
+          <div
+            {...dragHandleProps}
+            className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
           >
-            <X size={18} />
-          </button>
-        </div>
+            <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
+          </div>
 
-        {/* Content */}
-        <div className="p-6 flex flex-col gap-5 relative z-10 overflow-y-auto">
-          <p className="text-on-surface-variant text-sm font-medium text-center">
-            Share this address to receive Lightning payments directly to your wallet
-          </p>
-
-          {/* QR Code Presentation Card */}
-          <div className="flex justify-center">
-            <div className="qr-presentation-card">
-              <div className="qr-presentation-card-inner">
-                <QRCode value={lightningAddress} size={200} />
+          {/* Header */}
+          <div
+            {...dragHandleProps}
+            className="flex justify-between items-center px-6 py-4 border-b border-[rgba(247,244,235,0.04)] relative z-10 cursor-grab active:cursor-grabbing"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-[#12261d] border border-[#1e3c2e] flex items-center justify-center text-[#f2a93b]">
+                <Zap size={16} className="fill-current text-[#f2a93b]" />
+              </div>
+              <div>
+                <h2 className="font-display-hero text-headline-sm font-semibold text-on-surface">Lightning Address</h2>
               </div>
             </div>
+            <button
+              {...closeButtonProps}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors border border-outline-variant/30 cursor-pointer"
+            >
+              <X size={18} />
+            </button>
           </div>
+
+          {/* Content */}
+          <div className="p-6 flex flex-col gap-5 relative z-10 overflow-y-auto">
+            <p className="text-on-surface-variant text-sm font-medium text-center">
+              Share this address to receive Lightning payments directly to your wallet
+            </p>
+
+            {/* QR Code Presentation Card */}
+            <div className="flex justify-center">
+              <div className="qr-presentation-card">
+                <div className="qr-presentation-card-inner">
+                  <SafeQRCode value={lightningAddress} size={200} fallbackText="Use the Copy Address button below" />
+                </div>
+              </div>
+            </div>
 
           {/* Address with pen on the right & expanding edit background from right to left */}
           <div className="relative bg-[#101c16] rounded-2xl border border-outline-variant/40 hover:border-primary/40 transition-colors group flex items-center overflow-hidden min-h-[56px]">
@@ -230,8 +224,8 @@ export const LightningAddressModal: React.FC<LightningAddressModalProps> = ({ on
             {copied ? 'Copied!' : 'Copy Address'}
           </button>
         </div>
-      </div>
-    </div>,
-    document.body
+        </>
+      )}
+    </BottomSheet>
   );
 };

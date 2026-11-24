@@ -6,14 +6,33 @@ import { parseBitcoinInput } from '../utils/bitcoinValidation';
 import { validateLnurlPay } from './useLnurlValidation';
 import { isCashuRequest } from '../services/cashuRequests';
 
+export interface DecodedNoteInfo {
+  sats?: number;
+  amount: number;
+  face_value_sats?: number;
+  mint_url?: string;
+  serial?: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
+export interface NoteVerifyResult {
+  success: boolean;
+  status?: string;
+  message?: string;
+  proof_total_sats: number;
+  face_value_sats: number;
+  [key: string]: unknown;
+}
+
 export const useScan = () => {
   const [binB64, setBinB64] = useState<string>('');
-  const [noteInfo, setNoteInfo] = useState<any>(null);
+  const [noteInfo, setNoteInfo] = useState<DecodedNoteInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [verified, setVerified] = useState<boolean | null>(null);
-  const [verifyResult, setVerifyResult] = useState<any>(null);
+  const [verifyResult, setVerifyResult] = useState<NoteVerifyResult | null>(null);
 
   const [invoice, setInvoice] = useState<string>('');
   const [redeeming, setRedeeming] = useState(false);
@@ -38,7 +57,7 @@ export const useScan = () => {
       navigate('/', { state: { ecashToken: trimmed } });
       return;
     }
-    
+
     const parsed = parseBitcoinInput(trimmed);
     if (parsed.type === 'lightning') {
       navigate('/', { state: { lnbcInvoice: parsed.addressOrInvoice } });
@@ -75,11 +94,11 @@ export const useScan = () => {
     setVerified(null);
     setNoteInfo(null);
     try {
-      const res: any = await invoke('decode_bin', { binB64: trimmed });
+      const res = await invoke<DecodedNoteInfo>('decode_bin', { binB64: trimmed });
       setNoteInfo(res);
       setBinB64(trimmed);
-    } catch (e: any) {
-      setError(e.toString());
+    } catch (e: unknown) {
+      setError(String(e));
     }
     setLoading(false);
   };
@@ -87,13 +106,13 @@ export const useScan = () => {
   const handleVerify = async () => {
     setLoading(true);
     try {
-      const res: any = await invoke('verify_note', { binB64 });
+      const res = await invoke<NoteVerifyResult>('verify_note', { binB64 });
       if (res.success) {
         setVerified(true);
         setVerifyResult(res);
       }
-    } catch (e: any) {
-      setError("Verification failed: " + e.toString());
+    } catch (e: unknown) {
+      setError("Verification failed: " + String(e));
       setVerified(false);
     }
     setLoading(false);
@@ -107,14 +126,14 @@ export const useScan = () => {
     setError(null);
     try {
       if (redeemMethod === 'wallet') {
-        await invoke('redeem_note_direct', { binB64 });
+        await invoke<void>('redeem_note_direct', { binB64 });
       } else {
-        await invoke('redeem_note', { binB64, invoice: invoice.trim() });
+        await invoke<void>('redeem_note', { binB64, invoice: invoice.trim() });
       }
       setRedeemSuccess(true);
       await refreshWallet();
-    } catch (e: any) {
-      setError("Redeem failed: " + e.toString());
+    } catch (e: unknown) {
+      setError("Redeem failed: " + String(e));
     }
     setRedeeming(false);
   };

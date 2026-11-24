@@ -11,7 +11,37 @@ interface BlinkPaymentResponse {
     message?: string;
 }
 
-const queryBlink = async (query: string, variables: object) => {
+interface BlinkGraphQLError {
+    message?: string;
+    code?: string;
+    path?: string[];
+}
+
+interface BlinkGraphQLResponse<T> {
+    data?: T;
+    errors?: BlinkGraphQLError[];
+}
+
+interface BlinkMeData {
+    me?: { defaultAccount?: { wallets?: Array<{ id: string; walletCurrency: string }> } };
+}
+
+interface BlinkPaymentSendData {
+    lnInvoicePaymentSend?: { status?: string; errors?: BlinkGraphQLError[] };
+}
+
+interface BlinkInvoiceCreateData {
+    lnInvoiceCreate?: {
+        invoice?: { paymentRequest: string; paymentHash: string };
+        errors?: BlinkGraphQLError[];
+    };
+}
+
+interface BlinkInvoiceStatusData {
+    lnInvoicePaymentStatus?: { status?: string };
+}
+
+const queryBlink = async <T>(query: string, variables: object): Promise<T | undefined> => {
     const targetUrl = `${LIGHTNING_API_ENDPOINT}`;
 
     const payload = {
@@ -22,7 +52,7 @@ const queryBlink = async (query: string, variables: object) => {
         },
     };
 
-    const encrypted: any = await Encryption.encrypt(payload);
+    const encrypted = await Encryption.encrypt(payload);
 
     const requestData = {
         encrypted: encrypted.encrypted,
@@ -31,7 +61,7 @@ const queryBlink = async (query: string, variables: object) => {
         timestamp: encrypted.timestamp,
     };
 
-    const responseData = await requestProxyJson(targetUrl, {
+    const responseData = await requestProxyJson<BlinkGraphQLResponse<T>>(targetUrl, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -44,7 +74,7 @@ const queryBlink = async (query: string, variables: object) => {
     const { data, errors } = responseData;
 
     if (errors) {
-        throw new Error(`Blink GraphQL Error: ${errors.map((e: any) => e.message).join(', ')}`);
+        throw new Error(`Blink GraphQL Error: ${errors.map((e) => e.message).join(', ')}`);
     }
 
     return data;
@@ -68,7 +98,7 @@ const getBtcWalletId = async (): Promise<string> => {
         }
     `;
 
-    const data = await queryBlink(query, {});
+    const data = await queryBlink<BlinkMeData>(query, {});
     const wallets = data?.me?.defaultAccount?.wallets;
 
     if (!wallets || !Array.isArray(wallets)) {
@@ -110,14 +140,14 @@ export const payLightningInvoice = async (invoice: string): Promise<BlinkPayment
             },
         };
 
-        const data = await queryBlink(mutation, variables);
+        const data = await queryBlink<BlinkPaymentSendData>(mutation, variables);
         const paymentStatus = data?.lnInvoicePaymentSend?.status;
         const paymentErrors = data?.lnInvoicePaymentSend?.errors;
 
         if (paymentErrors && paymentErrors.length > 0) {
-            const isAlreadyPaid = paymentErrors.some((e: any) => e.code === 'ALREADY_PAID' || e.message?.includes('ALREADY_PAID'));
+            const isAlreadyPaid = paymentErrors.some((e) => e.code === 'ALREADY_PAID' || e.message?.includes('ALREADY_PAID'));
             if (!isAlreadyPaid) {
-                const errorMessage = paymentErrors.map((e: any) => `[${e.code}] ${e.message}`).join(', ');
+                const errorMessage = paymentErrors.map((e) => `[${e.code}] ${e.message}`).join(', ');
                 throw new Error(`Payment failed: ${errorMessage}`);
             }
         }
@@ -128,8 +158,8 @@ export const payLightningInvoice = async (invoice: string): Promise<BlinkPayment
             throw new Error(`Payment status returned: ${paymentStatus}`);
         }
 
-    } catch (error: any) {
-        return { success: false, message: error.message };
+    } catch (error: unknown) {
+        return { success: false, message: error instanceof Error ? error.message : String(error) };
     }
 };
 
@@ -158,12 +188,12 @@ export const createLightningInvoice = async (amountInSats: number): Promise<{ pa
         },
     };
 
-    const data = await queryBlink(mutation, variables);
+    const data = await queryBlink<BlinkInvoiceCreateData>(mutation, variables);
     const invoiceData = data?.lnInvoiceCreate?.invoice;
     const errors = data?.lnInvoiceCreate?.errors;
 
     if (errors && errors.length > 0) {
-        throw new Error(`Invoice creation failed: ${errors.map((e: any) => e.message).join(', ')}`);
+        throw new Error(`Invoice creation failed: ${errors.map((e) => e.message).join(', ')}`);
     }
 
     if (!invoiceData || !invoiceData.paymentRequest) {
@@ -192,11 +222,10 @@ export const checkInvoiceStatus = async (paymentRequest: string): Promise<{ isPa
     };
 
     try {
-        const data = await queryBlink(query, variables);
+        const data = await queryBlink<BlinkInvoiceStatusData>(query, variables);
         const status = data?.lnInvoicePaymentStatus?.status;
         return { isPaid: status === 'PAID' };
     } catch (error) {
         return { isPaid: false };
     }
 };
-

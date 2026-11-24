@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'react-hot-toast';
 import { Link2, ChevronDown, Copy, QrCode, Edit2, RefreshCcw, Check, X, X as XIcon } from 'lucide-react';
-import QRCode from 'react-qr-code';
+import { SafeQRCode } from '../shared/SafeQRCode';
 import { useWalletStore } from '../../store/wallet';
 import { MintIcon } from '../shared/MintIcon';
 import { MintName } from '../shared/MintName';
@@ -44,13 +44,13 @@ export const NWCSection: React.FC<NWCSectionProps> = ({
         const enabled = localStorage.getItem('nwc_enabled') === 'true';
         setIsEnabled(enabled);
         if (enabled) {
-          const uri: string = await invoke('get_nwc_uri');
+          const uri: string = await invoke<string>('get_nwc_uri');
           if (uri) {
             setNwcUri(uri);
           }
         }
 
-        const config: { mint_url: string | null, payment_limit_sats: number | null } = await invoke('get_nwc_config');
+        const config = await invoke<{ mint_url: string | null; payment_limit_sats: number | null }>('get_nwc_config');
         setMintUrl(config.mint_url || defaultMint);
         setLimitSats(config.payment_limit_sats);
       } catch (e) {
@@ -63,19 +63,19 @@ export const NWCSection: React.FC<NWCSectionProps> = ({
   const saveConfig = async (newMint: string, newLimit: number | null) => {
     try {
       if (newMint && !mints.includes(newMint)) {
-        await invoke('add_mint', { mintUrl: newMint });
+        await invoke<void>('add_mint', { mintUrl: newMint });
         await refreshWallet();
         toast.success("Added new mint to trusted mints");
       }
 
-      await invoke('set_nwc_config', {
+      await invoke<void>('set_nwc_config', {
         mintUrl: newMint || null,
         limitSats: newLimit
       });
       setMintUrl(newMint);
       setLimitSats(newLimit);
       toast.success("NWC settings updated");
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(`Failed to save NWC settings: ${e}`);
     }
   };
@@ -83,19 +83,19 @@ export const NWCSection: React.FC<NWCSectionProps> = ({
   const handleToggle = async () => {
     if (!isEnabled) {
       try {
-        await invoke('enable_nwc');
-        const uri: string = await invoke('get_nwc_uri');
+        await invoke<void>('enable_nwc');
+        const uri: string = await invoke<string>('get_nwc_uri');
         setNwcUri(uri);
         setIsEnabled(true);
         localStorage.setItem('nwc_enabled', 'true');
         toast.success("NWC enabled! Background payments are active.");
-      } catch (error: any) {
+      } catch (error: unknown) {
         toast.error(`Failed to enable NWC: ${error}`);
       }
     } else {
       try {
-        await invoke('disable_nwc');
-      } catch (error: any) {
+        await invoke<void>('disable_nwc');
+      } catch (error: unknown) {
         console.error("Failed to disable NWC in backend:", error);
       }
       setIsEnabled(false);
@@ -116,10 +116,10 @@ export const NWCSection: React.FC<NWCSectionProps> = ({
     if (confirm("Are you sure you want to reset the connection? Paired apps will be disconnected.")) {
       setIsResetting(true);
       try {
-        const newUri: string = await invoke('reset_nwc_keys');
+        const newUri: string = await invoke<string>('reset_nwc_keys');
         setNwcUri(newUri);
         toast.success('Connection reset. Paired apps are now disconnected.');
-      } catch (error: any) {
+      } catch (error: unknown) {
         toast.error(`Failed to reset connection: ${error}`);
       } finally {
         setIsResetting(false);
@@ -223,7 +223,7 @@ export const NWCSection: React.FC<NWCSectionProps> = ({
                           </button>
                         </div>
                         <div className="bg-white p-4 rounded-xl border border-outline-variant mb-6">
-                          <QRCode value={nwcUri} size={240} />
+                          <SafeQRCode value={nwcUri} size={240} fallbackText="Use the copy button to copy this NWC URI" />
                         </div>
                         <p className="text-center text-sm text-on-surface-variant leading-relaxed">
                           Scan this QR code from your Nostr app to grant it access to spend your ecash.

@@ -15,7 +15,7 @@ export const useAuth = () => {
   const [generatedMnemonic, setGeneratedMnemonic] = useState('');
   const [loading, setLoading] = useState(false);
   const [restoreProgress, setRestoreProgress] = useState<string[]>([]);
-  
+
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
     let isMounted = true;
@@ -38,7 +38,7 @@ export const useAuth = () => {
       if (unlistenFn) unlistenFn();
     };
   }, []);
-  
+
   const refreshWallet = useWalletStore((s) => s.refreshWallet);
 
   const triggerError = (msg: string) => {
@@ -50,14 +50,14 @@ export const useAuth = () => {
   const handleClearError = () => setErrorMsg('');
 
   useEffect(() => {
-    invoke('is_wallet_setup').then(async (setup) => {
+    invoke<boolean>('is_wallet_setup').then(async (setup) => {
       if (!setup) {
         setIsSetup(false);
         setMode('create');
       } else {
         const shouldAutoLogin = localStorage.getItem('rememberMe') === 'true';
         if (shouldAutoLogin) {
-          const res = await invoke('auto_login').catch(() => false);
+          const res = await invoke<boolean>('auto_login').catch(() => false);
           if (res) {
             await refreshWallet();
             return;
@@ -73,7 +73,7 @@ export const useAuth = () => {
     setLoading(true);
     handleClearError();
     try {
-      await invoke('unlock_wallet', { passphrase, rememberMe });
+      await invoke<void>('unlock_wallet', { passphrase, rememberMe });
       if (rememberMe) {
         localStorage.setItem('rememberMe', 'true');
       } else {
@@ -91,7 +91,7 @@ export const useAuth = () => {
 
       await refreshWallet();
       return true;
-    } catch (e: any) {
+    } catch (e: unknown) {
       triggerError(String(e));
       return false;
     } finally {
@@ -103,14 +103,14 @@ export const useAuth = () => {
     setLoading(true);
     handleClearError();
     try {
-      const res: any = await invoke('create_wallet', { passphrase, rememberMe });
+      const res = await invoke<{ mnemonic: string }>('create_wallet', { passphrase, rememberMe });
       if (rememberMe) {
         localStorage.setItem('rememberMe', 'true');
       } else {
         localStorage.removeItem('rememberMe');
       }
       return res.mnemonic as string;
-    } catch (e: any) {
+    } catch (e: unknown) {
       triggerError(String(e));
       return null;
     } finally {
@@ -123,7 +123,7 @@ export const useAuth = () => {
     setRestoreProgress([]);
     handleClearError();
     try {
-      await invoke('restore_wallet', { mnemonic, passphrase, rememberMe, mintUrls });
+      await invoke<void>('restore_wallet', { mnemonic, passphrase, rememberMe, mintUrls });
       if (rememberMe) {
         localStorage.setItem('rememberMe', 'true');
       } else {
@@ -132,7 +132,7 @@ export const useAuth = () => {
       window.history.replaceState(null, '', '/');
       await refreshWallet();
       return true;
-    } catch (e: any) {
+    } catch (e: unknown) {
       triggerError(String(e));
       return false;
     } finally {
@@ -145,7 +145,7 @@ export const useAuth = () => {
     handleClearError();
     try {
       await disconnectSparkSdk();
-      await invoke('reset_wallet');
+      await invoke<void>('reset_wallet');
       useNostrStore.getState().reset();
       useTransactionStore.getState().reset();
       localStorage.removeItem('npubx_claimed_quotes');
@@ -154,7 +154,7 @@ export const useAuth = () => {
       localStorage.removeItem('rememberMe');
       await refreshWallet();
       return true;
-    } catch (e: any) {
+    } catch (e: unknown) {
       triggerError(String(e));
       return false;
     } finally {
@@ -167,11 +167,11 @@ export const useAuth = () => {
     handleClearError();
     try {
       await disconnectSparkSdk();
-      await invoke('lock_wallet');
+      await invoke<void>('lock_wallet');
       localStorage.removeItem('rememberMe');
       useWalletStore.getState().clearWalletState();
       return true;
-    } catch (e: any) {
+    } catch (e: unknown) {
       triggerError(String(e));
       return false;
     } finally {

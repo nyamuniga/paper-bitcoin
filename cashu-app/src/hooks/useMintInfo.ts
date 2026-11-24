@@ -10,7 +10,7 @@ export interface MintInfo {
   motd?: string;
   icon_url?: string;
   time?: number;
-  nuts?: any;
+  nuts?: Record<string, { supported?: boolean; methods?: Array<{ method: string; unit?: string }> }>;
   _cachedAt?: number;
 }
 
@@ -89,20 +89,20 @@ export function useMintInfo(mintUrl: string | null) {
         const res = await fetch(fetchUrl);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        
+
         const fullData: MintInfo = { ...data, _cachedAt: Date.now() };
         mintInfoCache[cleanUrl] = fullData;
         try {
           localStorage.setItem('mint_info_cache', JSON.stringify(mintInfoCache));
         } catch {}
-        
+
         if (isMounted) {
           setInfo(fullData);
           setError(null);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isMounted) {
-          setError(err);
+          setError(err instanceof Error ? err : new Error(String(err)));
           // Only invalidate cache if we had no working cached info at all
           if (!mintInfoCache[cleanUrl]) {
             mintInfoCache[cleanUrl] = null;

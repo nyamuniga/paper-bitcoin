@@ -78,16 +78,7 @@ pub(crate) async fn persist_receive_quote(
         return Ok(ReceiveLightningQuote {quote_id, invoice, amount});
     }
     let previous_index = w_state.derivation_index;
-
-    let max_proof_idx = w_state
-        .proofs
-        .values()
-        .flat_map(|ps| ps.iter().map(|p| p.derivation_index))
-        .max()
-        .unwrap_or(0);
-    if max_proof_idx > 0 && w_state.derivation_index <= max_proof_idx {
-        w_state.derivation_index = max_proof_idx + 1;
-    }
+    w_state.advance_derivation_index_past_proofs();
 
     let mut deriv = TokenDerivation::from_hex(&w_state.seed_hex)
         .map_err(|e| crate::error::CommandError(format!("Derivation error: {}", e)))?;

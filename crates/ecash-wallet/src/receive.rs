@@ -83,9 +83,7 @@ pub async fn receive_ecash_validated(
     };
 
     if let Some(ref key) = nostr_key {
-        if w_state.default_nostr_key.as_ref() != Some(key) {
-            w_state.default_nostr_key = Some(key.clone());
-        }
+        w_state.set_default_nostr_key(key);
     }
 
     // Idempotency check: if we already successfully received this exact token, return early
@@ -203,21 +201,38 @@ pub async fn receive_ecash_validated(
                         tx.status = TransactionStatus::Success;
                         tx.amount = total_restored;
                         w_state.normalize_proofs_for_persistence();
-                        w_state.save_encrypted(path, passphrase).ok();
+                        if let Err(save_error) = w_state.save_encrypted(path, passphrase) {
+                            let message = format!(
+                                "Recovered {total_restored} sats from spent token, but failed to save wallet state: {save_error:#}. Check History before claiming again."
+                            );
+                            eprintln!("[receive_ecash] {tx_id}: {message}");
+                            return Err(anyhow!(message));
+                        }
                         return Ok(total_restored);
                     } else {
                         println!("[receive_ecash] Restore recovered 0 proofs");
                         tx.status = TransactionStatus::Failed;
                         w_state.normalize_proofs_for_persistence();
-                        w_state.save_encrypted(path, passphrase).ok();
-                        return Err(anyhow!(
-                            "Tokens are already spent and could not be recovered"
-                        ));
+                        let mut message =
+                            "Tokens are already spent and could not be recovered".to_string();
+                        if let Err(save_error) = w_state.save_encrypted(path, passphrase) {
+                            message.push_str(&format!(
+                                " Failed status could not be saved: {save_error:#}."
+                            ));
+                            eprintln!("[receive_ecash] {tx_id}: {message}");
+                        }
+                        return Err(anyhow!(message));
                     }
                 }
                 w_state.normalize_proofs_for_persistence();
-                w_state.save_encrypted(path, passphrase).ok();
-                return Err(anyhow!("Failed to receive ecash: {}", e));
+                let mut message = format!("Failed to receive ecash: {}", e);
+                if let Err(save_error) = w_state.save_encrypted(path, passphrase) {
+                    message.push_str(&format!(
+                        " Recovery state could not be saved: {save_error:#}."
+                    ));
+                    eprintln!("[receive_ecash] {tx_id}: {message}");
+                }
+                return Err(anyhow!(message));
             }
 
             if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
@@ -237,20 +252,11 @@ pub async fn receive_ecash_validated(
 
     let actual_received: u64 = new_proofs.iter().map(|p| p.amount).sum();
 
-    // Store the new proofs in the wallet
-    w_state
-        .proofs
-        .entry(mint_url.clone())
-        .or_default()
-        .extend(new_proofs);
-
-    // Ensure mint is tracked
-    if !w_state.mints.contains(&mint_url) {
-        w_state.mints.push(mint_url.clone());
-    }
+    // Store the new proofs in the wallet and ensure mint is tracked
+    w_state.credit_proofs(&mint_url, new_proofs);
 
     // Update transaction to Success
-    if let Some(tx) = w_state.transactions.iter_mut().find(|t| t.id == tx_id) {
+    if let Some(tx) = w_state.find_transaction_mut(&tx_id) {
         tx.amount = actual_received;
         tx.fee += net_amount.saturating_sub(actual_received);
         tx.status = TransactionStatus::Success;

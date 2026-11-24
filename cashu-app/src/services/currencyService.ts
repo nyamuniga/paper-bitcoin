@@ -110,7 +110,7 @@ async function loadTickerRates(): Promise<Record<string, number>> {
 
   for (const [code, item] of Object.entries(data)) {
     if (item && typeof item === 'object' && 'last' in item) {
-      const last = Number((item as any).last);
+      const last = Number((item as { last?: unknown }).last);
       if (!isNaN(last) && last > 0) {
         rates[code] = last;
       }

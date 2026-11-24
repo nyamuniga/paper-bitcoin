@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { X, Check, XCircle, Zap, Loader2, Clock } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNwcStore, PendingNwcRequest } from '../../store/nwcStore';
-import { useBottomSheet } from '../../hooks/useBottomSheet';
+import { BottomSheet } from '../shared/BottomSheet';
 
 interface PendingNwcModalProps {
   onClose: () => void;
 }
 
 export const PendingNwcModal: React.FC<PendingNwcModalProps> = ({ onClose }) => {
-  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
   const { pendingRequests, approveRequest, rejectRequest } = useNwcStore();
   const [processingId, setProcessingId] = useState<string | null>(null);
 
@@ -25,124 +23,121 @@ export const PendingNwcModal: React.FC<PendingNwcModalProps> = ({ onClose }) => 
     return `${days}d ago`;
   };
 
-  const handleApprove = async (req: PendingNwcRequest) => {
+  const handleApprove = async (req: PendingNwcRequest, closeSheet: () => void) => {
     setProcessingId(req.event_id);
     const toastId = toast.loading('Approving Zap...');
     try {
       await approveRequest(req.event_id);
       toast.success('Zap approved and paid!', { id: toastId });
       if (pendingRequests.length === 1) {
-        closeWithAnimation();
+        closeSheet();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(`Failed to approve Zap: ${err}`, { id: toastId });
     } finally {
       setProcessingId(null);
     }
   };
 
-  const handleReject = async (req: PendingNwcRequest) => {
+  const handleReject = async (req: PendingNwcRequest, closeSheet: () => void) => {
     setProcessingId(req.event_id);
     const toastId = toast.loading('Rejecting Zap...');
     try {
       await rejectRequest(req.event_id);
       toast.success('Zap rejected', { id: toastId });
       if (pendingRequests.length === 1) {
-        closeWithAnimation();
+        closeSheet();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(`Failed to reject Zap: ${err}`, { id: toastId });
     } finally {
       setProcessingId(null);
     }
   };
 
-  return createPortal(
-    <div 
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
-      style={backdropStyle}
-      onClick={closeWithAnimation}
+  return (
+    <BottomSheet
+      onClose={onClose}
+      aria-label="Pending Zaps"
+      className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md p-6 relative max-h-[88vh] flex flex-col border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] pb-8 sm:pb-6"
     >
-      <div 
-        onClick={(e) => e.stopPropagation()}
-        style={sheetStyle}
-        className="bg-surface-container-high/95 backdrop-blur-xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md p-6 relative max-h-[88vh] flex flex-col border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] pb-8 sm:pb-6"
-      >
-        {/* Drag Handle */}
-        <div 
-          {...dragHandleProps}
-          className="w-full flex justify-center pt-0 pb-3 -mt-2 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
-        >
-          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
-        </div>
-
-        <button
-          onClick={closeWithAnimation}
-          className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface transition-colors"
-        >
-          <X size={24} />
-        </button>
-
-        <div 
-          {...dragHandleProps}
-          className="flex items-center gap-3 mb-6 cursor-grab active:cursor-grabbing"
-        >
-          <div className="bg-primary/20 p-2 rounded-xl text-primary">
-            <Zap size={24} />
+      {({ dragHandleProps, closeButtonProps, close }) => (
+        <>
+          {/* Drag Handle */}
+          <div
+            {...dragHandleProps}
+            className="w-full flex justify-center pt-0 pb-3 -mt-2 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
+          >
+            <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-on-surface">Pending Zaps</h2>
-            <p className="text-sm text-on-surface-variant">Delayed NWC requests</p>
-          </div>
-        </div>
 
-        <div className="flex-1 overflow-y-auto space-y-4">
-          {pendingRequests.length === 0 ? (
-            <div className="text-center py-8 text-on-surface-variant">
-              No pending zaps.
+          <button
+            {...closeButtonProps}
+            className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface transition-colors"
+          >
+            <X size={24} />
+          </button>
+
+          <div
+            {...dragHandleProps}
+            className="flex items-center gap-3 mb-6 cursor-grab active:cursor-grabbing"
+          >
+            <div className="bg-primary/20 p-2 rounded-xl text-primary">
+              <Zap size={24} />
             </div>
-          ) : (
-            pendingRequests.map((req) => (
-              <div
-                key={req.event_id}
-                className="bg-surface rounded-xl p-4 border border-outline-variant/30 flex flex-col gap-3"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="text-2xl font-bold text-on-surface flex items-center gap-1">
-                      {Math.floor(req.amount_msats / 1000).toLocaleString()} <span className="text-sm font-normal text-on-surface-variant">sats</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-on-surface-variant mt-1">
-                      <Clock size={12} />
-                      {formatTimeAgo(req.created_at)}
+            <div>
+              <h2 className="text-xl font-bold text-on-surface">Pending Zaps</h2>
+              <p className="text-sm text-on-surface-variant">Delayed NWC requests</p>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-4">
+            {pendingRequests.length === 0 ? (
+              <div className="text-center py-8 text-on-surface-variant">
+                No pending zaps.
+              </div>
+            ) : (
+              pendingRequests.map((req) => (
+                <div
+                  key={req.event_id}
+                  className="bg-surface rounded-xl p-4 border border-outline-variant/30 flex flex-col gap-3"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="text-2xl font-bold text-on-surface flex items-center gap-1">
+                        {Math.floor(req.amount_msats / 1000).toLocaleString()} <span className="text-sm font-normal text-on-surface-variant">sats</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-on-surface-variant mt-1">
+                        <Clock size={12} />
+                        {formatTimeAgo(req.created_at)}
+                      </div>
                     </div>
                   </div>
+
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => handleReject(req, close)}
+                      disabled={processingId !== null}
+                      className="flex-1 bg-surface-container hover:bg-surface-variant text-on-surface rounded-lg py-2 text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {processingId === req.event_id ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => handleApprove(req, close)}
+                      disabled={processingId !== null}
+                      className="flex-1 bg-primary hover:bg-primary text-on-primary rounded-lg py-2 text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {processingId === req.event_id ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                      Approve
+                    </button>
+                  </div>
                 </div>
-                
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={() => handleReject(req)}
-                    disabled={processingId !== null}
-                    className="flex-1 bg-surface-container hover:bg-surface-variant text-on-surface rounded-lg py-2 text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {processingId === req.event_id ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
-                    Reject
-                  </button>
-                  <button
-                    onClick={() => handleApprove(req)}
-                    disabled={processingId !== null}
-                    className="flex-1 bg-primary hover:bg-primary text-on-primary rounded-lg py-2 text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {processingId === req.event_id ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                    Approve
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body
+              ))
+            )}
+          </div>
+        </>
+      )}
+    </BottomSheet>
   );
 };

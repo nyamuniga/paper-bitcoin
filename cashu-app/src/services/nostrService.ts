@@ -64,7 +64,7 @@ export const generateNip98AuthHeader = async (
   privateKey: string,
   body?: string
 ): Promise<string> => {
-  // If we are calling our local Cloudflare Worker proxy at 28waves.com, we MUST 
+  // If we are calling our local Cloudflare Worker proxy at 28waves.com, we MUST
   // sign the NIP-98 event for the actual backend (npubx.cash) that verifies the signature!
   const audienceUrl = url.replace(NPUB_CASH_API_URL, NPUB_CASH_BACKEND_URL);
 
@@ -248,7 +248,7 @@ export const claimUsername = async (
       success: true,
       address: data.address || `${username}@${NPUB_DOMAIN}`,
     };
-  } catch (e: any) {
-    return { success: false, error: e.message || (typeof e === 'string' ? e : 'Unknown error') };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : (typeof e === 'string' ? e : 'Unknown error') };
   }
 };

@@ -15,15 +15,15 @@ export const BiometricToggle = () => {
   const toggleBiometrics = async () => {
     try {
       if (biometricsEnabled) {
-        await invoke('disable_biometrics');
+        await invoke<void>('disable_biometrics');
         setBiometricsEnabled(false);
         toast.success('Biometric login disabled');
       } else {
-        await invoke('enable_biometrics');
+        await invoke<void>('enable_biometrics');
         setBiometricsEnabled(true);
         toast.success('Biometric login enabled');
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error('Failed: ' + e);
     }
   };

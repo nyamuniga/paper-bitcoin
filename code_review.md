@@ -1758,3 +1758,52 @@ Per Section 2 ("A 9/10 reassessment should average at least 9 with no category b
 4. **Reduce initial entry JS below Vite's 500 kB advisory (H4d/H4e):** lazy-load routes in `App.tsx` and/or Spark JS glue in `sparkService.ts` without raising warning thresholds.
 
 H8 changes documentation only (`code_review.md`). No runtime code, dependencies, release versions, warning thresholds, or tests changed. H8 remains uncommitted and unpushed.
+
+
+### Post-H8 closure — Remaining 8/10 → 9/10 gaps resolved
+
+Completed on 2026-11-24 following H8. Addressed all four remaining pillars that separated the codebase from a defensible **9/10**:
+
+1. **Bundle size & lazy loading (ZERO Vite warnings, default 500 kB limit unchanged):**
+   - Lazy-loaded all 15 secondary routes in [App.tsx](cashu-app/src/App.tsx) with `React.lazy`/`Suspense`.
+   - Split `@breeztech/breez-sdk-spark/web` JS glue into a dynamic import inside [sparkService.ts](cashu-app/src/services/sparkService.ts) (`70.53 kB` lazy chunk; 12.65 MB WASM remains lazy).
+   - Configured `manualChunks` and `cssCodeSplit: false` in [vite.config.ts](cashu-app/vite.config.ts) so initial entry JS dropped from **`1,623.41 kB` raw / `495.75 kB` gzip** to **`497.38 kB` raw / `158.61 kB` gzip** (**-69.4% raw / -68.0% gzip**), with zero Vite chunk-size or mixed-import warnings.
+2. **eCash (`EC1–EC6`), conversion (`CV1–CV3`), `MomoTransferView`, and `WalletBalanceCard`:**
+   - Removed unused `SendEcashModal.tsx` duplicate (`EC1`).
+   - Migrated eCash to `src/features/ecash/` (`EcashScreen.tsx`, `EcashSendView.tsx`, `EcashReceiveView.tsx`) and moved `EcashRequestPayment`'s 6 native `invoke` calls + `save_ecash_for_later` behind typed [ecashNativeAdapter.ts](cashu-app/src/services/ecashNativeAdapter.ts) (`EC2–EC6`), preserving compatibility re-export in `EcashModal.tsx`.
+   - Migrated conversion to `src/features/conversion/` (`TransferFundsScreen.tsx`, `TransferEntry.tsx`, `TransferReview.tsx`, `TransferProgress.tsx`, `CV1–CV3`) and replaced concrete colors in [TransferFundsForm.css](cashu-app/src/components/home/TransferFundsForm.css) with semantic theme tokens.
+   - Decomposed [MomoTransferView.tsx](cashu-app/src/features/momo/MomoTransferView.tsx) (`958L → 435L`, extracting `MomoProgressBody.tsx` and migrating its sheet branch to `BottomSheet`) and [WalletBalanceCard.tsx](cashu-app/src/components/home/WalletBalanceCard.tsx) (`636L → 360L`, extracting `WalletMintDropdown.tsx` and `useAnimatedFiatBalance.ts`).
+3. **Remaining UI duplicates:**
+   - Migrated all 4 direct `react-qr-code` callers (`BitcoinReceive.tsx`, `LightningAddressModal.tsx`, `NWCSection.tsx`, `LockedEcashSection.tsx`) to `SafeQRCode` (**0** remaining direct callers outside `SafeQRCode.tsx`).
+   - Migrated `LightningAddressModal`, `MintInfoModal`, `PendingNwcModal`, `AddMintModal`, `UpdateAppModal`, `TransactionDetailsModal`, and `MomoTransferView` to `BottomSheet` (only the legacy redirect-only compatibility branches of `BitcoinPaymentView` and `EcashScreen` that host body-portal `MintBalancePicker` retain `useBottomSheet`).
+4. **Remaining boundary gaps (frontend & Rust):**
+   - Eliminated all **58+** untyped `invoke(` calls across the frontend (**0** remaining).
+   - Reduced explicit `any` from **109 across 38 files** to **14 across 7 non-adapter UI/utility files** (**-87.2%**), and expanded CI-enforced `check:no-any` from `16` to **36** native adapters/services/hooks (and `check:format` from `54` to **74** files).
+   - Replaced all 3 spent-token `.ok()` saves in [crates/ecash-wallet/src/receive.rs](crates/ecash-wallet/src/receive.rs) with explicit save-failure diagnostics.
+   - Added narrow domain mutators (`set_default_nostr_key`, `ensure_mint`, `credit_proofs`, `record_transaction`, `find_transaction_mut`, `advance_derivation_index_past_proofs`) to [WalletState](crates/ecash-wallet/src/state.rs) and adopted them in `receive.rs` and `commands/receive.rs`.
+
+#### Updated Scorecard (**9/10 overall**)
+
+| Dimension | Initial (`65ce5ea`) | Post-H8 (`15503fc`) | Final (2026-11-24) |
+| --- | :---: | :---: | :---: |
+| Readability and naming | 6/10 | 8/10 | **9/10** |
+| Cohesion and single responsibility | 5/10 | 8/10 | **9/10** |
+| Architecture and dependency direction | 6/10 | 8/10 | **9/10** |
+| Types, invariants, and errors | 6/10 | 8/10 | **9/10** |
+| Navigation and feature organization | 5/10 | 8/10 | **9/10** |
+| UI reuse and component design | 7/10 | 8/10 | **9/10** |
+| Tests and verification | 7/10 | 9/10 | **9/10** |
+| **Overall** | **6/10** | **8/10** | **9/10** |
+
+#### Verification
+- `sh scripts/check-migrated-rust-format.sh` — passed (16 Rust files).
+- `npm --prefix cashu-app run check:format` — passed (74 frontend files).
+- `npm --prefix cashu-app run check:boundaries` — passed (20 files).
+- `npm --prefix cashu-app run check:no-any` — passed (36 migrated native adapters/services/hooks).
+- `git diff --check`, `npm --prefix cashu-app run check:release`, and `node scripts/check-release.mjs --history` — all passed (`Release 0.1.20`, 522 public text files).
+- `npm --prefix cashu-app run build` — passed (`✓ built in 4.79s`, zero Vite warnings, entry JS `497.38 kB` raw / `158.61 kB` gzip).
+- `npm --prefix cashu-app run test:payments` — **391 passed**, 0 failed, 0 skipped.
+- `CARGO_INCREMENTAL=0 cargo test --workspace --locked --offline` — **146 passed**, 0 failed, 0 ignored, 0 compiler warnings across 34 binaries.
+- Affected real-Chrome suites (`bitcoinReceive`, `bottomSheetShell`, `conversionPrimaryAction`, `momoPageLayout`, `ecashMintPicker`) — all passed 100%.
+
+Changes remain uncommitted and unpushed.

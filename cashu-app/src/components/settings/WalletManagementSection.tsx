@@ -76,14 +76,15 @@ export const WalletManagementSection: React.FC<WalletManagementSectionProps> = (
     setCleanError(null);
 
     try {
-      const res: any = await invoke('clean_wallet');
+      const res = await invoke<number | Partial<CleanWalletResult>>('clean_wallet');
       await refreshWallet();
 
+      const detailsObj = typeof res === 'number' ? null : res;
       const resultData: CleanWalletResult = {
-        removed_sats: typeof res === 'number' ? res : res?.removed_sats ?? 0,
-        restored_sats: res?.restored_sats ?? 0,
-        derivation_index: res?.derivation_index ?? 0,
-        cleaned_txs: res?.cleaned_txs ?? 0,
+        removed_sats: typeof res === 'number' ? res : detailsObj?.removed_sats ?? 0,
+        restored_sats: detailsObj?.restored_sats ?? 0,
+        derivation_index: detailsObj?.derivation_index ?? 0,
+        cleaned_txs: detailsObj?.cleaned_txs ?? 0,
       };
       setCleanResult(resultData);
 
@@ -98,8 +99,8 @@ export const WalletManagementSection: React.FC<WalletManagementSectionProps> = (
       } else {
         toast.success('Wallet is clean and counters are synchronized.');
       }
-    } catch (e: any) {
-      const msg = String(e?.message || e);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
       setCleanError(msg);
       toast.error(`Failed to clean wallet: ${msg}`);
     } finally {

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { X, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { formatMintUrl } from '../../utils/format';
@@ -9,7 +8,7 @@ import { IconButton } from '../shared/IconButton';
 import { useMintInfo } from '../../hooks/useMintInfo';
 import { useWalletStore } from '../../store/wallet';
 import { useMints } from '../../hooks/useMints';
-import { useBottomSheet } from '../../hooks/useBottomSheet';
+import { BottomSheet } from '../shared/BottomSheet';
 
 interface MintInfoModalProps {
   mintUrl: string;
@@ -17,7 +16,6 @@ interface MintInfoModalProps {
 }
 
 export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }) => {
-  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({ onClose });
   const { info, loading, error } = useMintInfo(mintUrl);
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const normalize = (u: string) => u.replace(/\/+$/, '').toLowerCase();
@@ -71,44 +69,40 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
     }
   }
 
-  const receiveMethods = info?.nuts?.['4']?.methods?.map((m: any) => m.method.toUpperCase()) || [];
-  const sendMethods = info?.nuts?.['5']?.methods?.map((m: any) => m.method.toUpperCase()) || [];
+  const receiveMethods = info?.nuts?.['4']?.methods?.map((m: { method: string }) => m.method.toUpperCase()) || [];
+  const sendMethods = info?.nuts?.['5']?.methods?.map((m: { method: string }) => m.method.toUpperCase()) || [];
   const units = info?.nuts?.['4']?.methods?.[0]?.unit || 'sat';
 
-  return createPortal(
-    <div 
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
-      style={backdropStyle}
-      onClick={closeWithAnimation}
+  return (
+    <BottomSheet
+      onClose={onClose}
+      aria-label="Mint details"
+      className="bg-surface-container-high/98 backdrop-blur-2xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] overflow-hidden flex flex-col relative max-h-[92vh]"
     >
-      <div 
-        onClick={e => e.stopPropagation()}
-        style={sheetStyle}
-        className="bg-surface-container-high/98 backdrop-blur-2xl rounded-t-[2rem] sm:rounded-3xl w-full max-w-md border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] overflow-hidden flex flex-col relative max-h-[92vh]"
-      >
-        <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
+      {({ dragHandleProps, closeButtonProps }) => (
+        <>
+          <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
 
-        {/* Drag Handle for mobile */}
-        <div 
-          {...dragHandleProps}
-          className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
-        >
-          <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
-        </div>
-
-        {/* Top Control Bar (No name/title on top) */}
-        <div 
-          {...dragHandleProps}
-          className="flex items-center justify-end px-5 pt-2 pb-1 relative z-10"
-        >
-          <button 
-            onClick={closeWithAnimation}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container/70 text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors border border-outline-variant/20 cursor-pointer"
-            aria-label="Close"
+          {/* Drag Handle for mobile */}
+          <div
+            {...dragHandleProps}
+            className="w-full flex justify-center pt-3 pb-1 relative z-10 cursor-grab active:cursor-grabbing sm:hidden"
           >
-            <X size={18} />
-          </button>
-        </div>
+            <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
+          </div>
+
+          {/* Top Control Bar (No name/title on top) */}
+          <div
+            {...dragHandleProps}
+            className="flex items-center justify-end px-5 pt-2 pb-1 relative z-10"
+          >
+            <button
+              {...closeButtonProps}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container/70 text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors border border-outline-variant/20 cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
 
         {/* Scrollable Content */}
         <div className="px-6 pt-1 flex-1 flex flex-col gap-5 relative z-10 overflow-y-auto pb-4">
@@ -302,8 +296,8 @@ export const MintInfoModal: React.FC<MintInfoModalProps> = ({ mintUrl, onClose }
             </button>
           )}
         </div>
-      </div>
-    </div>,
-    document.body
+        </>
+      )}
+    </BottomSheet>
   );
 };

@@ -104,12 +104,12 @@ export const useHistory = () => {
   const handleRetryMint = async (txId: string) => {
     try {
       toast.loading('Retrying mint...', { id: txId });
-      await invoke('retry_mint', { txId });
+      await invoke<void>('retry_mint', { txId });
       toast.success('Tokens minted safely!', { id: txId });
       fetchHistory();
       await refreshWallet();
-    } catch (e: any) {
-      toast.error(e.toString(), { id: txId });
+    } catch (e: unknown) {
+      toast.error(String(e), { id: txId });
     }
   };
 
@@ -129,12 +129,12 @@ export const useHistory = () => {
       }
       fetchHistory();
       await refreshWallet();
-    } catch (e: any) {
-      toast.error(e.toString(), { id: txId });
+    } catch (e: unknown) {
+      toast.error(String(e), { id: txId });
     }
   };
 
-  const handleCheckIssue = async (txId: string, navigate: any) => {
+  const handleCheckIssue = async (txId: string, navigate: (to: string, options?: { state?: Record<string, unknown> }) => void) => {
     try {
       toast.loading('Checking issue status...', { id: txId });
       const success = await invoke<boolean>('check_issue_status', { txId });
@@ -146,8 +146,8 @@ export const useHistory = () => {
       }
       fetchHistory();
       await refreshWallet();
-    } catch (e: any) {
-      toast.error(e.toString(), { id: txId });
+    } catch (e: unknown) {
+      toast.error(String(e), { id: txId });
     }
   };
 
@@ -178,7 +178,7 @@ export const useHistory = () => {
       } else {
         toast.dismiss(txId);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(`Failed to save: ${e}`, { id: txId });
     }
   };
@@ -196,7 +196,7 @@ export const useHistory = () => {
       }
       fetchHistory();
       await refreshWallet();
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(`Error checking status: ${e}`, { id: txId });
     }
   };
@@ -223,14 +223,14 @@ export const useHistory = () => {
         }
       }
 
-      await invoke('receive_ecash', { 
+      await invoke<void>('receive_ecash', {
         tokenString: cleanToken,
         nostrKey: nostrKey || undefined,
       });
       toast.success('Successfully claimed eCash!', { id: txId });
       fetchHistory();
       await refreshWallet();
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(`Failed to claim: ${e}`, { id: txId });
     }
   };

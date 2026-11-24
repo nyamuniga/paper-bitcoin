@@ -155,10 +155,10 @@ export const calculateQuote = async (
     let invoice = "";
     let quoteId = "";
     try {
-      const res: any = await withDeadline(() => invoke('receive_lightning', { mintUrl, amount: netSats }));
+      const res = await withDeadline(() => invoke<{ quote_id: string; invoice: string; amount: number }>('receive_lightning', { mintUrl, amount: netSats }));
       invoice = res.invoice as string;
       quoteId = res.quote_id as string;
-    } catch (e: any) {
+    } catch (e: unknown) {
       throw new Error(`Failed to create lightning invoice: ${e}`);
     }
 
@@ -183,7 +183,7 @@ export const calculateQuote = async (
       momoPhoneNumber,
     );
     if (!momoResponse.success || !momoResponse.referenceId) {
-      if (momoResponse.submission === 'rejected') store.updateTransaction({momoSubmission:'rejected'});
+      if (!momoResponse.success && momoResponse.submission === 'rejected') store.updateTransaction({momoSubmission:'rejected'});
       throw new Error(momoResponse.message || "Failed to initiate Momo payment.");
     }
 
@@ -201,8 +201,8 @@ export const calculateQuote = async (
     if (useTransactionStore.getState().activeTransaction) {
       store.moveToHistory(useTransactionStore.getState().activeTransaction!);
     }
-  } catch (err: any) {
-    const errorMessage = typeof err === 'string' ? err : (err?.message || "Failed to fetch quote. Please try again.");
+  } catch (err: unknown) {
+    const errorMessage = typeof err === 'string' ? err : (err instanceof Error ? err.message : "Failed to fetch quote. Please try again.");
     store.setError(errorMessage);
     const ambiguous = useTransactionStore.getState().activeTransaction?.momoSubmission === 'submitting';
     store.updateTransaction({status:ambiguous ? 'PENDING' : 'FAILED', currentPhase:ambiguous ? AppPhase.RECOVERY_REQUIRED : AppPhase.PAYMENT_FAILED, recoveryMessage:errorMessage});
@@ -398,9 +398,9 @@ export const calculateSendQuote = async (
       paymentHash: paymentHash,
       currentPhase: AppPhase.AWAITING_INVOICE_PAYMENT,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Quote error:", err);
-    const errorMessage = typeof err === 'string' ? err : (err?.message || "Failed to fetch quote. Please try again.");
+    const errorMessage = typeof err === 'string' ? err : (err instanceof Error ? err.message : "Failed to fetch quote. Please try again.");
     store.setError(errorMessage);
     store.updateTransaction({status:'FAILED', currentPhase:AppPhase.PAYMENT_FAILED, recoveryMessage:errorMessage});
     store.moveToHistory(useTransactionStore.getState().activeTransaction!);
@@ -418,12 +418,12 @@ export const executeSendPayment = async () => {
     if (!currentTx.invoicePaid) {
       try {
         if (currentTx.mintUrl) {
-          await withDeadline(() => invoke('pay_invoice', { invoice: currentTx!.invoice!, mintUrl: currentTx!.mintUrl }));
+          await withDeadline(() => invoke<void>('pay_invoice', { invoice: currentTx!.invoice!, mintUrl: currentTx!.mintUrl }));
         } else {
-          await withDeadline(() => invoke('pay_invoice', { invoice: currentTx!.invoice! }));
+          await withDeadline(() => invoke<void>('pay_invoice', { invoice: currentTx!.invoice! }));
         }
         store.updateTransaction({ invoicePaid: true });
-      } catch (e: any) {
+      } catch (e: unknown) {
         throw new Error(`Failed to pay invoice from wallet: ${e}`);
       }
 
@@ -434,9 +434,9 @@ export const executeSendPayment = async () => {
       currentPhase: AppPhase.INITIATING_PAYOUT
     });
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Payment error:", err);
-    store.setError(err.message || "Failed to pay invoice. Please try again.");
+    store.setError((err instanceof Error ? err.message : String(err)) || "Failed to pay invoice. Please try again.");
     store.updateTransaction({ currentPhase: AppPhase.RECOVERY_REQUIRED, recoveryMessage:'We could not confirm whether the Bitcoin funding payment completed. Check status before trying again. Do not pay the invoice again.' });
   }
 };

@@ -64,8 +64,8 @@ export default function DiscoverMints() {
         });
 
         setMints(parsedData);
-      } catch (e: any) {
-        toast.error('Could not load mint registry: ' + e.message);
+      } catch (e: unknown) {
+        toast.error('Could not load mint registry: ' + (e instanceof Error ? e.message : String(e)));
       } finally {
         setLoading(false);
       }

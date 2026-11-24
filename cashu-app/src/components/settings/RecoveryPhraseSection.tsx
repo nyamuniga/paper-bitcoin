@@ -34,7 +34,7 @@ export const RecoveryPhraseSection: React.FC<RecoveryPhraseSectionProps> = ({
         setMnemonic(words.join(' '));
         setShowMnemonic(true);
         setShowPrompt(false);
-      } catch (err: any) {
+      } catch (err: unknown) {
         toast.error('Failed to get recovery words');
       }
     } catch {

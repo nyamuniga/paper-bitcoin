@@ -34,7 +34,7 @@ interface LnurlParams {
 
 export const Pay = () => {
   const location = useLocation();
-  const state = location.state as any;
+  const state = location.state as { lnurl?: string; mintUrl?: string } | null;
   const mintUrl = state?.mintUrl;
 
   const [invoice, setInvoice] = useState('');
@@ -84,9 +84,9 @@ export const Pay = () => {
           domain,
         });
         setLnurlAmount(Math.floor((data.minSendable || 1000) / 1000).toString());
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!isCancelled) {
-          toast.error(e?.message || 'Failed to fetch LNURL details');
+          toast.error((e instanceof Error ? e.message : String(e)) || 'Failed to fetch LNURL details');
           setLnurlParams(null);
         }
       } finally {
@@ -148,8 +148,8 @@ export const Pay = () => {
       try {
         const data = await fetchLnurlPayInvoice(lnurlParams.callback, amtSats * 1000);
         bolt11 = data.pr;
-      } catch (e: any) {
-        return failWith(e?.message || 'Could not reach the LNURL provider.');
+      } catch (e: unknown) {
+        return failWith((e instanceof Error ? e.message : String(e)) || 'Could not reach the LNURL provider.');
       } finally {
         setFetchingInvoice(false);
       }

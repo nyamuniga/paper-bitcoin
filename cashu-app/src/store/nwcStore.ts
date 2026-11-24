@@ -35,7 +35,7 @@ export const useNwcStore = create<NwcState>((set, get) => ({
 
   approveRequest: async (eventId: string) => {
     try {
-      await invoke('approve_nwc_request', { eventId });
+      await invoke<void>('approve_nwc_request', { eventId });
       await get().fetchPendingRequests();
     } catch (err) {
       console.error('Failed to approve NWC request:', err);
@@ -45,7 +45,7 @@ export const useNwcStore = create<NwcState>((set, get) => ({
 
   rejectRequest: async (eventId: string) => {
     try {
-      await invoke('reject_nwc_request', { eventId });
+      await invoke<void>('reject_nwc_request', { eventId });
       await get().fetchPendingRequests();
     } catch (err) {
       console.error('Failed to reject NWC request:', err);

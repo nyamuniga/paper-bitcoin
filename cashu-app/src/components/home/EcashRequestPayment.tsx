@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { parseCashuRequest, selectRequestMint, qrRequestTransport, paymentRequestKey } from '../../services/cashuRequests';
 import { deliverQrPayment } from '../../services/qrPayment';
+import {
+  getEcashPaymentQuote,
+  resumeEcashPayment,
+  sendEcashRequestPayment,
+  validateEcashPayment,
+  type EcashPaymentQuote as Quote,
+  type PreparedEcashPayment as PreparedPayment,
+} from '../../services/ecashNativeAdapter';
 import type { CashuPaymentRequest } from '../../services/cashuRequests';
 import { useWalletStore } from '../../store/wallet';
 import { MintName } from '../shared/MintName';
 import { MintIcon } from '../shared/MintIcon';
 
-interface PreparedPayment { token: string; token_v3?: string; tx_id: string; mint_url: string }
-interface Quote { token_amount: number; receiver_fee: number; sender_fee: number; total: number }
 interface Merchant {
   raw: string;
   request: CashuPaymentRequest;
@@ -81,8 +86,8 @@ export function EcashRequestPayment({ mintUrl, paused, onPrepared, onBusy, onSta
     const request = parseCashuRequest(raw);
     qrRequestTransport(request); // Reject unsupported transports before preparing funds.
     const key = paymentRequestKey(request);
-    const prepared = await invoke<PreparedPayment | null>('ecash_resume_payment', { request: key }) ||
-      (key !== raw ? await invoke<PreparedPayment | null>('ecash_resume_payment', { request: raw }) : null);
+    const prepared = (await resumeEcashPayment(key)) ||
+      (key !== raw ? await resumeEcashPayment(raw) : null);
     if (!current(id)) return;
     if (prepared) {
       setMerchant({ raw, request, mint: prepared.mint_url, prepared, key });
@@ -91,7 +96,7 @@ export function EcashRequestPayment({ mintUrl, paused, onPrepared, onBusy, onSta
       return;
     }
     const mint = selectRequestMint(request, balances, mintUrl);
-    const quote = await invoke<Quote>('ecash_payment_quote', { mintUrl: mint, amount: request.amount });
+    const quote = await getEcashPaymentQuote(mint, request.amount);
     if (!current(id)) return;
     setMerchant({ raw, request, mint, quote, key });
     setMessage('');
@@ -114,7 +119,7 @@ export function EcashRequestPayment({ mintUrl, paused, onPrepared, onBusy, onSta
       let prepared = selected.prepared;
       if (!prepared) {
         if (!selected.quote) throw new Error('Scan the merchant request again.');
-        const result = await invoke<{ token_v4: string; token_v3: string; tx_id: string }>('send_ecash', {
+        const result = await sendEcashRequestPayment({
           mintUrl: selected.mint, amount: selected.request.amount, pubkey: selected.request.pubkey,
           paymentRequest: selected.key, paymentMaxTotal: selected.quote.total,
         });
@@ -124,7 +129,7 @@ export function EcashRequestPayment({ mintUrl, paused, onPrepared, onBusy, onSta
         setMerchant({ ...selected, prepared });
         onPrepared(prepared, selected.request.amount);
       }
-      await invoke('ecash_validate_payment', { token: prepared.token, amount: selected.request.amount });
+      await validateEcashPayment(prepared.token, selected.request.amount);
       if (!current(id)) return;
       if (!prepared.token_v3) throw new Error('The saved payment has no delivery token. Recover it in History.');
       setMessage('Delivering payment…');

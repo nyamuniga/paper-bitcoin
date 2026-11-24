@@ -3,17 +3,34 @@ import { invoke } from '@tauri-apps/api/core';
 import { useLocation } from 'react-router-dom';
 import { useWalletStore } from '../store/wallet';
 
+export interface PendingIssuePayload {
+  tx_id: string;
+  invoice?: string;
+  sats?: number;
+  mint_url?: string;
+  [key: string]: unknown;
+}
+
+export interface IssuedNotePayload {
+  tx_id?: string;
+  sats: number;
+  serial?: string;
+  svg?: string;
+  bin_b64?: string;
+  [key: string]: unknown;
+}
+
 export const useIssue = () => {
   const location = useLocation();
-  const state = location.state as any;
+  const state = location.state as { pendingIssue?: PendingIssuePayload } | null;
 
   const [sats, setSats] = useState<string>('');
   const [mintUrls, setMintUrls] = useState<string[]>([]);
   const [strategy, setStrategy] = useState<'dynamic' | 'static'>('dynamic');
   const [fundMethod, setFundMethod] = useState<'lightning' | 'wallet'>('lightning');
   const [loading, setLoading] = useState(false);
-  const [invoicePayload, setInvoicePayload] = useState<any>(state?.pendingIssue || null);
-  const [issuedNote, setIssuedNote] = useState<any>(null);
+  const [invoicePayload, setInvoicePayload] = useState<PendingIssuePayload | null>(state?.pendingIssue || null);
+  const [issuedNote, setIssuedNote] = useState<IssuedNotePayload | null>(null);
   const [pollTrigger, setPollTrigger] = useState(0);
   const [error, setError] = useState<string>('');
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
@@ -37,19 +54,19 @@ export const useIssue = () => {
     try {
       if (fundMethod === 'wallet') {
         addLog(`Calling issue_note_direct with amt=${amt}, mintUrls=${mintUrls.join(', ')}`);
-        const res: any = await invoke('issue_note_direct', { sats: amt, mintUrls: mintUrls });
+        const res = await invoke<IssuedNotePayload>('issue_note_direct', { sats: amt, mintUrls: mintUrls });
         addLog("issue_note_direct succeeded!");
         setIssuedNote(res);
         await refreshWallet();
       } else {
-        const res: any = await invoke('issue_note', { sats: amt, mintUrls: mintUrls, strategy: strategy });
+        const res = await invoke<PendingIssuePayload>('issue_note', { sats: amt, mintUrls: mintUrls, strategy: strategy });
         addLog("issue_note resolved with PendingIssue: " + JSON.stringify(res));
-        setInvoicePayload(res); 
+        setInvoicePayload(res);
         await refreshWallet();
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       addLog("issue_note failed: " + String(e));
-      setError(e.toString());
+      setError(String(e));
     }
     setLoading(false);
   };
@@ -57,7 +74,7 @@ export const useIssue = () => {
   useEffect(() => {
     if (!invoicePayload || !invoicePayload.tx_id || issuedNote) return;
 
-    let timeoutId: any;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     let isPolling = true;
 
     const pollStatus = async () => {
@@ -68,15 +85,15 @@ export const useIssue = () => {
       }
       isCheckingRef.current = true;
       try {
-        const res = await invoke('check_issue_status', { txId: invoicePayload.tx_id });
+        const res = await invoke<IssuedNotePayload>('check_issue_status', { txId: invoicePayload.tx_id });
         if (!isPolling) return;
         addLog("check_issue_status returned success!");
         setIssuedNote(res);
         setInvoicePayload(null);
         await refreshWallet();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!isPolling) return;
-        const errMsg = e.toString();
+        const errMsg = String(e);
         addLog("check_issue_status error: " + errMsg);
 
         if (errMsg.includes('not paid') || errMsg.includes('Concurrent issuance failed') || errMsg.includes('already spent') || errMsg.includes('timeout')) {

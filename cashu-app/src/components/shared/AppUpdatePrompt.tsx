@@ -51,7 +51,8 @@ export const AppUpdatePrompt: React.FC = () => {
     window.addEventListener('check_app_update', handleManualCheck);
 
     // Provide a convenient developer helper on window for fast testing
-    if (import.meta.env.DEV) (window as any).__checkBitnotesUpdate = (simulateUpdate = false) => {
+    const devWindow = window as Window & { __checkBitnotesUpdate?: (simulateUpdate?: boolean) => void };
+    if (import.meta.env.DEV) devWindow.__checkBitnotesUpdate = (simulateUpdate = false) => {
       if (simulateUpdate) {
         setUpdateInfo({
           hasUpdate: true,
@@ -68,7 +69,7 @@ export const AppUpdatePrompt: React.FC = () => {
 
     return () => {
       window.removeEventListener('check_app_update', handleManualCheck);
-      delete (window as any).__checkBitnotesUpdate;
+      if (import.meta.env.DEV) delete (window as Window & { __checkBitnotesUpdate?: (simulateUpdate?: boolean) => void }).__checkBitnotesUpdate;
     };
   }, []);
 

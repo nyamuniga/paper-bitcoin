@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Phone, PhoneOutgoing, PhoneIncoming, ChevronDown, Check, BookUser } from 'lucide-react';
+import { X, Phone, PhoneOutgoing, PhoneIncoming } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { PaymentPageLayout } from '../../components/shared/PaymentPageLayout';
+import { BottomSheet } from '../../components/shared/BottomSheet';
 import { MomoPaymentForm } from './MomoPaymentForm';
+import { MomoProgressBody } from './MomoProgressBody';
 import { buildMomoReview, MomoReviewChangedError } from '../../services/momoReview';
 import type { MomoReview } from '../../services/momoReview';
 import './MomoPages.css';
@@ -16,12 +18,7 @@ import { useWalletStore } from '../../store/wallet';
 import { useTransactionStore } from '../../store/transactionStore';
 import { useAddressBookStore } from '../../store/addressBookStore';
 import { AddressBookPickerModal } from '../../components/addressBook/AddressBookPickerModal';
-import { AddressBookAutocomplete } from '../../components/addressBook/AddressBookAutocomplete';
-import { MintIcon } from '../../components/shared/MintIcon';
-import { MintName } from '../../components/shared/MintName';
 import { SovereignStampOverlay, StampPaymentStatus } from '../../components/shared/SovereignStampOverlay';
-import { createPortal } from 'react-dom';
-import { useBottomSheet } from '../../hooks/useBottomSheet';
 import { canSaveMomoTransaction } from '../../services/momoRecovery';
 
 export interface MomoTransferViewProps {
@@ -35,10 +32,19 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
   initialTab = 'receive',
   onClose,
   mintUrl: initialMintUrl = '',
-  page = false
+  page = false,
 }) => {
   const navigate = useNavigate();
-  const { activeTransaction, history, error, setError, updateTransaction, setActiveTransaction, saveActiveTransaction, resumeTransaction } = useTransactionStore();
+  const {
+    activeTransaction,
+    history,
+    error,
+    setError,
+    updateTransaction,
+    setActiveTransaction,
+    saveActiveTransaction,
+    resumeTransaction,
+  } = useTransactionStore();
   const phase = activeTransaction?.currentPhase || AppPhase.IDLE;
 
   const isProcessPhase =
@@ -51,15 +57,12 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
     phase !== AppPhase.RECOVERY_REQUIRED &&
     phase !== AppPhase.EXPIRED;
 
-  const { dragHandleProps, sheetStyle, backdropStyle, closeWithAnimation } = useBottomSheet({
-    onClose,
-    disabled: false,
-    modal: !page,
-  });
-
-  const initialDerivedTab = activeTransaction && !canSaveMomoTransaction(activeTransaction)
-    ? (activeTransaction.direction === 'RWF_TO_SATS' ? 'receive' : 'send')
-    : initialTab;
+  const initialDerivedTab =
+    activeTransaction && !canSaveMomoTransaction(activeTransaction)
+      ? activeTransaction.direction === 'RWF_TO_SATS'
+        ? 'receive'
+        : 'send'
+      : initialTab;
 
   const [activeTab, setActiveTab] = useState<'send' | 'receive'>(initialDerivedTab);
   const [amount, setAmount] = useState('');
@@ -71,51 +74,21 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
   const [showAddressBook, setShowAddressBook] = useState(false);
   const [stampDismissed, setStampDismissed] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
-  const savedTransfers = history.filter(tx => ['RWF_TO_SATS', 'SATS_TO_RWF'].includes(tx.direction) && tx.id !== activeTransaction?.id &&
-    (tx.status === 'PENDING' || tx.currentPhase === AppPhase.RECOVERY_REQUIRED ||
-      (tx.direction === 'SATS_TO_RWF' && tx.invoicePaid && tx.status !== 'COMPLETED')));
+
+  const savedTransfers = history.filter(
+    (tx) =>
+      ['RWF_TO_SATS', 'SATS_TO_RWF'].includes(tx.direction) &&
+      tx.id !== activeTransaction?.id &&
+      (tx.status === 'PENDING' ||
+        tx.currentPhase === AppPhase.RECOVERY_REQUIRED ||
+        (tx.direction === 'SATS_TO_RWF' && tx.invoicePaid && tx.status !== 'COMPLETED')),
+  );
+
   useEffect(() => {
-    // Opening Top Up/Cash Out is an explicit request for a new form. Older
-    // provider waits stay durable and can be opened from Saved transfers.
     useTransactionStore.getState().saveActiveTransaction();
   }, []);
-  const startNewTopup = () => {
-    if (!saveActiveTransaction()) return;
-    setReview(null);
-    setActiveTab('receive');
-    setAmount('');
-    setPhoneNumber('');
-    setStampDismissed(false);
-    if (page) navigate('/top-up', { replace:true, state:{mintUrl} });
-  };
-  const needsRecovery = phase === AppPhase.RECOVERY_REQUIRED || phase === AppPhase.RETRYABLE_ERROR;
-  const handleCheckStatus = async () => {
-    setCheckingStatus(true);
-    setError(null);
-    try { await checkMomoRecovery(); }
-    finally { setCheckingStatus(false); }
-  };
 
   const [mintUrl, setMintUrl] = useState(initialMintUrl);
-  const [showMintDropdown, setShowMintDropdown] = useState(false);
-  const [isClosingMintDropdown, setIsClosingMintDropdown] = useState(false);
-
-  const closeMintDropdown = () => {
-    setIsClosingMintDropdown(true);
-    setTimeout(() => {
-      setShowMintDropdown(false);
-      setIsClosingMintDropdown(false);
-    }, 160);
-  };
-
-  const toggleMintDropdown = () => {
-    if (showMintDropdown) {
-      closeMintDropdown();
-    } else {
-      setShowMintDropdown(true);
-    }
-  };
-
   const mintBalances = useWalletStore((s) => s.mintBalances);
   const mintUrls = Object.keys(mintBalances || {});
   const availableBalance = mintBalances ? mintBalances[mintUrl] || 0 : 0;
@@ -125,6 +98,27 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
       setMintUrl(mintUrls[0]);
     }
   }, [mintUrl, mintUrls]);
+
+  const startNewTopup = () => {
+    if (!saveActiveTransaction()) return;
+    setReview(null);
+    setActiveTab('receive');
+    setAmount('');
+    setPhoneNumber('');
+    setStampDismissed(false);
+    if (page) navigate('/top-up', { replace: true, state: { mintUrl } });
+  };
+
+  const needsRecovery = phase === AppPhase.RECOVERY_REQUIRED || phase === AppPhase.RETRYABLE_ERROR;
+  const handleCheckStatus = async () => {
+    setCheckingStatus(true);
+    setError(null);
+    try {
+      await checkMomoRecovery();
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
 
   const [currentRate, setCurrentRate] = useState<number | null>(null);
   const [proxyBalance, setProxyBalance] = useState<ProxyBlinkBalanceResult | null>(null);
@@ -138,7 +132,7 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
           const rate = await fetchCurrentRate();
           setCurrentRate(rate);
         } catch (e) {
-          console.error("Failed to fetch rate for validation", e);
+          console.error('Failed to fetch rate for validation', e);
         } finally {
           setIsFetchingRate(false);
         }
@@ -149,7 +143,7 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
           const balance = await fetchProxyBlinkBalance();
           setProxyBalance(balance);
         } catch (e) {
-          console.error("Failed to fetch proxy balance", e);
+          console.error('Failed to fetch proxy balance', e);
         }
       }
     };
@@ -163,18 +157,19 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
   const lightningFeeRwf = currentRate ? Math.ceil(ECASH_LIGHTNING_FEE / currentRate) : 10;
   const totalNetworkFeeRwf = MOMO_WITHDRAWAL_FIXED_FEE + lightningFeeRwf;
 
-  const maxWithdrawableRwf = (activeTab === 'send' && currentRate && availableBalance > ECASH_LIGHTNING_FEE)
-    ? (() => {
-      const usableBalance = availableBalance - ECASH_LIGHTNING_FEE;
-      let maxRwf = Math.max(0, Math.floor(((usableBalance / currentRate) - MOMO_WITHDRAWAL_FIXED_FEE) / (1 + SPREAD)));
-      while (maxRwf > 0) {
-        const testNeeded = maxRwf + MOMO_WITHDRAWAL_FIXED_FEE + Math.ceil(maxRwf * SPREAD);
-        if (Math.ceil(testNeeded * currentRate) + ECASH_LIGHTNING_FEE <= availableBalance) break;
-        maxRwf--;
-      }
-      return maxRwf;
-    })()
-    : 0;
+  const maxWithdrawableRwf =
+    activeTab === 'send' && currentRate && availableBalance > ECASH_LIGHTNING_FEE
+      ? (() => {
+          const usableBalance = availableBalance - ECASH_LIGHTNING_FEE;
+          let maxRwf = Math.max(0, Math.floor((usableBalance / currentRate - MOMO_WITHDRAWAL_FIXED_FEE) / (1 + SPREAD)));
+          while (maxRwf > 0) {
+            const testNeeded = maxRwf + MOMO_WITHDRAWAL_FIXED_FEE + Math.ceil(maxRwf * SPREAD);
+            if (Math.ceil(testNeeded * currentRate) + ECASH_LIGHTNING_FEE <= availableBalance) break;
+            maxRwf--;
+          }
+          return maxRwf;
+        })()
+      : 0;
 
   if (amount) {
     if (isNaN(amountNum) || amountNum < 100) {
@@ -190,7 +185,7 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
     } else if (activeTab === 'receive' && currentRate && proxyBalance?.status === 'available') {
       const estimatedSats = Math.floor(amountNum * (1 - SPREAD) * currentRate);
       if (estimatedSats > proxyBalance.balanceSats) {
-        amountError = `Gateway has insufficient liquidity to process this amount right now. Please try a smaller amount.`;
+        amountError = 'Gateway has insufficient liquidity to process this amount right now. Please try a smaller amount.';
       }
     }
   }
@@ -199,12 +194,10 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
     phoneError = 'Phone number must start with 078 or 079 and be exactly 10 digits.';
   }
 
-  const isFormValid = amount && phoneNumber && !amountError && !phoneError && !isFetchingRate && phase === AppPhase.IDLE;
-
+  const isFormValid = Boolean(amount && phoneNumber && !amountError && !phoneError && !isFetchingRate && phase === AppPhase.IDLE);
   const isSuccess = phase === AppPhase.READY_TO_CLAIM || phase === AppPhase.PAYOUT_COMPLETE;
   const isFailed = phase === AppPhase.PAYMENT_FAILED || phase === AppPhase.PAYOUT_FAILED;
 
-  // Auto-record successfully used phone numbers into the address book
   useEffect(() => {
     if (isSuccess && phoneNumber) {
       try {
@@ -218,21 +211,29 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
     }
   }, [isSuccess, phoneNumber]);
 
-  const stampStatus: StampPaymentStatus | null = (!stampDismissed && isSuccess)
-    ? 'success'
-    : (!stampDismissed && isFailed)
-      ? 'failed'
-      : null;
+  const stampStatus: StampPaymentStatus | null = !stampDismissed && isSuccess ? 'success' : !stampDismissed && isFailed ? 'failed' : null;
 
   const reviewTransfer = () => {
     if (!isFormValid || !currentRate) return;
     setError(null);
     try {
-      setReview(buildMomoReview({ direction: activeTab === 'send' ? 'SATS_TO_RWF' : 'RWF_TO_SATS',
-        amount: amountNum, phone: phoneNumber, mint: mintUrl, rate: currentRate,
-        spread: SPREAD, fixedFee: MOMO_WITHDRAWAL_FIXED_FEE, networkReserve: ECASH_LIGHTNING_FEE }));
-    } catch (error) { setError(error instanceof Error ? error.message : 'Could not review transfer.'); }
+      setReview(
+        buildMomoReview({
+          direction: activeTab === 'send' ? 'SATS_TO_RWF' : 'RWF_TO_SATS',
+          amount: amountNum,
+          phone: phoneNumber,
+          mint: mintUrl,
+          rate: currentRate,
+          spread: SPREAD,
+          fixedFee: MOMO_WITHDRAWAL_FIXED_FEE,
+          networkReserve: ECASH_LIGHTNING_FEE,
+        }),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not review transfer.');
+    }
   };
+
   const confirmReview = async () => {
     if (!review || confirming.current || phase !== AppPhase.IDLE) return;
     confirming.current = true;
@@ -243,13 +244,16 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
       const submit = review.direction === 'SATS_TO_RWF' ? calculateSendQuote : calculateQuote;
       await submit(String(review.amount), review.phone, 'ecash', review.mint, review);
       setReview(null);
-    } catch (error) {
-      if (error instanceof MomoReviewChangedError) {
-        setReview(error.review);
-        setCurrentRate(error.review.rate);
+    } catch (err) {
+      if (err instanceof MomoReviewChangedError) {
+        setReview(err.review);
+        setCurrentRate(err.review.rate);
       }
-      setError(error instanceof Error ? error.message : 'Could not confirm transfer.');
-    } finally { confirming.current = false; setSubmittingReview(false); }
+      setError(err instanceof Error ? err.message : 'Could not confirm transfer.');
+    } finally {
+      confirming.current = false;
+      setSubmittingReview(false);
+    }
   };
 
   const handleReceiveFromMomo = async () => {
@@ -286,673 +290,276 @@ export const MomoTransferView: React.FC<MomoTransferViewProps> = ({
     }
   };
 
-  const handleClose = () => {
+  const handleClose = (closeSheet?: () => void) => {
     if (confirming.current && phase === AppPhase.IDLE) return;
     clearFinishedTransfer();
-    if (page) onClose(); else closeWithAnimation();
+    if (closeSheet) closeSheet();
+    else onClose();
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleClose]);
-
-  const renderContent = (content: React.ReactNode) => {
-    if (page) {
-      return (
-        <PaymentPageLayout
-          className="momo-page"
-          bodyClassName="momo-page-body"
-          bodyLabel="Mobile Money transfer"
-          header={
-            <PageHeader
-              title={review ? activeTab === 'send' ? 'Review cashout' : 'Review top-up' : activeTab === 'send' ? 'Cash out' : 'Top up'}
-              subtitle={review ? 'Check your phone number, amount and fees' : activeTab === 'send' ? 'Send RWF to a Mobile Money account' : 'Add funds using Mobile Money'}
-              sticky={false}
-              className="momo-page-header"
-              backDisabled={submittingReview}
-              onBack={() => { if (review) {setReview(null);setError(null);} else handleClose(); }}
-            />
-          }
-        >
-          {content}
-        </PaymentPageLayout>
-      );
-    }
-    return createPortal(
-      <div
-        className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
-        style={backdropStyle}
-        onClick={handleClose}
-      >
-        {content}
-      </div>,
-      document.body,
-    );
-  };
-  return (
+  const renderBody = (closeAction: () => void, dragHandleProps?: Record<string, unknown>) => (
     <>
-      {renderContent(
-        <>
-      <div
-        onClick={e => e.stopPropagation()}
-        style={page ? undefined : sheetStyle}
-        className={page ? "momo-sheet" : "w-full max-w-lg bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden relative max-h-[92vh] pb-6 sm:pb-0"}
-      >
-        <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
+      <div className="absolute inset-0 texture-overlay opacity-20 pointer-events-none"></div>
 
-        {/* Drag Handle */}
+      {!page && (
         <div
-          {...(isProcessPhase ? {} : dragHandleProps)}
+          {...(isProcessPhase ? {} : dragHandleProps || {})}
           className={`w-full flex justify-center pt-3 pb-1 relative z-10 sm:hidden ${
             isProcessPhase ? 'cursor-default pointer-events-none opacity-30' : 'cursor-grab active:cursor-grabbing'
           }`}
         >
           <div className="w-12 h-1.5 bg-white/25 rounded-full transition-colors"></div>
         </div>
+      )}
 
-        {!page && phase === AppPhase.IDLE && (
-          <>
-            <div
-              {...dragHandleProps}
-              className="flex items-center justify-between px-6 py-4 relative z-10 border-b border-outline-variant/10 cursor-grab active:cursor-grabbing"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                  <Phone className=" text-primary" size={20} />
-                </div>
-                <h2 className="text-headline-sm font-headline-sm text-on-surface">Mobile Money</h2>
-              </div>
-              <button
-                onClick={handleClose}
-                className="w-8 h-8 rounded-full flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="relative flex border-b border-outline-variant/10 z-10 bg-surface-container-high/40 select-none">
-              <button
-                onClick={() => switchTab('receive')}
-                className={`flex-1 py-3.5 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${activeTab === 'receive'
-                    ? 'text-primary'
-                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
-                  }`}
-              >
-                <PhoneIncoming size={16} className={`transition-transform duration-200 ${activeTab === 'receive' ? 'scale-110 text-primary' : ''}`} />
-                <span>TOP UP</span>
-              </button>
-              <button
-                onClick={() => switchTab('send')}
-                className={`flex-1 py-3.5 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${activeTab === 'send'
-                    ? 'text-primary'
-                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
-                  }`}
-              >
-                <PhoneOutgoing size={16} className={`transition-transform duration-200 ${activeTab === 'send' ? 'scale-110 text-primary' : ''}`} />
-                <span>CASH OUT</span>
-              </button>
-
-              {/* Gliding active indicator */}
-              <div
-                className="absolute bottom-0 left-0 h-[2.5px] bg-primary shadow-[0_0_12px_rgba(242,169,59,0.7)] rounded-t-full transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] w-1/2 pointer-events-none"
-                style={{
-                  transform: `translate3d(${activeTab === 'receive' ? '0%' : '100%'}, 0, 0)`
-                }}
-              />
-            </div>
-          </>
-        )}
-
-        {page && phase === AppPhase.IDLE ? <MomoPaymentForm
-          cashout={activeTab === 'send'} amount={amount} phone={phoneNumber} mint={mintUrl} balances={mintBalances}
-          onAmount={setAmount} onPhone={setPhoneNumber} onMint={setMintUrl} onAddressBook={() => setShowAddressBook(true)}
-          valid={Boolean(isFormValid && currentRate && mintUrl)} loadingRate={isFetchingRate}
-          validation={phoneError || (amountError === 'INSUFFICIENT_BALANCE' ? 'Insufficient wallet balance for this amount and fees.' : amountError)}
-          review={review} submitting={submittingReview} error={error} maxAmount={maxWithdrawableRwf}
-          rateUnavailable={!currentRate && !isFetchingRate} onRefreshRate={async () => {
-            setIsFetchingRate(true);
-            try { setCurrentRate(await fetchCurrentRate()); setError(null); }
-            catch { setError('Could not load the exchange rate. Try again.'); }
-            finally { setIsFetchingRate(false); }
-          }}
-          onReview={reviewTransfer} onConfirm={confirmReview} saved={savedTransfers}
-          onResume={id => { if (resumeTransaction(id)) { const tx = history.find(t => t.id === id); if (tx) setActiveTab(tx.direction === 'RWF_TO_SATS' ? 'receive' : 'send'); setReview(null); setStampDismissed(false); } }}
-        /> : <div className="momo-progress-body flex-1 overflow-y-auto overflow-x-hidden p-6 relative z-10 custom-scrollbar">
-          {error && (
-            <div className="p-3 mb-4 rounded-xl bg-error/10 text-error text-body-md text-center">
-              {error}
-            </div>
-          )}
-
-          {phase === AppPhase.IDLE && savedTransfers.length > 0 && (
-            <details className="mb-5 rounded-2xl bg-surface-container-highest/60 border border-outline-variant/15">
-              <summary className="p-4 cursor-pointer text-label-lg text-on-surface">Saved transfers <span className="text-on-surface-variant text-body-sm">({savedTransfers.length} pending)</span></summary>
-              <div className="px-4 pb-4 flex flex-col gap-2">
-                <p className="text-body-sm text-on-surface-variant mb-1">These transfers may still complete. Open one to check its status.</p>
-                {savedTransfers.map(tx => (
-                  <button key={tx.id} onClick={() => {
-                    if (!resumeTransaction(tx.id)) return;
-                    setActiveTab(tx.direction === 'RWF_TO_SATS' ? 'receive' : 'send');
-                    setStampDismissed(false);
-                  }} className="flex items-center justify-between gap-3 w-full p-3 rounded-xl border border-outline-variant/20 text-left hover:bg-surface-bright/30">
-                    <span className="min-w-0"><span className="block text-label-md text-on-surface">{tx.direction === 'RWF_TO_SATS' ? 'Top-up' : 'Cashout'} · {tx.rwfAmount.toLocaleString()} RWF</span><span className="block text-body-sm text-on-surface-variant">{tx.timestamp ? new Date(tx.timestamp).toLocaleDateString() : 'Pending'}</span></span>
-                    <span className="text-label-md text-primary shrink-0">View transfer</span>
-                  </button>
-                ))}
-              </div>
-            </details>
-          )}
-
-          {/* Mint info */}
-          {phase === AppPhase.IDLE && (
-            <div className="flex flex-col gap-2 mb-6">
-              <p className="text-body-md font-body-md text-on-surface-variant">
-                {activeTab === 'send'
-                  ? 'Cash out from mint:'
-                  : 'Top up to mint:'}
-              </p>
-              <div className="relative">
-                {showMintDropdown && (
-                  <div className="fixed inset-0 z-40" onClick={closeMintDropdown}></div>
-                )}
-                <button
-                  onClick={toggleMintDropdown}
-                  className="w-full flex items-center justify-between bg-surface-container-highest p-3 rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-colors relative z-50 cursor-pointer"
-                >
-                  <div className="flex items-center gap-2 min-w-0 pr-4">
-                    <MintIcon mintUrl={mintUrl} className="w-6 h-6 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30" textClassName="text-primary text-[10px] font-bold" />
-                    <MintName mintUrl={mintUrl} className="text-body-md font-body-md text-on-surface font-medium truncate" />
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap">
-                    <span className="text-body-md font-body-md font-semibold text-on-surface">₿{availableBalance.toLocaleString()}</span>
-                    <ChevronDown 
-                      size={16} 
-                      className={`flex-shrink-0 transition-transform duration-300 ease-out ${
-                        showMintDropdown && !isClosingMintDropdown ? 'rotate-180 text-primary' : 'text-on-surface-variant'
-                      }`} 
-                    />
-                  </div>
-                </button>
-
-                {showMintDropdown && (
-                  <div className={`absolute top-full left-0 right-0 mt-2 bg-surface-container-highest rounded-2xl shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)] border border-outline-variant/20 overflow-hidden flex flex-col z-50 max-h-[250px] overflow-y-auto ${
-                    isClosingMintDropdown ? 'animate-dropdown-collapse' : 'animate-dropdown-expand'
-                  }`}>
-                    {mintUrls.map((m, index) => (
-                      <button
-                        key={m}
-                        style={{ animationDelay: `${index * 30}ms` }}
-                        onClick={() => { setMintUrl(m); closeMintDropdown(); }}
-                        className="flex items-center justify-between p-3 hover:bg-surface-bright transition-colors text-left w-full border-b border-outline-variant/10 last:border-b-0 animate-dropdown-item cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2 min-w-0 pr-2">
-                          <MintIcon mintUrl={m} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0" textClassName="text-primary text-[10px] font-bold" />
-                          <MintName mintUrl={m} className="text-body-sm font-body-sm text-on-surface truncate" />
-                          {mintUrl === m && <Check size={14} className="text-primary flex-shrink-0" />}
-                        </div>
-                        <span className="text-body-sm font-body-sm font-bold text-on-surface flex-shrink-0">₿{(mintBalances![m] || 0).toLocaleString()}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {needsRecovery ? (
-            <div className="flex flex-col gap-5 py-4">
-              <div>
-                <h3 className="text-headline-md text-on-surface mb-3">Check your transfer</h3>
-                <p className="text-body-md text-on-surface-variant" role="status">{activeTransaction?.recoveryMessage || 'This transfer was interrupted. Check its status before trying again.'}</p>
-              </div>
-              <div className="rounded-2xl bg-surface-container-highest p-4">
-                <p className="text-label-md text-on-surface-variant mb-2">Transaction ID</p>
-                <p className="text-body-sm text-on-surface break-all select-text">{activeTransaction?.id}</p>
-              </div>
-              <p className="text-body-sm text-on-surface-variant">You can close this screen. This transfer stays saved. Checking its status will not charge your phone or wallet again.</p>
-              {activeTransaction?.direction === 'SATS_TO_RWF' && activeTransaction.invoicePaid && activeTransaction.momoSubmission === 'rejected' && (
-                <button disabled={checkingStatus} onClick={() => {
-                  setError(null);
-                  updateTransaction({momoSubmission:'not_started', currentPhase:AppPhase.INITIATING_PAYOUT});
-                }} className="w-full bg-surface-container-highest text-on-surface py-4 rounded-2xl font-label-lg">Retry payout using existing funding</button>
-              )}
-              <button disabled={checkingStatus} onClick={handleCheckStatus} className="w-full bg-primary text-on-primary py-4 rounded-2xl font-label-lg disabled:opacity-50">{checkingStatus ? 'Checking status…' : 'Check status'}</button>
-              <button onClick={startNewTopup} className="w-full text-primary py-3 rounded-2xl font-label-lg">New top-up</button>
-              <button onClick={handleClose} className="w-full text-primary py-3 rounded-2xl font-label-lg">Close</button>
-            </div>
-          ) : <div
-            key={activeTab}
-            className={`flex flex-col gap-4 ${activeTab === 'send' ? 'animate-tab-from-right' : 'animate-tab-from-left'
-              }`}
+      {!page && phase === AppPhase.IDLE && (
+        <>
+          <div
+            {...(dragHandleProps || {})}
+            className="flex items-center justify-between px-6 py-4 relative z-10 border-b border-outline-variant/10 cursor-grab active:cursor-grabbing"
           >
-            {activeTab === 'receive' && (
-              <div className="flex flex-col gap-4">
-                {phase === AppPhase.READY_TO_CLAIM ? (
-                  <div className="text-center py-8">
-                    <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center mx-auto mb-4">
-                      <PhoneIncoming size={32} />
-                    </div>
-                    <h3 className="text-headline-md text-on-surface mb-2">Success!</h3>
-                    <p className="text-body-md text-on-surface-variant">Sats have been topped up to your wallet.</p>
-                    <button
-                      onClick={handleClose}
-                      className="w-full mt-6 bg-primary text-on-primary py-4 rounded-2xl font-label-lg"
-                    >
-                      Close
-                    </button>
-                  </div>
-                ) : phase === AppPhase.PAYMENT_FAILED ? (
-                  <div className="text-center py-8">
-                    <div className="w-16 h-16 rounded-full bg-error/20 text-error flex items-center justify-center mx-auto mb-4">
-                      <X size={32} />
-                    </div>
-                    <h3 className="text-headline-md text-on-surface mb-2">Transfer Failed</h3>
-                    <p className="text-body-md text-on-surface-variant mb-6">{error || activeTransaction?.recoveryMessage || "Something went wrong."}</p>
-                    <button onClick={handleClose} className="w-full bg-surface-container-highest text-on-surface py-4 rounded-2xl font-label-lg hover:bg-surface-bright">Close</button>
-                  </div>
-                ) : [AppPhase.FETCHING_RATE, AppPhase.INITIATING_PAYMENT, AppPhase.PENDING_PAYMENT, AppPhase.VERIFYING_PAYMENT, AppPhase.PAYING_INVOICE, AppPhase.FULFILLING].includes(phase) ? (
-                  <div className="py-6 px-4">
-                    <h3 className="text-headline-md text-on-surface mb-6 text-center">Processing Transfer</h3>
-
-                    <div className="flex flex-col gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="relative flex items-center justify-center w-8 h-8">
-                          {[AppPhase.FETCHING_RATE, AppPhase.INITIATING_PAYMENT].includes(phase) ? (
-                            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`text-label-lg ${[AppPhase.FETCHING_RATE, AppPhase.INITIATING_PAYMENT].includes(phase) ? 'text-primary' : 'text-on-surface'}`}>Initiating Transaction</p>
-                          <p className="text-body-sm text-on-surface-variant">Generating quote and securing rates</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="relative flex items-center justify-center w-8 h-8">
-                          {phase === AppPhase.PENDING_PAYMENT || phase === AppPhase.VERIFYING_PAYMENT ? (
-                            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : [AppPhase.PAYING_INVOICE, AppPhase.FULFILLING].includes(phase) ? (
-                            <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                            </div>
-                          ) : (
-                            <div className="w-2 h-2 rounded-full bg-outline-variant/50" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`text-label-lg ${phase === AppPhase.PENDING_PAYMENT || phase === AppPhase.VERIFYING_PAYMENT ? 'text-primary' : [AppPhase.PAYING_INVOICE, AppPhase.FULFILLING].includes(phase) ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>Awaiting MoMo Approval</p>
-                          <p className={`text-body-sm ${phase === AppPhase.PENDING_PAYMENT || phase === AppPhase.VERIFYING_PAYMENT ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}`}>Please enter your PIN on your phone</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="relative flex items-center justify-center w-8 h-8">
-                          {phase === AppPhase.PAYING_INVOICE ? (
-                            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : phase === AppPhase.FULFILLING ? (
-                            <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                            </div>
-                          ) : (
-                            <div className="w-2 h-2 rounded-full bg-outline-variant/50" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`text-label-lg ${phase === AppPhase.PAYING_INVOICE ? 'text-primary' : phase === AppPhase.FULFILLING ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>Paying Lightning Invoice</p>
-                          <p className={`text-body-sm ${phase === AppPhase.PAYING_INVOICE ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}`}>Funding the Cashu Mint via proxy</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="relative flex items-center justify-center w-8 h-8">
-                          {phase === AppPhase.FULFILLING ? (
-                            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <div className="w-2 h-2 rounded-full bg-outline-variant/50" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`text-label-lg ${phase === AppPhase.FULFILLING ? 'text-primary' : 'text-on-surface-variant/50'}`}>Minting eCash</p>
-                          <p className={`text-body-sm ${phase === AppPhase.FULFILLING ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}`}>Issuing tokens to your wallet</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <label className="text-label-md text-on-surface-variant block mb-2">Phone Number</label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          spellCheck={false}
-                          placeholder="078..."
-                          className={`w-full bg-[#0c1b14] rounded-xl p-4 pr-12 text-body-lg text-on-surface border focus:outline-none focus:ring-1 ${phoneError ? 'border-error focus:ring-error' : 'border-[#142d20] focus:border-primary/50 focus:ring-primary'}`}
-                          value={phoneNumber}
-                          onChange={e => setPhoneNumber(e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowAddressBook(true)}
-                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary p-1.5 rounded-xl hover:bg-surface-container transition-colors cursor-pointer"
-                          title="Open Address Book"
-                        >
-                          <BookUser size={18} />
-                        </button>
-
-                        <AddressBookAutocomplete
-                          type="momo"
-                          query={phoneNumber}
-                          visible={!!phoneNumber && !phoneError}
-                          onSelect={(c) => {
-                            setPhoneNumber(c.value);
-                          }}
-                          onClose={() => {}}
-                        />
-                      </div>
-                      {phoneError && <p className="text-error text-label-sm mt-2 ml-2">{phoneError}</p>}
-                    </div>
-                    <div>
-                      <label className="text-label-md text-on-surface-variant block mb-2">Amount to Receive (RWF)</label>
-                      <input
-                        type="number"
-                        spellCheck={false}
-                        placeholder="Amount in RWF"
-                        className={`w-full bg-[#0c1b14] rounded-xl p-4 text-body-lg text-on-surface border focus:outline-none focus:ring-1 ${amountError ? 'border-error focus:ring-error' : 'border-[#142d20] focus:border-primary/50 focus:ring-primary'}`}
-                        value={amount}
-                        onChange={e => setAmount(e.target.value)}
-                      />
-                      {amountError && <p className="text-error text-label-sm mt-2 ml-2">{amountError}</p>}
-                      {!amountError && amountNum >= 100 && currentRate && (
-                        <div className="mt-2.5 p-3 rounded-xl bg-surface-container-highest/60 border border-outline-variant/15 flex flex-col gap-1 text-xs text-on-surface-variant">
-                          <div className="flex justify-between items-center">
-                            <span>Deposit fee:</span>
-                            <span className="font-semibold text-emerald-400">0 RWF (Free)</span>
-                          </div>
-                          <div className="flex justify-between items-center pt-1 border-t border-outline-variant/10 text-on-surface">
-                            <span>You will receive:</span>
-                            <span className="font-bold text-primary">
-                              ~{Math.floor(amountNum * (1 - SPREAD) * currentRate).toLocaleString()} sats
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={handleReceiveFromMomo}
-                      disabled={!isFormValid}
-                      className="w-full mt-4 bg-primary text-on-primary py-4 rounded-2xl font-label-lg disabled:opacity-50"
-                    >
-                      {phase === AppPhase.FETCHING_RATE ? 'Calculating...' : phase === AppPhase.INITIATING_PAYMENT ? 'Initiating...' : 'Top Up via MoMo'}
-                    </button>
-                  </>
-                )}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                <Phone className="text-primary" size={20} />
               </div>
-            )}
+              <h2 className="text-headline-sm font-headline-sm text-on-surface">Mobile Money</h2>
+            </div>
+            <button
+              type="button"
+              onClick={closeAction}
+              aria-label="Close"
+              className="w-8 h-8 rounded-full flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
 
-            {activeTab === 'send' && (
-              <div className="flex flex-col gap-4">
-                {phase === AppPhase.READY_TO_CLAIM ? (
-                  <div className="text-center py-8">
-                    <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center mx-auto mb-4">
-                      <PhoneOutgoing size={32} />
-                    </div>
-                    <h3 className="text-headline-md text-on-surface mb-2">Transfer Complete!</h3>
-                    <p className="text-body-md text-on-surface-variant">RWF has been cashed out successfully to the mobile money number.</p>
-                    <button
-                      onClick={handleClose}
-                      className="w-full mt-6 bg-primary text-on-primary py-4 rounded-2xl font-label-lg"
-                    >
-                      Close
-                    </button>
-                  </div>
-                ) : phase === AppPhase.PAYMENT_FAILED ? (
-                  <div className="text-center py-8">
-                    <div className="w-16 h-16 rounded-full bg-error/20 text-error flex items-center justify-center mx-auto mb-4">
-                      <X size={32} />
-                    </div>
-                    <h3 className="text-headline-md text-on-surface mb-2">Transfer Failed</h3>
-                    <p className="text-body-md text-on-surface-variant mb-6">{error || activeTransaction?.recoveryMessage || "Something went wrong."}</p>
-                    <button onClick={handleClose} className="w-full bg-surface-container-highest text-on-surface py-4 rounded-2xl font-label-lg hover:bg-surface-bright">Close</button>
-                  </div>
-                ) : [AppPhase.GENERATING_INVOICE, AppPhase.AWAITING_INVOICE_PAYMENT, AppPhase.PAYING_INVOICE, AppPhase.INITIATING_PAYOUT, AppPhase.VERIFYING_PAYOUT].includes(phase) ? (
-                  <div className="py-6 px-4">
-                    <h3 className="text-headline-md text-on-surface mb-6 text-center">Processing Send</h3>
+          <div className="relative flex border-b border-outline-variant/10 z-10 bg-surface-container-high/40 select-none">
+            <button
+              onClick={() => switchTab('receive')}
+              className={`flex-1 py-3.5 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
+                activeTab === 'receive' ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
+              }`}
+            >
+              <PhoneIncoming size={16} className={`transition-transform duration-200 ${activeTab === 'receive' ? 'scale-110 text-primary' : ''}`} />
+              <span>TOP UP</span>
+            </button>
+            <button
+              onClick={() => switchTab('send')}
+              className={`flex-1 py-3.5 text-[14px] font-bold tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
+                activeTab === 'send' ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20'
+              }`}
+            >
+              <PhoneOutgoing size={16} className={`transition-transform duration-200 ${activeTab === 'send' ? 'scale-110 text-primary' : ''}`} />
+              <span>CASH OUT</span>
+            </button>
 
-                    <div className="flex flex-col gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="relative flex items-center justify-center w-8 h-8">
-                          {phase === AppPhase.GENERATING_INVOICE ? (
-                            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`text-label-lg ${phase === AppPhase.GENERATING_INVOICE ? 'text-primary' : 'text-on-surface'}`}>Calculating Quote</p>
-                          <p className="text-body-sm text-on-surface-variant">Securing exchange rate and invoice</p>
-                        </div>
-                      </div>
+            <div
+              className="absolute bottom-0 left-0 h-[2.5px] bg-primary shadow-[0_0_12px_rgba(242,169,59,0.7)] rounded-t-full transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] w-1/2 pointer-events-none"
+              style={{ transform: `translate3d(${activeTab === 'receive' ? '0%' : '100%'}, 0, 0)` }}
+            />
+          </div>
+        </>
+      )}
 
-                      <div className="flex items-center gap-4">
-                        <div className="relative flex items-center justify-center w-8 h-8">
-                          {[AppPhase.AWAITING_INVOICE_PAYMENT, AppPhase.PAYING_INVOICE].includes(phase) ? (
-                            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : [AppPhase.INITIATING_PAYOUT, AppPhase.VERIFYING_PAYOUT].includes(phase) ? (
-                            <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                            </div>
-                          ) : (
-                            <div className="w-2 h-2 rounded-full bg-outline-variant/50" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`text-label-lg ${[AppPhase.AWAITING_INVOICE_PAYMENT, AppPhase.PAYING_INVOICE].includes(phase) ? 'text-primary' : [AppPhase.INITIATING_PAYOUT, AppPhase.VERIFYING_PAYOUT].includes(phase) ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>Funding Transfer</p>
-                          <p className={`text-body-sm ${[AppPhase.AWAITING_INVOICE_PAYMENT, AppPhase.PAYING_INVOICE].includes(phase) ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}`}>Paying Lightning invoice from eCash</p>
-                        </div>
-                      </div>
+      {page && phase === AppPhase.IDLE ? (
+        <MomoPaymentForm
+          cashout={activeTab === 'send'}
+          amount={amount}
+          phone={phoneNumber}
+          mint={mintUrl}
+          balances={mintBalances}
+          onAmount={setAmount}
+          onPhone={setPhoneNumber}
+          onMint={setMintUrl}
+          onAddressBook={() => setShowAddressBook(true)}
+          valid={Boolean(isFormValid && currentRate && mintUrl)}
+          loadingRate={isFetchingRate}
+          validation={
+            phoneError || (amountError === 'INSUFFICIENT_BALANCE' ? 'Insufficient wallet balance for this amount and fees.' : amountError)
+          }
+          review={review}
+          submitting={submittingReview}
+          error={error}
+          maxAmount={maxWithdrawableRwf}
+          rateUnavailable={!currentRate && !isFetchingRate}
+          onRefreshRate={async () => {
+            setIsFetchingRate(true);
+            try {
+              setCurrentRate(await fetchCurrentRate());
+              setError(null);
+            } catch {
+              setError('Could not load the exchange rate. Try again.');
+            } finally {
+              setIsFetchingRate(false);
+            }
+          }}
+          onReview={reviewTransfer}
+          onConfirm={confirmReview}
+          saved={savedTransfers}
+          onResume={(id) => {
+            if (resumeTransaction(id)) {
+              const tx = history.find((t) => t.id === id);
+              if (tx) setActiveTab(tx.direction === 'RWF_TO_SATS' ? 'receive' : 'send');
+              setReview(null);
+              setStampDismissed(false);
+            }
+          }}
+        />
+      ) : (
+        <MomoProgressBody
+          activeTab={activeTab}
+          phase={phase}
+          activeTransaction={activeTransaction}
+          error={error}
+          savedTransfers={savedTransfers}
+          mintUrl={mintUrl}
+          mintUrls={mintUrls}
+          mintBalances={mintBalances}
+          availableBalance={availableBalance}
+          needsRecovery={needsRecovery}
+          checkingStatus={checkingStatus}
+          isProcessPhase={isProcessPhase}
+          phoneNumber={phoneNumber}
+          phoneError={phoneError}
+          amount={amount}
+          amountNum={amountNum}
+          amountError={amountError}
+          currentRate={currentRate}
+          isFetchingRate={isFetchingRate}
+          isFormValid={isFormValid}
+          maxWithdrawableRwf={maxWithdrawableRwf}
+          totalNetworkFeeRwf={totalNetworkFeeRwf}
+          onSelectMint={setMintUrl}
+          onResumeTransfer={(id) => {
+            if (!resumeTransaction(id)) return;
+            const tx = history.find((t) => t.id === id);
+            if (tx) setActiveTab(tx.direction === 'RWF_TO_SATS' ? 'receive' : 'send');
+            setStampDismissed(false);
+          }}
+          onRetryPayout={() => {
+            setError(null);
+            updateTransaction({ momoSubmission: 'not_started', currentPhase: AppPhase.INITIATING_PAYOUT });
+          }}
+          onCheckStatus={handleCheckStatus}
+          onStartNewTopup={startNewTopup}
+          onClose={closeAction}
+          onPhoneChange={setPhoneNumber}
+          onAmountChange={setAmount}
+          onOpenAddressBook={() => setShowAddressBook(true)}
+          onReceiveFromMomo={handleReceiveFromMomo}
+          onSendToMomo={handleSendToMomo}
+        />
+      )}
+    </>
+  );
 
-                      <div className="flex items-center gap-4">
-                        <div className="relative flex items-center justify-center w-8 h-8">
-                          {phase === AppPhase.INITIATING_PAYOUT ? (
-                            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : phase === AppPhase.VERIFYING_PAYOUT ? (
-                            <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                            </div>
-                          ) : (
-                            <div className="w-2 h-2 rounded-full bg-outline-variant/50" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`text-label-lg ${phase === AppPhase.INITIATING_PAYOUT ? 'text-primary' : phase === AppPhase.VERIFYING_PAYOUT ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>Initiating MoMo Payout</p>
-                          <p className={`text-body-sm ${phase === AppPhase.INITIATING_PAYOUT ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}`}>Instructing gateway to cash out RWF</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="relative flex items-center justify-center w-8 h-8">
-                          {phase === AppPhase.VERIFYING_PAYOUT ? (
-                            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <div className="w-2 h-2 rounded-full bg-outline-variant/50" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`text-label-lg ${phase === AppPhase.VERIFYING_PAYOUT ? 'text-primary' : 'text-on-surface-variant/50'}`}>Verifying Transfer</p>
-                          <p className={`text-body-sm ${phase === AppPhase.VERIFYING_PAYOUT ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}`}>Waiting for MoMo network confirmation</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <label className="text-label-md text-on-surface-variant block mb-2">Recipient Phone Number</label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          spellCheck={false}
-                          placeholder="078..."
-                          className={`w-full bg-[#0c1b14] rounded-xl p-4 pr-12 text-body-lg text-on-surface border focus:outline-none focus:ring-1 ${phoneError ? 'border-error focus:ring-error' : 'border-[#142d20] focus:border-primary/50 focus:ring-primary'}`}
-                          value={phoneNumber}
-                          onChange={e => setPhoneNumber(e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowAddressBook(true)}
-                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary p-1.5 rounded-xl hover:bg-surface-container transition-colors cursor-pointer"
-                          title="Open Address Book"
-                        >
-                          <BookUser size={18} />
-                        </button>
-
-                        <AddressBookAutocomplete
-                          type="momo"
-                          query={phoneNumber}
-                          visible={!!phoneNumber && !phoneError}
-                          onSelect={(c) => {
-                            setPhoneNumber(c.value);
-                          }}
-                          onClose={() => {}}
-                        />
-                      </div>
-                      {phoneError && <p className="text-error text-label-sm mt-2 ml-2">{phoneError}</p>}
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-label-md text-on-surface-variant">Amount to Send (RWF)</label>
-                        {maxWithdrawableRwf >= 100 && (
-                          <button
-                            type="button"
-                            onClick={() => setAmount(String(maxWithdrawableRwf))}
-                            className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors uppercase tracking-wider px-2 py-0.5 rounded-md bg-primary/10 hover:bg-primary/20 cursor-pointer"
-                          >
-                            Max: {maxWithdrawableRwf.toLocaleString()} RWF
-                          </button>
-                        )}
-                      </div>
-                      <input
-                        type="number"
-                        spellCheck={false}
-                        placeholder="Amount in RWF"
-                        className={`w-full bg-[#0c1b14] rounded-xl p-4 text-body-lg text-on-surface border focus:outline-none focus:ring-1 ${amountError ? 'border-error focus:ring-error' : 'border-[#142d20] focus:border-primary/50 focus:ring-primary'}`}
-                        value={amount}
-                        onChange={e => setAmount(e.target.value)}
-                      />
-                      {amountError === 'INSUFFICIENT_BALANCE' && currentRate && (
-                        <div className="mt-2.5 p-3 rounded-xl bg-error/10 border border-error/20 flex flex-col gap-1.5 text-xs">
-                          <div className="text-error font-medium">
-                            Need ~{(Math.ceil((amountNum + MOMO_WITHDRAWAL_FIXED_FEE + Math.ceil(amountNum * SPREAD)) * currentRate) + ECASH_LIGHTNING_FEE).toLocaleString()} sats (includes ~{totalNetworkFeeRwf.toLocaleString()} RWF network fee).
-                          </div>
-                          {maxWithdrawableRwf >= 100 ? (
-                            <div className="text-on-surface-variant flex items-center justify-between pt-1 border-t border-error/15">
-                              <span>Max you can withdraw:</span>
-                              <button
-                                type="button"
-                                onClick={() => setAmount(String(maxWithdrawableRwf))}
-                                className="font-bold text-primary hover:underline cursor-pointer"
-                              >
-                                Set to {maxWithdrawableRwf.toLocaleString()} RWF →
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-on-surface-variant text-[11px]">
-                              Balance too low to cover ~{totalNetworkFeeRwf.toLocaleString()} RWF network fee.
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {amountError && amountError !== 'INSUFFICIENT_BALANCE' && (
-                        <p className="text-error text-label-sm mt-2 ml-2">{amountError}</p>
-                      )}
-                      {!amountError && amountNum >= 100 && currentRate && (
-                        <div className="mt-2.5 p-3 rounded-xl bg-surface-container-highest/60 border border-outline-variant/15 flex flex-col gap-1 text-xs text-on-surface-variant">
-                          <div className="flex justify-between items-center">
-                            <span>Recipient receives:</span>
-                            <span className="font-semibold text-on-surface">{amountNum.toLocaleString()} RWF</span>
-                          </div>
-                          <div className="flex justify-between items-center text-on-surface-variant/80">
-                            <span>Network fee:</span>
-                            <span>~{totalNetworkFeeRwf.toLocaleString()} RWF</span>
-                          </div>
-                          <div className="flex justify-between items-center pt-1 border-t border-outline-variant/10 text-on-surface">
-                            <span>Total from wallet:</span>
-                            <span className="font-bold text-primary">
-                              ~{(Math.ceil((amountNum + MOMO_WITHDRAWAL_FIXED_FEE + Math.ceil(amountNum * SPREAD)) * currentRate) + ECASH_LIGHTNING_FEE).toLocaleString()} sats
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={handleSendToMomo}
-                      disabled={!isFormValid}
-                      className="w-full mt-4 bg-primary text-on-primary py-4 rounded-2xl font-label-lg disabled:opacity-50 transition-all"
-                    >
-                      {isFetchingRate ? 'Loading rates...' : 'Cash Out to MoMo'}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>}
-          {isProcessPhase && <button onClick={handleClose} className="w-full mt-5 text-primary py-3 rounded-2xl font-label-lg">Close and keep transfer</button>}
-          {isProcessPhase && canSaveMomoTransaction(activeTransaction) && <button onClick={startNewTopup} className="w-full text-primary py-3 rounded-2xl font-label-lg">New top-up</button>}
-        </div>}
-      </div>
+  const overlays = (
+    <>
       <SovereignStampOverlay
         status={stampStatus}
         amountValue={activeTransaction?.rwfAmount || (amount ? parseInt(amount, 10) : undefined)}
         currency="RWF"
         currencyPosition="suffix"
-        title={stampStatus === 'success'
-          ? (activeTab === 'receive' ? 'Top Up Complete' : 'Cash Out Complete')
-          : (activeTab === 'receive' ? 'Top Up Failed' : 'Cash Out Failed')
+        title={
+          stampStatus === 'success'
+            ? activeTab === 'receive'
+              ? 'Top Up Complete'
+              : 'Cash Out Complete'
+            : activeTab === 'receive'
+              ? 'Top Up Failed'
+              : 'Cash Out Failed'
         }
-        subtitle={stampStatus === 'success'
-          ? (activeTab === 'receive' ? 'Funds added to your wallet balance.' : 'RWF sent to your mobile money account.')
-          : (error || activeTransaction?.recoveryMessage || 'The mobile money transfer failed.')
+        subtitle={
+          stampStatus === 'success'
+            ? activeTab === 'receive'
+              ? 'Funds added to your wallet balance.'
+              : 'RWF sent to your mobile money account.'
+            : error || activeTransaction?.recoveryMessage || 'The mobile money transfer failed.'
         }
-        badgeLabel={stampStatus === 'success'
-          ? (activeTab === 'receive' ? 'Topped Up' : 'Cashed Out')
-          : 'Failed'
-        }
-        errorMessage={stampStatus === 'failed' ? (error || activeTransaction?.recoveryMessage || undefined) : undefined}
+        badgeLabel={stampStatus === 'success' ? (activeTab === 'receive' ? 'Topped Up' : 'Cashed Out') : 'Failed'}
+        errorMessage={stampStatus === 'failed' ? error || activeTransaction?.recoveryMessage || undefined : undefined}
         onDismiss={() => {
           setStampDismissed(true);
           if (stampStatus === 'success' && page) clearFinishedTransfer();
           else handleClose();
         }}
-        onRetry={stampStatus === 'failed' ? () => {
-          setStampDismissed(false);
-          setActiveTransaction(null);
-          setError(null);
-        } : undefined}
+        onRetry={
+          stampStatus === 'failed'
+            ? () => {
+                setStampDismissed(false);
+                setActiveTransaction(null);
+                setError(null);
+              }
+            : undefined
+        }
       />
-          </>
-        )}
+      <AddressBookPickerModal
+        isOpen={showAddressBook}
+        onClose={() => setShowAddressBook(false)}
+        type="momo"
+        onSelect={(contact) => {
+          setPhoneNumber(contact.value);
+        }}
+      />
+    </>
+  );
 
-        <AddressBookPickerModal
-          isOpen={showAddressBook}
-          onClose={() => setShowAddressBook(false)}
-          type="momo"
-          onSelect={(contact) => {
-            setPhoneNumber(contact.value);
-          }}
-        />
+  if (page) {
+    return (
+      <>
+        <PaymentPageLayout
+          className="momo-page"
+          bodyClassName="momo-page-body"
+          bodyLabel="Mobile Money transfer"
+          header={
+            <PageHeader
+              title={
+                review
+                  ? activeTab === 'send'
+                    ? 'Review cashout'
+                    : 'Review top-up'
+                  : activeTab === 'send'
+                    ? 'Cash out'
+                    : 'Top up'
+              }
+              subtitle={
+                review
+                  ? 'Check your phone number, amount and fees'
+                  : activeTab === 'send'
+                    ? 'Send RWF to a Mobile Money account'
+                    : 'Add funds using Mobile Money'
+              }
+              sticky={false}
+              className="momo-page-header"
+              backDisabled={submittingReview}
+              onBack={() => {
+                if (review) {
+                  setReview(null);
+                  setError(null);
+                } else handleClose();
+              }}
+            />
+          }
+        >
+          <div className="momo-sheet">{renderBody(() => handleClose())}</div>
+        </PaymentPageLayout>
+        {overlays}
       </>
     );
-  };
+  }
+
+  return (
+    <>
+      <BottomSheet
+        onClose={() => handleClose()}
+        aria-label="Mobile Money"
+        dismissible={!isProcessPhase && !(confirming.current && phase === AppPhase.IDLE)}
+        className="w-full max-w-lg bg-surface-container-high/95 backdrop-blur-xl rounded-t-[28px] sm:rounded-2xl border-t border-x sm:border border-outline-variant/20 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden relative max-h-[92vh] pb-6 sm:pb-0"
+      >
+        {({ close, dragHandleProps }) => renderBody(() => handleClose(close), dragHandleProps)}
+      </BottomSheet>
+      {overlays}
+    </>
+  );
+};

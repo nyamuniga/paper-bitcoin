@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { EcashModal } from '../components/home/EcashModal';
+import { EcashScreen } from '../features/ecash/EcashScreen';
 import { useWalletStore } from '../store/wallet';
 
 export function ReceiveEcashPage() {
@@ -9,6 +9,6 @@ export function ReceiveEcashPage() {
   const mints = Object.keys(mintBalances);
   const preferred = state?.mintUrl || localStorage.getItem('preferred_mint_url');
   const mintUrl = mints.includes(preferred) ? preferred : mints[0] || '';
-  return <EcashModal page mintUrl={mintUrl} initialTab="receive" initialToken={state?.ecashToken}
+  return <EcashScreen page mintUrl={mintUrl} initialTab="receive" initialToken={state?.ecashToken}
     onClose={() => window.history.state?.idx > 0 ? navigate(-1) : navigate('/')} />;
 }
