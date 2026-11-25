@@ -565,11 +565,15 @@ pub async fn spark_prepare_onchain_receive(
             d.address = address.clone();
         }
         let existing_id = existing.id.clone();
-        // Clean up any other duplicate pending ReceiveOnchain entries without a txid
+        // Clean up any other duplicate unquoted pending ReceiveOnchain entries without a txid.
+        // Never remove a pending ReceiveOnchain that already holds a Cashu mint quote_id.
         w_state.transactions.retain(|tx| {
             tx.id == existing_id
                 || tx.status != TransactionStatus::Pending
-                || !matches!(&tx.tx_type, TransactionType::ReceiveOnchain(d) if d.txid.is_none())
+                || !matches!(
+                    &tx.tx_type,
+                    TransactionType::ReceiveOnchain(d) if d.txid.is_none() && d.quote_id.is_none()
+                )
         });
         w_state.normalize_proofs_for_persistence();
         w_state.save_encrypted(&path, &passphrase)?;
@@ -739,79 +743,21 @@ pub async fn spark_prepare_mint_from_spark(
         .unwrap_or_default()
         .as_secs();
 
-    let target_pos = if let Some(ref id) = tx_id {
-        w_state.transactions.iter().position(|t| &t.id == id)
-    } else {
-        // First prefer an unquoted pending ReceiveOnchain, otherwise reuse ANY pending ReceiveOnchain
-        // so retried sweeps never insert duplicate pending ReceiveOnchain transactions.
-        w_state
-            .transactions
-            .iter()
-            .position(|t| {
-                t.status == TransactionStatus::Pending
-                    && matches!(
-                        &t.tx_type,
-                        TransactionType::ReceiveOnchain(d) if d.quote_id.is_none()
-                    )
-            })
-            .or_else(|| {
-                w_state.transactions.iter().position(|t| {
-                    t.status == TransactionStatus::Pending
-                        && matches!(&t.tx_type, TransactionType::ReceiveOnchain(_))
-                })
-            })
-    };
-
-    let final_tx_id = if let Some(pos) = target_pos {
-        let tx = &mut w_state.transactions[pos];
-        tx.id = quote_id.clone();
-        tx.amount = amount_sats;
-        tx.mint_url = resolved_mint_url.clone();
-        if let Some(f) = fee_sats {
-            tx.fee = f;
-        }
-        if let TransactionType::ReceiveOnchain(ref mut d) = tx.tx_type {
-            d.quote_id = Some(quote_id.clone());
-            d.outputs = outputs;
-            d.blinding_sessions_hex = blinding_sessions_hex;
-            if txid.is_some() {
-                d.txid = txid;
-            }
-            if let Some(addr) = address {
-                if !addr.is_empty() {
-                    d.address = addr;
-                }
-            }
-        }
-        let keep_id = quote_id.clone();
-        // Clean up any stale duplicate Pending ReceiveOnchain entries from earlier failed sweep attempts
-        w_state.transactions.retain(|t| {
-            t.id == keep_id
-                || t.status != TransactionStatus::Pending
-                || !matches!(&t.tx_type, TransactionType::ReceiveOnchain(_))
-        });
-        keep_id
-    } else {
-        w_state.transactions.insert(
-            0,
-            Transaction {
-                id: quote_id.clone(),
-                tx_type: TransactionType::ReceiveOnchain(ReceiveOnchainTransactionData {
-                    address: address.unwrap_or_else(|| "spark-onchain-bridge".to_string()),
-                    txid,
-                    quote_id: Some(quote_id.clone()),
-                    outputs,
-                    blinding_sessions_hex,
-                }),
-                amount: amount_sats,
-                fee: fee_sats.unwrap_or(0),
-                status: TransactionStatus::Pending,
-                timestamp: now,
-                mint_url: resolved_mint_url,
-            },
-        );
-        quote_id.clone()
-    };
+    let final_tx_id = attach_prepared_mint_from_spark(
+        &mut w_state.transactions,
+        PreparedMintFromSpark {
+            tx_id,
+            quote_id: quote_id.clone(),
+            amount_sats,
+            mint_url: resolved_mint_url,
+            fee_sats,
+            txid,
+            address,
+            outputs,
+            blinding_sessions_hex,
+            timestamp: now,
+        },
+    );
 
     w_state.normalize_proofs_for_persistence();
     w_state.save_encrypted(&path, &passphrase)?;
@@ -822,6 +768,105 @@ pub async fn spark_prepare_mint_from_spark(
         invoice,
         amount_sats,
     })
+}
+
+struct PreparedMintFromSpark {
+    tx_id: Option<String>,
+    quote_id: String,
+    amount_sats: u64,
+    mint_url: String,
+    fee_sats: Option<u64>,
+    txid: Option<String>,
+    address: Option<String>,
+    outputs: Vec<serde_json::Value>,
+    blinding_sessions_hex: Vec<String>,
+    timestamp: u64,
+}
+
+/// Attach a newly requested Cashu mint quote to an *unquoted* Pending ReceiveOnchain
+/// placeholder, or insert a new Pending ReceiveOnchain entry if all existing pending
+/// entries already carry a `quote_id`. Never overwrite or delete a quoted ReceiveOnchain
+/// entry, because its Lightning invoice may already be paid or in flight.
+fn attach_prepared_mint_from_spark(
+    transactions: &mut Vec<Transaction>,
+    prep: PreparedMintFromSpark,
+) -> String {
+    let target_pos = if let Some(ref id) = prep.tx_id {
+        transactions.iter().position(|t| {
+            &t.id == id
+                && t.status == TransactionStatus::Pending
+                && matches!(
+                    &t.tx_type,
+                    TransactionType::ReceiveOnchain(d) if d.quote_id.is_none()
+                )
+        })
+    } else {
+        transactions.iter().position(|t| {
+            t.status == TransactionStatus::Pending
+                && matches!(
+                    &t.tx_type,
+                    TransactionType::ReceiveOnchain(d) if d.quote_id.is_none()
+                )
+        })
+    };
+
+    if let Some(pos) = target_pos {
+        let tx = &mut transactions[pos];
+        tx.id = prep.quote_id.clone();
+        tx.amount = prep.amount_sats;
+        tx.mint_url = prep.mint_url;
+        if let Some(f) = prep.fee_sats {
+            tx.fee = f;
+        }
+        if let TransactionType::ReceiveOnchain(ref mut d) = tx.tx_type {
+            d.quote_id = Some(prep.quote_id.clone());
+            d.outputs = prep.outputs;
+            d.blinding_sessions_hex = prep.blinding_sessions_hex;
+            if prep.txid.is_some() {
+                d.txid = prep.txid;
+            }
+            if let Some(addr) = prep.address {
+                if !addr.is_empty() {
+                    d.address = addr;
+                }
+            }
+        }
+        let keep_id = prep.quote_id.clone();
+        // Clean up only stale *unquoted* duplicate Pending ReceiveOnchain placeholders.
+        // Never drop another Pending ReceiveOnchain that already has a quote_id.
+        transactions.retain(|t| {
+            t.id == keep_id
+                || t.status != TransactionStatus::Pending
+                || !matches!(
+                    &t.tx_type,
+                    TransactionType::ReceiveOnchain(d) if d.quote_id.is_none()
+                )
+        });
+        keep_id
+    } else {
+        transactions.insert(
+            0,
+            Transaction {
+                id: prep.quote_id.clone(),
+                tx_type: TransactionType::ReceiveOnchain(ReceiveOnchainTransactionData {
+                    address: prep
+                        .address
+                        .filter(|a| !a.is_empty())
+                        .unwrap_or_else(|| "spark-onchain-bridge".to_string()),
+                    txid: prep.txid,
+                    quote_id: Some(prep.quote_id.clone()),
+                    outputs: prep.outputs,
+                    blinding_sessions_hex: prep.blinding_sessions_hex,
+                }),
+                amount: prep.amount_sats,
+                fee: prep.fee_sats.unwrap_or(0),
+                status: TransactionStatus::Pending,
+                timestamp: prep.timestamp,
+                mint_url: prep.mint_url,
+            },
+        );
+        prep.quote_id
+    }
 }
 
 #[tauri::command]
@@ -895,4 +940,121 @@ pub async fn spark_abort_unpaid_mint_from_spark(
     }
 
     Ok(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pending_receive_onchain(
+        id: &str,
+        address: &str,
+        amount: u64,
+        quote_id: Option<&str>,
+        timestamp: u64,
+    ) -> Transaction {
+        Transaction {
+            id: id.to_string(),
+            tx_type: TransactionType::ReceiveOnchain(ReceiveOnchainTransactionData {
+                address: address.to_string(),
+                txid: None,
+                quote_id: quote_id.map(str::to_string),
+                outputs: quote_id
+                    .map(|_| vec![serde_json::json!({"amount": amount})])
+                    .unwrap_or_default(),
+                blinding_sessions_hex: quote_id
+                    .map(|q| vec![format!("sess_{q}")])
+                    .unwrap_or_default(),
+            }),
+            amount,
+            fee: 0,
+            status: TransactionStatus::Pending,
+            timestamp,
+            mint_url: "https://mint.example".to_string(),
+        }
+    }
+
+    #[test]
+    fn attach_reuses_unquoted_pending_receive_onchain() {
+        let mut txs = vec![pending_receive_onchain(
+            "tx_receive_onchain_1",
+            "bc1pdepositaddr",
+            220_000,
+            None,
+            100,
+        )];
+
+        let id = attach_prepared_mint_from_spark(
+            &mut txs,
+            PreparedMintFromSpark {
+                tx_id: None,
+                quote_id: "quote_large".to_string(),
+                amount_sats: 216_487,
+                mint_url: "https://mint.example".to_string(),
+                fee_sats: Some(1_435),
+                txid: Some("btc_txid_1".to_string()),
+                address: None,
+                outputs: vec![serde_json::json!({"amount": 216_487})],
+                blinding_sessions_hex: vec!["sess_large".to_string()],
+                timestamp: 101,
+            },
+        );
+
+        assert_eq!(id, "quote_large");
+        assert_eq!(txs.len(), 1);
+        assert_eq!(txs[0].id, "quote_large");
+        assert_eq!(txs[0].amount, 216_487);
+        match &txs[0].tx_type {
+            TransactionType::ReceiveOnchain(d) => {
+                assert_eq!(d.address, "bc1pdepositaddr");
+                assert_eq!(d.quote_id.as_deref(), Some("quote_large"));
+                assert_eq!(d.blinding_sessions_hex, vec!["sess_large"]);
+            }
+            _ => panic!("expected ReceiveOnchain"),
+        }
+    }
+
+    #[test]
+    fn attach_never_overwrites_existing_quoted_pending_receive_onchain() {
+        let mut txs = vec![pending_receive_onchain(
+            "quote_large",
+            "bc1pdepositaddr",
+            216_487,
+            Some("quote_large"),
+            100,
+        )];
+
+        let second_id = attach_prepared_mint_from_spark(
+            &mut txs,
+            PreparedMintFromSpark {
+                tx_id: None,
+                quote_id: "quote_buffer".to_string(),
+                amount_sats: 314,
+                mint_url: "https://mint.example".to_string(),
+                fee_sats: Some(362),
+                txid: Some("btc_txid_1".to_string()),
+                address: None,
+                outputs: vec![serde_json::json!({"amount": 314})],
+                blinding_sessions_hex: vec!["sess_buffer".to_string()],
+                timestamp: 102,
+            },
+        );
+
+        assert_eq!(second_id, "quote_buffer");
+        assert_eq!(txs.len(), 2);
+
+        let large = txs.iter().find(|t| t.id == "quote_large").expect("large quote must survive");
+        assert_eq!(large.amount, 216_487);
+        match &large.tx_type {
+            TransactionType::ReceiveOnchain(d) => {
+                assert_eq!(d.quote_id.as_deref(), Some("quote_large"));
+                assert_eq!(d.blinding_sessions_hex, vec!["sess_quote_large"]);
+            }
+            _ => panic!("expected ReceiveOnchain"),
+        }
+
+        let buffer = txs.iter().find(|t| t.id == "quote_buffer").expect("buffer quote inserted");
+        assert_eq!(buffer.amount, 314);
+        assert_eq!(buffer.fee, 362);
+    }
 }

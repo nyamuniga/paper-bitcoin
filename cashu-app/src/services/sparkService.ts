@@ -157,11 +157,11 @@ export async function getSparkSdk(): Promise<BreezSdk> {
         proportionalPpm: 15000,
       };
 
-      const builder = await breez.SdkBuilder.new(sdkConfig, {type:'mnemonic', mnemonic:cfg.mnemonic})
+      const builder = await breez.SdkBuilder.new(sdkConfig, { type: 'mnemonic', mnemonic: cfg.mnemonic })
         .withDefaultStorage(`bitnotes_spark_${cfg.wallet_id}`);
       const sdk = await builder.withPaymentObserver({
         beforeSend: guardConversionPayments,
-        afterSend: async () => {},
+        afterSend: async () => { },
       }).build();
 
       sdkListenerId = await sdk.addEventListener({
@@ -201,7 +201,7 @@ export async function disconnectSparkSdk(): Promise<void> {
   if (instance) {
     try {
       if (listenerId) {
-        await instance.removeEventListener(listenerId).catch(() => {});
+        await instance.removeEventListener(listenerId).catch(() => { });
       }
       await instance.disconnect();
     } catch (e) {
@@ -255,8 +255,8 @@ function extractSendFeeQuoteSats(prep: PrepareSendPaymentResponse, speed: 'fast'
       speed === 'fast'
         ? quote.speedFast
         : speed === 'slow'
-        ? quote.speedSlow
-        : quote.speedMedium;
+          ? quote.speedSlow
+          : quote.speedMedium;
     return Number(selected.userFeeSat + selected.l1BroadcastFeeSat);
   }
   if (prep.paymentMethod.type === 'bolt11Invoice') {
@@ -385,7 +385,7 @@ export const executeOnChainSendSpark = async (
     const expectedBalance = amountSats + Math.max(0, Math.floor(estimatedSparkFeeSats * 0.5));
     let currentBalance = 0;
     for (let attempt = 0; attempt < 25; attempt++) {
-      await sdk.syncWallet({}).catch(() => {});
+      await sdk.syncWallet({}).catch(() => { });
       const info = await sdk.getInfo({ ensureSynced: false });
       currentBalance = Number(info.balanceSats);
       if (currentBalance >= expectedBalance) {
@@ -430,15 +430,15 @@ export const executeOnChainSendSpark = async (
         const finalTopupInvoice =
           topupLnFee > 0
             ? (
-                await sdk.receivePayment({
-                  paymentMethod: {
-                    type: 'bolt11Invoice',
-                    description: 'BitNotes On-Chain Fee Top-Up',
-                    amountSats: deficitSats + topupLnFee,
-                    expirySecs: 600,
-                  },
-                })
-              ).paymentRequest
+              await sdk.receivePayment({
+                paymentMethod: {
+                  type: 'bolt11Invoice',
+                  description: 'BitNotes On-Chain Fee Top-Up',
+                  amountSats: deficitSats + topupLnFee,
+                  expirySecs: 600,
+                },
+              })
+            ).paymentRequest
             : topupReceive.paymentRequest;
 
         const topupRes = await invoke<MeltToSparkResponse>('spark_topup_for_send', {
@@ -448,7 +448,7 @@ export const executeOnChainSendSpark = async (
         totalCashuFee += topupRes.cashu_fee;
 
         for (let attempt = 0; attempt < 20; attempt++) {
-          await sdk.syncWallet({}).catch(() => {});
+          await sdk.syncWallet({}).catch(() => { });
           const info = await sdk.getInfo({ ensureSynced: false });
           currentBalance = Number(info.balanceSats);
           if (currentBalance >= amountSats + mediumFee) {
@@ -492,7 +492,7 @@ export const executeOnChainSendSpark = async (
 
     // If any unused safety fee buffer (>= 100 sats) remains in Spark after the send,
     // sweep it back to the user's Cashu wallet asynchronously.
-    sweepSparkToCashu(mintUrl).catch(() => {});
+    sweepSparkToCashu(mintUrl).catch(() => { });
 
     return l1Txid;
   } catch (err) {
@@ -503,7 +503,7 @@ export const executeOnChainSendSpark = async (
       finalSparkFeeSats: null,
       cashuFeeSats: null,
       failed: true,
-    }).catch(() => {});
+    }).catch(() => { });
 
     // Automatically sweep the Spark balance back into the user's Cashu mint so funds are restored
     await sweepSparkToCashu(mintUrl).catch((sweepErr) => {
@@ -557,7 +557,7 @@ export const getDepositAddressSpark = async (
   });
 
   // Trigger a non-blocking check for any unclaimed deposits
-  claimUnclaimedDeposits(sdk).catch(() => {});
+  claimUnclaimedDeposits(sdk).catch(() => { });
 
   return {
     address: bitcoinAddress,
@@ -640,8 +640,8 @@ async function sweepSparkToCashuLocked(preferredMintUrl?: string): Promise<boole
   isSweeping = true;
   try {
     const sdk = await getSparkSdk();
-    await sdk.syncWallet({}).catch(() => {});
-    await claimUnclaimedDeposits(sdk).catch(() => {});
+    await sdk.syncWallet({}).catch(() => { });
+    await claimUnclaimedDeposits(sdk).catch(() => { });
 
     const info = await sdk.getInfo({ ensureSynced: false });
     const balanceSats = Number(info.balanceSats);
@@ -667,44 +667,71 @@ async function sweepSparkToCashuLocked(preferredMintUrl?: string): Promise<boole
       feeSats: totalReceiveFee,
     });
 
+    let sendPrep: PrepareSendPaymentResponse;
     try {
-      const sendPrep = await sdk.prepareSendPayment({
-        paymentRequest: { type: 'input', input: mintPrep.invoice },
-      });
+        sendPrep = await sdk.prepareSendPayment({
+          paymentRequest: { type: 'input', input: mintPrep.invoice },
+        });
+      } catch (prepErr) {
+        // Payment was never dispatched; safe to detach the unpaid quote.
+        await invoke<void>('spark_abort_unpaid_mint_from_spark', {
+          txId: mintPrep.tx_id,
+        }).catch(() => { });
+        throw prepErr;
+      }
 
-      await sdk.sendPayment({
-        prepareResponse: sendPrep,
-      });
-    } catch (payErr) {
-      await invoke<void>('spark_abort_unpaid_mint_from_spark', {
-        txId: mintPrep.tx_id,
-      }).catch(() => {});
-      throw payErr;
-    }
+        // Do not abort/wipe the quoted transaction if sendPayment throws after dispatch:
+        // the Lightning payment may still settle on the mint, and background reconciliation
+        // will mint it if paid or expire it cleanly if unpaid.
+        await sdk.sendPayment({
+          prepareResponse: sendPrep,
+        });
 
-    const completed = await invoke<boolean>('spark_complete_mint_from_spark', {
-      txId: mintPrep.tx_id,
-      txid: depositTxid,
-    });
+        const completed = await completeMintFromSparkWithRetry(mintPrep.tx_id, depositTxid);
 
-    if (completed) {
-      lastKnownDepositTxid = null;
-    }
+        if(completed) {
+          lastKnownDepositTxid = null;
+        }
 
     return completed;
-  } finally {
-    isSweeping = false;
-  }
-}
+      } finally {
+        isSweeping = false;
+      }
+    }
 
-export async function syncAndSweepSpark(defaultMintUrl?: string): Promise<boolean> {
-  if (isSweeping) return false;
-  if (await sparkIsSending()) return false;
+const COMPLETE_MINT_RETRY_DELAYS_MS = [0, 500, 1000, 2000, 3000];
 
-  try {
-    return await sweepSparkToCashu(defaultMintUrl);
-  } catch (e) {
+    async function completeMintFromSparkWithRetry(
+      txId: string,
+      txid: string | null
+    ): Promise<boolean> {
+      for (const delayMs of COMPLETE_MINT_RETRY_DELAYS_MS) {
+        if (delayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+        try {
+          const completed = await invoke<boolean>('spark_complete_mint_from_spark', {
+            txId,
+            txid,
+          });
+          if (completed) {
+            return true;
+          }
+        } catch (err: unknown) {
+          console.warn('Retrying spark_complete_mint_from_spark after transient error:', err);
+        }
+      }
+      return false;
+    }
 
-    return false;
-  }
-}
+    export async function syncAndSweepSpark(defaultMintUrl?: string): Promise<boolean> {
+      if (isSweeping) return false;
+      if (await sparkIsSending()) return false;
+
+      try {
+        return await sweepSparkToCashu(defaultMintUrl);
+      } catch (e) {
+
+        return false;
+      }
+    }

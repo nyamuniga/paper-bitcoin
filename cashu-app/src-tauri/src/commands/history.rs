@@ -4,67 +4,86 @@ use ecash_core::types::Transaction;
 use crate::commands::auth::AppState;
 use tauri::State;
 
+/// Deduplicate only *unquoted* Pending ReceiveOnchain placeholders (those with `quote_id == None`).
+/// Never remove a Pending ReceiveOnchain that already carries a Cashu `quote_id`, because its
+/// Lightning payment may already be paid or in flight.
+fn deduplicate_unquoted_pending_onchain(transactions: &mut Vec<Transaction>) -> bool {
+    let unquoted_pending_count = transactions
+        .iter()
+        .filter(|t| {
+            t.status == ecash_core::types::TransactionStatus::Pending
+                && matches!(
+                    &t.tx_type,
+                    ecash_core::types::TransactionType::ReceiveOnchain(d) if d.quote_id.is_none()
+                )
+        })
+        .count();
+
+    if unquoted_pending_count <= 1 {
+        return false;
+    }
+
+    let real_address_and_mint = transactions.iter().find_map(|t| {
+        if t.status == ecash_core::types::TransactionStatus::Pending {
+            if let ecash_core::types::TransactionType::ReceiveOnchain(ref d) = t.tx_type {
+                if d.quote_id.is_none()
+                    && !d.address.is_empty()
+                    && d.address != "spark-onchain-bridge"
+                {
+                    return Some((d.address.clone(), t.mint_url.clone()));
+                }
+            }
+        }
+        None
+    });
+
+    if let Some(keep_id) = transactions
+        .iter()
+        .filter(|t| {
+            t.status == ecash_core::types::TransactionStatus::Pending
+                && matches!(
+                    &t.tx_type,
+                    ecash_core::types::TransactionType::ReceiveOnchain(d) if d.quote_id.is_none()
+                )
+        })
+        .max_by_key(|t| t.timestamp)
+        .map(|t| t.id.clone())
+    {
+        transactions.retain(|t| {
+            t.id == keep_id
+                || t.status != ecash_core::types::TransactionStatus::Pending
+                || !matches!(
+                    &t.tx_type,
+                    ecash_core::types::TransactionType::ReceiveOnchain(d) if d.quote_id.is_none()
+                )
+        });
+        if let Some((real_addr, real_mint)) = real_address_and_mint {
+            if let Some(kept) = transactions.iter_mut().find(|t| t.id == keep_id) {
+                if !real_mint.is_empty() {
+                    kept.mint_url = real_mint;
+                }
+                if let ecash_core::types::TransactionType::ReceiveOnchain(ref mut d) = kept.tx_type
+                {
+                    if d.address == "spark-onchain-bridge" || d.address.is_empty() {
+                        d.address = real_addr;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    false
+}
+
 #[tauri::command]
 pub async fn get_transactions(state: State<'_, AppState>) -> CommandResult<Vec<Transaction>> {
     let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
     let w_state = wallet_guard.as_mut().unwrap();
 
-    // Auto-deduplicate any multiple Pending ReceiveOnchain entries created by earlier sweep retries:
-    // keep the newest Pending ReceiveOnchain (preferring one with a real Bitcoin address if another is a bridge placeholder).
-    let pending_onchain_count = w_state
-        .transactions
-        .iter()
-        .filter(|t| {
-            t.status == ecash_core::types::TransactionStatus::Pending
-                && matches!(t.tx_type, ecash_core::types::TransactionType::ReceiveOnchain(_))
-        })
-        .count();
-
-    if pending_onchain_count > 1 {
-        let real_address_and_mint = w_state.transactions.iter().find_map(|t| {
-            if t.status == ecash_core::types::TransactionStatus::Pending {
-                if let ecash_core::types::TransactionType::ReceiveOnchain(ref d) = t.tx_type {
-                    if !d.address.is_empty() && d.address != "spark-onchain-bridge" {
-                        return Some((d.address.clone(), t.mint_url.clone()));
-                    }
-                }
-            }
-            None
-        });
-
-        // Pick the newest pending ReceiveOnchain to keep
-        if let Some(keep_id) = w_state
-            .transactions
-            .iter()
-            .filter(|t| {
-                t.status == ecash_core::types::TransactionStatus::Pending
-                    && matches!(t.tx_type, ecash_core::types::TransactionType::ReceiveOnchain(_))
-            })
-            .max_by_key(|t| t.timestamp)
-            .map(|t| t.id.clone())
-        {
-            w_state.transactions.retain(|t| {
-                t.id == keep_id
-                    || t.status != ecash_core::types::TransactionStatus::Pending
-                    || !matches!(t.tx_type, ecash_core::types::TransactionType::ReceiveOnchain(_))
-            });
-            if let Some((real_addr, real_mint)) = real_address_and_mint {
-                if let Some(kept) = w_state.transactions.iter_mut().find(|t| t.id == keep_id) {
-                    if !real_mint.is_empty() {
-                        kept.mint_url = real_mint;
-                    }
-                    if let ecash_core::types::TransactionType::ReceiveOnchain(ref mut d) =
-                        kept.tx_type
-                    {
-                        if d.address == "spark-onchain-bridge" || d.address.is_empty() {
-                            d.address = real_addr;
-                        }
-                    }
-                }
-            }
-            w_state.normalize_proofs_for_persistence();
-            let _ = w_state.save_encrypted(&path, &passphrase);
-        }
+    if deduplicate_unquoted_pending_onchain(&mut w_state.transactions) {
+        w_state.normalize_proofs_for_persistence();
+        let _ = w_state.save_encrypted(&path, &passphrase);
     }
 
     let mut txs = w_state.transactions.clone();
@@ -344,5 +363,68 @@ pub async fn check_token_spend_status(
         Ok("Partially Spent".to_string())
     } else {
         Ok("Unspent".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ecash_core::types::{
+        ReceiveOnchainTransactionData, TransactionStatus, TransactionType,
+    };
+
+    fn pending_onchain(
+        id: &str,
+        address: &str,
+        amount: u64,
+        quote_id: Option<&str>,
+        timestamp: u64,
+    ) -> Transaction {
+        Transaction {
+            id: id.to_string(),
+            tx_type: TransactionType::ReceiveOnchain(ReceiveOnchainTransactionData {
+                address: address.to_string(),
+                txid: None,
+                quote_id: quote_id.map(str::to_string),
+                outputs: Vec::new(),
+                blinding_sessions_hex: Vec::new(),
+            }),
+            amount,
+            fee: 0,
+            status: TransactionStatus::Pending,
+            timestamp,
+            mint_url: "https://mint.example".to_string(),
+        }
+    }
+
+    #[test]
+    fn dedup_preserves_all_quoted_pending_onchain_transactions() {
+        let mut txs = vec![
+            pending_onchain("quote_1", "bc1paddr", 216_487, Some("quote_1"), 100),
+            pending_onchain("quote_2", "spark-onchain-bridge", 314, Some("quote_2"), 105),
+        ];
+
+        assert!(!deduplicate_unquoted_pending_onchain(&mut txs));
+        assert_eq!(txs.len(), 2);
+        assert!(txs.iter().any(|t| t.id == "quote_1" && t.amount == 216_487));
+        assert!(txs.iter().any(|t| t.id == "quote_2" && t.amount == 314));
+    }
+
+    #[test]
+    fn dedup_collapses_only_unquoted_placeholders_without_touching_quoted_ones() {
+        let mut txs = vec![
+            pending_onchain("quote_1", "bc1paddr", 216_487, Some("quote_1"), 100),
+            pending_onchain("placeholder_old", "bc1paddr", 220_000, None, 101),
+            pending_onchain("placeholder_new", "spark-onchain-bridge", 220_000, None, 102),
+        ];
+
+        assert!(deduplicate_unquoted_pending_onchain(&mut txs));
+        assert_eq!(txs.len(), 2);
+        assert!(txs.iter().any(|t| t.id == "quote_1"));
+        let kept = txs.iter().find(|t| t.id == "placeholder_new").unwrap();
+        match &kept.tx_type {
+            TransactionType::ReceiveOnchain(d) => assert_eq!(d.address, "bc1paddr"),
+            _ => panic!("expected ReceiveOnchain"),
+        }
     }
 }

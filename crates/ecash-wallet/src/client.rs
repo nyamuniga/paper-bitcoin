@@ -536,12 +536,17 @@ impl MintClient {
             "outputs": outputs
         });
 
-        let mut backoff = std::time::Duration::from_millis(2000);
-        for attempt in 0..2 {
+        const MAX_ATTEMPTS: usize = 5;
+        const MAX_WAIT_SECS: u64 = 60;
+        let mut backoff = std::time::Duration::from_secs(3);
+        for attempt in 0..MAX_ATTEMPTS {
             let resp = self.http.post(format!("{}/v1/restore", self.url))
                 .json(&req).send().await?;
 
             if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                if attempt + 1 >= MAX_ATTEMPTS {
+                    break;
+                }
                 let retry_after_secs = resp.headers()
                     .get("retry-after")
                     .and_then(|h| h.to_str().ok())
@@ -549,17 +554,17 @@ impl MintClient {
                     .unwrap_or(0);
 
                 let wait_time = if retry_after_secs > 0 {
-                    std::time::Duration::from_secs(retry_after_secs + 1)
+                    std::time::Duration::from_secs(std::cmp::min(retry_after_secs + 1, MAX_WAIT_SECS))
                 } else {
-                    backoff
+                    std::cmp::min(backoff, std::time::Duration::from_secs(MAX_WAIT_SECS))
                 };
 
                 println!(
-                    "[MintClient] Rate limited (HTTP 429) on {} /v1/restore. Waiting {:?} (attempt {}/2)...",
-                    self.url, wait_time, attempt + 1
+                    "[MintClient] Rate limited (HTTP 429) on {} /v1/restore. Waiting {:?} (attempt {}/{})...",
+                    self.url, wait_time, attempt + 1, MAX_ATTEMPTS
                 );
                 tokio::time::sleep(wait_time).await;
-                backoff *= 2;
+                backoff = std::cmp::min(backoff * 2, std::time::Duration::from_secs(MAX_WAIT_SECS));
                 continue;
             }
 

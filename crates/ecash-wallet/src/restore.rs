@@ -269,9 +269,53 @@ pub async fn restore_from_mints_range(
     Ok(total_restored)
 }
 
-/// Adaptively restores proofs from mints starting from index 0 across all denominations.
-/// Uses a gap limit and batching (25 indices per batch) to scan however many outputs exist
-/// without hitting mint rate limits. Replaces any broken proofs and adds missing unspent proofs.
+/// Plan non-overlapping `(start, end)` inclusive index batches covering `0..=scan_limit`,
+/// prioritizing the recent window around `recent_anchor` first so recently dropped proofs
+/// are recovered in the very first request(s) before a mint's rate limit can trigger.
+fn plan_initial_restore_batches(
+    recent_anchor: u64,
+    scan_limit: u64,
+    batch_size: u64,
+) -> Vec<(u64, u64)> {
+    let step = batch_size.max(1);
+    let mut batches = Vec::new();
+
+    let push_range = |out: &mut Vec<(u64, u64)>, from: u64, to: u64| {
+        if from > to {
+            return;
+        }
+        let mut cursor = from;
+        while cursor <= to {
+            let end = std::cmp::min(cursor.saturating_add(step - 1), to);
+            out.push((cursor, end));
+            if end == u64::MAX {
+                break;
+            }
+            cursor = end + 1;
+        }
+    };
+
+    let recent_start = recent_anchor.saturating_sub(step);
+    let recent_end = std::cmp::min(scan_limit, recent_anchor.saturating_add(step - 1));
+
+    // 1. Scan around the current derivation index first (1-2 requests).
+    push_range(&mut batches, recent_start, recent_end);
+    // 2. Scan older history below the recent window.
+    if recent_start > 0 {
+        push_range(&mut batches, 0, recent_start - 1);
+    }
+    // 3. Scan any remaining range above the recent window up to scan_limit.
+    if recent_end < scan_limit {
+        push_range(&mut batches, recent_end + 1, scan_limit);
+    }
+
+    batches
+}
+
+/// Adaptively restores proofs from mints across all denominations.
+/// Scans the recent window around `derivation_index` first using 100-index batches (200 outputs
+/// per `/v1/restore` call) to minimize HTTP requests and avoid mint rate limits, persists
+/// recovered proofs incrementally, and extends the scan window whenever signatures are found.
 pub async fn restore_from_mints_adaptive(
     state: &mut WalletState,
     wallet_path: &PathBuf,
@@ -279,6 +323,10 @@ pub async fn restore_from_mints_adaptive(
     mint_urls: Vec<String>,
     progress_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> Result<u64> {
+    const BATCH_SIZE: u64 = 100;
+    const GAP_EXTENSION: u64 = 100;
+    const MAX_SCAN_INDEX: u64 = 5000;
+
     let mut total_restored = 0;
     let mut max_used_index = -1_i64;
 
@@ -313,19 +361,25 @@ pub async fn restore_from_mints_adaptive(
         let max_known_proof_idx = state.proofs.get(&mint_url)
             .map(|ps| ps.iter().map(|p| p.derivation_index).max().unwrap_or(0))
             .unwrap_or(0);
-        let mut scan_limit = std::cmp::max(
-            std::cmp::max(state.derivation_index, max_known_proof_idx) + 30,
-            75,
+        let recent_anchor = std::cmp::max(state.derivation_index, max_known_proof_idx);
+        let initial_scan_limit = std::cmp::min(
+            std::cmp::max(recent_anchor + GAP_EXTENSION, BATCH_SIZE - 1),
+            MAX_SCAN_INDEX,
         );
+        let mut highest_queued = initial_scan_limit;
+        let mut pending_batches: std::collections::VecDeque<(u64, u64)> =
+            plan_initial_restore_batches(recent_anchor, initial_scan_limit, BATCH_SIZE).into();
 
-        let mut batch_start = 0_u64;
-        const BATCH_SIZE: u64 = 25;
         let mut mint_restored_sats = 0_u64;
         let mut mint_restored_count = 0_usize;
         let mut mint_healed_count = 0_usize;
+        let mut batch_number = 0_usize;
 
-        while batch_start <= scan_limit {
-            let batch_end = batch_start + BATCH_SIZE - 1;
+        while let Some((batch_start, batch_end)) = pending_batches.pop_front() {
+            if batch_number > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+            }
+            batch_number += 1;
 
             let mut output_json = Vec::new();
             let mut session_map = std::collections::HashMap::new();
@@ -452,7 +506,16 @@ pub async fn restore_from_mints_adaptive(
                                     max_used_index = std::cmp::max(max_used_index, idx as i64);
 
                                     // Extend scan limit past discovered index (gap limit)
-                                    scan_limit = std::cmp::max(scan_limit, idx + 35);
+                                    let desired_limit = std::cmp::min(idx + GAP_EXTENSION, MAX_SCAN_INDEX);
+                                    if desired_limit > highest_queued {
+                                        let mut cursor = highest_queued + 1;
+                                        while cursor <= desired_limit {
+                                            let end = std::cmp::min(cursor + BATCH_SIZE - 1, desired_limit);
+                                            pending_batches.push_back((cursor, end));
+                                            cursor = end + 1;
+                                        }
+                                        highest_queued = desired_limit;
+                                    }
 
                                     if seen_batch_secrets.insert(proof.secret.clone()) {
                                         let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(proof.secret.as_bytes()));
@@ -480,6 +543,7 @@ pub async fn restore_from_mints_adaptive(
                     let mut batch_unspent = Vec::new();
                     let existing_proofs = state.proofs.entry(mint_url.clone()).or_default();
 
+                    let mut batch_healed = 0_usize;
                     for proof in batch_restored_proofs {
                         let y = ecash_core::dhke::point_to_hex(&ecash_core::dhke::hash_to_curve(proof.secret.as_bytes()));
                         if states.get(&y).map(|s| s.as_str()) == Some("UNSPENT") {
@@ -487,6 +551,7 @@ pub async fn restore_from_mints_adaptive(
                                 if existing_p.c != proof.c || existing_p.dleq.is_none() {
                                     *existing_p = proof;
                                     mint_healed_count += 1;
+                                    batch_healed += 1;
                                 }
                             } else {
                                 mint_restored_sats += proof.amount;
@@ -496,9 +561,13 @@ pub async fn restore_from_mints_adaptive(
                         }
                     }
 
-                    if !batch_unspent.is_empty() {
+                    let batch_found_unspent = !batch_unspent.is_empty();
+                    if batch_found_unspent {
                         let batch_sats: u64 = batch_unspent.iter().map(|p| p.amount).sum();
                         existing_proofs.extend(batch_unspent);
+                        if !state.mints.contains(&mint_url) {
+                            state.mints.push(mint_url.clone());
+                        }
                         if let Some(tx) = &progress_tx {
                             tx.send(format!(
                                 "Restored {} unspent proofs ({} sats) on {} (indices {}..{})",
@@ -506,15 +575,17 @@ pub async fn restore_from_mints_adaptive(
                             )).ok();
                         }
                     }
+
+                    // Persist incrementally so recovered proofs survive later rate limits or disconnects.
+                    if batch_found_unspent || batch_healed > 0 {
+                        if max_used_index >= 0 {
+                            state.derivation_index =
+                                std::cmp::max(state.derivation_index, (max_used_index as u64) + 1);
+                        }
+                        state.normalize_proofs_for_persistence();
+                        state.save_encrypted(wallet_path, passphrase)?;
+                    }
                 }
-            }
-
-            tokio::time::sleep(std::time::Duration::from_millis(800)).await;
-            batch_start += BATCH_SIZE;
-
-            // Safety limit to prevent unbounded execution
-            if batch_start > 2000 {
-                break;
             }
         }
 
@@ -801,7 +872,9 @@ pub async fn clean_wallet_proofs(
         }
     }
 
-    // 8. Find maximum derivation index across all proofs and advance safely past it
+    // 8. Find maximum derivation index across all proofs and ensure derivation_index never regresses.
+    // Never shrink derivation_index downward: lowering it risks output collisions and truncating
+    // future NUT-09 restore scans if an earlier scan was rate-limited.
     let max_proof_idx = state
         .proofs
         .values()
@@ -810,10 +883,10 @@ pub async fn clean_wallet_proofs(
         .unwrap_or(0);
 
     let min_safe_idx = max_proof_idx + 1;
-    if state.derivation_index < min_safe_idx || state.derivation_index > min_safe_idx + 35 {
-        state.derivation_index = min_safe_idx + 15;
+    if state.derivation_index < min_safe_idx {
+        state.derivation_index = min_safe_idx;
         if let Some(tx) = &progress_tx {
-            tx.send(format!("Derivation index safely normalized to {}", state.derivation_index)).ok();
+            tx.send(format!("Derivation index advanced to {}", state.derivation_index)).ok();
         }
     }
 
@@ -831,4 +904,34 @@ pub async fn clean_wallet_proofs(
         derivation_index: state.derivation_index,
         cleaned_txs,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::plan_initial_restore_batches;
+
+    #[test]
+    fn recent_window_is_scanned_first_without_overlap_or_gaps() {
+        let batches = plan_initial_restore_batches(350, 450, 100);
+        // First batches cover [250..=449] around anchor 350.
+        assert_eq!(batches[0], (250, 349));
+        assert_eq!(batches[1], (350, 449));
+
+        // Verify every index in 0..=450 is covered exactly once.
+        let mut covered = vec![0u32; 451];
+        for (start, end) in &batches {
+            assert!(start <= end);
+            assert!(end - start < 100);
+            for idx in *start..=*end {
+                covered[idx as usize] += 1;
+            }
+        }
+        assert!(covered.iter().all(|&count| count == 1));
+    }
+
+    #[test]
+    fn small_anchor_covers_zero_to_limit_in_single_batch() {
+        let batches = plan_initial_restore_batches(20, 99, 100);
+        assert_eq!(batches, vec![(0, 99)]);
+    }
 }
