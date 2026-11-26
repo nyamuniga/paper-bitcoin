@@ -47,9 +47,16 @@ export function formatUnits(amount: bigint, decimals: number): string {
   const fraction = (amount % scale).toString().padStart(decimals, '0').replace(/0+$/, '');
   return whole.toString() + (fraction ? '.' + fraction : '');
 }
+/**
+ * Total source-asset debit for a Spark/Flashnet conversion.
+ * In breez-sdk-spark 0.28.0 (`flashnet.rs` execute_swap), `amountIn` is the
+ * complete input sent to the pool; `fee` is taken inside the swap (and for
+ * `fromBitcoin` is denominated in token units, not sats), so it must never
+ * be added on top of `amountIn`.
+ */
 export function conversionCost(estimate: {amountIn: bigint; fee: bigint}): bigint {
   if (estimate.amountIn <= 0n || estimate.fee < 0n) throw new Error('Invalid conversion quote.');
-  return estimate.amountIn + estimate.fee;
+  return estimate.amountIn;
 }
 export function encodeQuote(value: unknown): string {
   return JSON.stringify(value, (_, v) => typeof v === 'bigint' ? {$bigint: v.toString()} : v);

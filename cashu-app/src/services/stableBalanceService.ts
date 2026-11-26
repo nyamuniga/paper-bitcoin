@@ -101,15 +101,18 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
     const ownAddress = direction === 'toUsd' ? (await sdk.receivePayment({paymentMethod:{type:'sparkAddress'}})).paymentRequest : '';
     const cacheKey = `${direction}|${mintUrl}`;
     const cachedFit = fittingCache.get(sdk)?.get(cacheKey);
-    if (sourceBudget !== undefined && cachedFit && cachedFit.expires > Date.now()) {
+    let wasShrunk = false;
+    if (sourceBudget !== undefined && cachedFit && cachedFit.expires > Date.now() && cachedFit.output > 0n && cachedFit.principal > 0n) {
       const principal = (outputAmount * cachedFit.principal + cachedFit.output - 1n) / cachedFit.output;
-      const debit = principal + cachedFit.debit - cachedFit.principal;
+      const debit = (outputAmount * cachedFit.debit + cachedFit.output - 1n) / cachedFit.output;
       if (debit > sourceBudget) {
         const seeded = resizeTransferOutput(outputAmount, sourceBudget, debit, principal);
         outputAmount = seeded > (limits.minToAmount ?? 0n) ? seeded : (limits.minToAmount ?? 1n);
+        wasShrunk = true;
       }
     }
     let quotingMinimum = false;
+    let recoveredUpward = false;
     let best: StableOperation | null = null;
     let previousRejectedDebit: bigint | null = null;
     const smallerOutput = (debit: bigint, principal: bigint): bigint => {
@@ -120,6 +123,7 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
       const step = outputAmount - (outputAmount + 19n) / 20n;
       const next = previousRejectedDebit === debit && step < predicted ? step : predicted;
       previousRejectedDebit = debit;
+      wasShrunk = true;
       return next;
     };
     for (let attempt = 0; attempt < (sourceBudget === undefined ? 1 : MAX_FIT_QUOTES); attempt++) {
@@ -161,6 +165,7 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
       if (cost > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Conversion is too large.');
       const reservedCost = mode?.protected ? protectedCost(cost) : cost;
       if (sourceBudget !== undefined && reservedCost > sourceBudget && !quotingMinimum) {
+        if (best) break;
         // Avoid generating funding invoices and mint fee quotes for an already oversized conversion.
         const principal = prep.conversionEstimate!.amountIn;
         const resized = smallerOutput(reservedCost, principal);
@@ -184,6 +189,7 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
         maxDebit = BigInt(await invoke<number>('stable_funding_quote', {invoice: fundingInvoice, mintUrl}));
       }
       if (sourceBudget !== undefined && maxDebit > sourceBudget) {
+        if (best) break;
         if (quotingMinimum) throw new TransferMinimumError(maxDebit, true);
         const principal = prep.conversionEstimate!.amountIn;
         const resized = smallerOutput(maxDebit, principal);
@@ -193,7 +199,10 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
         } else outputAmount = resized;
         continue;
       }
-      if (maxDebit > available) throw new Error('Insufficient balance for this transfer and its fees.');
+      if (maxDebit > available) {
+        if (best) break;
+        throw new Error('Insufficient balance for this transfer and its fees.');
+      }
       mode?.signal?.throwIfAborted();
       const op: StableOperation = {
         id: crypto.randomUUID(), direction, stage: 'quoted', mint_url: mintUrl,
@@ -202,10 +211,26 @@ export async function quoteStableConversion(direction: StableDirection, outputAm
         funding_sats: fundingSats, mint_quote_id: mintQuoteId, quote_json: encodeQuote(prep), payment_id: null, conversion_request_version: 0,
         prior_payment_ids: [], return_quote_id: '', return_quote_json: '', return_amount: 0,
       };
-      best = op;
-      let cache = fittingCache.get(sdk);
-      if (!cache) {cache = new Map(); fittingCache.set(sdk,cache);}
-      cache.set(cacheKey,{expires:Date.now()+60000,output:outputAmount,principal:prep.conversionEstimate!.amountIn,debit:maxDebit});
+      if (!best || BigInt(op.output_amount) > BigInt(best.output_amount)) {
+        best = op;
+        let cache = fittingCache.get(sdk);
+        if (!cache) {cache = new Map(); fittingCache.set(sdk,cache);}
+        cache.set(cacheKey,{expires:Date.now()+60000,output:outputAmount,principal:prep.conversionEstimate!.amountIn,debit:maxDebit});
+      }
+      // If a downward step left more than 5% of the user's budget unused, try one
+      // bounded upward recovery while keeping `best` as a guaranteed fallback.
+      if (wasShrunk && !recoveredUpward && sourceBudget !== undefined && maxDebit * 100n < sourceBudget * 95n && attempt + 1 < MAX_FIT_QUOTES) {
+        const targetDebit = sourceBudget * 98n / 100n;
+        const divisor = maxDebit > 0n ? maxDebit : prep.conversionEstimate!.amountIn;
+        if (targetDebit > maxDebit && divisor > 0n) {
+          const boost = (outputAmount * (targetDebit - maxDebit)) / divisor;
+          if (boost > 0n) {
+            recoveredUpward = true;
+            outputAmount = outputAmount + boost;
+            continue;
+          }
+        }
+      }
       // A valid fee-inclusive quote is enough. Maximizing the remaining budget
       // creates more invoices and mint requests for negligible additional output.
       break;
@@ -330,7 +355,8 @@ export async function executeStableConversion(id: string): Promise<StableOperati
     // AMM/token legs reject idempotency keys before sending. The durable stage prevents retries.
     // https://github.com/breez/spark-sdk/blob/main/crates/breez-sdk/core/src/sdk/payments/send/mod.rs
     try {
-      const sent = await withConversionSpendGuard(op, checkedEstimate(prep, op.direction).fee, () => sdk.sendPayment({prepareResponse: prep}));
+      const sparkFeeReserve = op.direction === 'toUsd' && prep.paymentMethod.type === 'sparkAddress' ? prep.paymentMethod.fee : 0n;
+      const sent = await withConversionSpendGuard(op, sparkFeeReserve, () => sdk.sendPayment({prepareResponse: prep}));
       op = await advance(op, 'converting', sent.payment.id);
       return await settle(op, sent.payment);
     } catch (error) {

@@ -163,6 +163,57 @@ impl StableOperation {
     }
 }
 
+/// Estimate the Cashu funding debit matching `pay_invoice_capped`'s ascending coin
+/// selection and active-keyset power-of-2 melt proof count, instead of taxing all
+/// proofs in the wallet and 64 proofs at the highest historical keyset fee.
+pub fn estimate_funding_debit(
+    base_melt_needed: u64,
+    proofs: &[ecash_core::types::Proof],
+    keysets: &[crate::client::KeysetSummary],
+) -> Option<u64> {
+    let active_ppk = keysets
+        .iter()
+        .filter(|ks| ks.active && ks.unit == "sat")
+        .map(|ks| ks.input_fee_ppk)
+        .max()
+        .unwrap_or_else(|| {
+            keysets
+                .iter()
+                .filter(|ks| ks.active)
+                .map(|ks| ks.input_fee_ppk)
+                .max()
+                .unwrap_or_else(|| keysets.iter().map(|ks| ks.input_fee_ppk).max().unwrap_or(0))
+        });
+
+    let mut total_melt_needed = base_melt_needed;
+    if active_ppk > 0 {
+        for _ in 0..3 {
+            let denoms = ecash_core::types::split_into_powers_of_2(total_melt_needed);
+            let fee_ppk_sum = (denoms.len() as u64).checked_mul(active_ppk)?;
+            let melt_input_fee = fee_ppk_sum.checked_add(999)? / 1000;
+            total_melt_needed = base_melt_needed.checked_add(melt_input_fee)?;
+        }
+    }
+
+    let mut sorted_proofs: Vec<&ecash_core::types::Proof> = proofs.iter().collect();
+    sorted_proofs.sort_by_key(|p| p.amount);
+
+    let mut selected = Vec::new();
+    let mut selected_total: u64 = 0;
+    for p in sorted_proofs {
+        selected.push(p.clone());
+        selected_total = selected_total.checked_add(p.amount)?;
+        let swap_fee = crate::client::calculate_input_fee(&selected, keysets);
+        let needed = total_melt_needed.checked_add(swap_fee)?;
+        if selected_total >= needed {
+            return Some(needed);
+        }
+    }
+
+    let swap_fee = crate::client::calculate_input_fee(&selected, keysets);
+    total_melt_needed.checked_add(swap_fee)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -384,5 +435,59 @@ mod tests {
         }))
         .unwrap();
         assert!(wallet.stable_operations.is_empty());
+    }
+
+    #[test]
+    fn estimate_funding_debit_only_taxes_selected_proofs_and_active_keyset() {
+        let keysets = vec![
+            crate::client::KeysetSummary {
+                id: "active-sat".into(),
+                unit: "sat".into(),
+                active: true,
+                input_fee_ppk: 100,
+            },
+            crate::client::KeysetSummary {
+                id: "retired-expensive".into(),
+                unit: "sat".into(),
+                active: false,
+                input_fee_ppk: 50_000,
+            },
+        ];
+        // Ascending selection for base_melt_needed = 1000 picks the 10 small proofs (1000 sats)
+        // plus 1 large proof (1000 sats) = 11 proofs, NOT all 510 proofs in the wallet.
+        let mut proofs = Vec::new();
+        for i in 0..10 {
+            proofs.push(ecash_core::types::Proof {
+                id: "active-sat".into(),
+                amount: 100,
+                secret: format!("small-{i}"),
+                c: "02".into(),
+                witness: None,
+                dleq: None,
+                b_prime: None,
+                c_prime: None,
+                derivation_index: 0,
+            });
+        }
+        for i in 0..500 {
+            proofs.push(ecash_core::types::Proof {
+                id: "active-sat".into(),
+                amount: 1000,
+                secret: format!("large-{i}"),
+                c: "02".into(),
+                witness: None,
+                dleq: None,
+                b_prime: None,
+                c_prime: None,
+                derivation_index: 0,
+            });
+        }
+
+        // base_melt_needed = 1000 sats:
+        // split_into_powers_of_2(1000) = 6 proofs -> melt_input_fee = ceil(6 * 100 / 1000) = 1 sat -> total_melt_needed = 1001.
+        // Ascending selection picks 10 * 100 (1000) + 1 * 1000 (2000) = 11 proofs -> swap_fee = ceil(11 * 100 / 1000) = 2 sats.
+        // Total = 1001 + 2 = 1003 sats (old logic would have added 51 sats for all 510 proofs + 3200 sats for 64 * 50_000 ppk!).
+        let debit = estimate_funding_debit(1000, &proofs, &keysets).unwrap();
+        assert_eq!(debit, 1003);
     }
 }

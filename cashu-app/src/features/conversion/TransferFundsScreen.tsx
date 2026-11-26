@@ -279,6 +279,37 @@ export function TransferFundsScreen({
       )
     : '';
   const conversion = quote?.conversionEstimate;
+  const estimatedCost = conversion && conversion.amountIn > 0n && conversion.fee >= 0n ? conversionCost(conversion) : null;
+  const estimatedSpend =
+    !isReturn && protectedReview && estimatedCost !== null
+      ? toDollars
+        ? money(estimatedCost, false)
+        : dollarAmount(estimatedCost)
+      : null;
+  const reviewFeeText =
+    isReturn && quote?.paymentMethod.type === 'bolt11Invoice'
+      ? `${quote.paymentMethod.lightningFeeSats + (quote.paymentMethod.sparkTransferFeeSats ?? 0)} sats`
+      : !isReturn && conversion && conversion.fee >= 0n
+        ? toDollars
+          ? `${conversion.fee > 0n ? dollarAmount(conversion.fee) : '$0.00'} + mint reserve`
+          : conversion.fee > 0n
+            ? dollarAmount(conversion.fee)
+            : '$0.00'
+        : 'Included in total';
+  const bufferAmount =
+    !isReturn && protectedReview && estimatedCost !== null && operation
+      ? toDollars
+        ? BigInt(operation.funding_sats) > estimatedCost
+          ? BigInt(operation.funding_sats) - estimatedCost
+          : 0n
+        : BigInt(operation.max_debit) > estimatedCost
+          ? BigInt(operation.max_debit) - estimatedCost
+          : 0n
+      : 0n;
+  const bufferText =
+    bufferAmount > 0n
+      ? `${toDollars ? money(bufferAmount, false) : dollarAmount(bufferAmount)} (refundable)`
+      : null;
   const liveRate =
     conversion && conversion.amountIn > 0n && conversion.amountOut > 0n
       ? dollarAmount(
@@ -415,13 +446,11 @@ export function TransferFundsScreen({
                 toDollars={toDollars}
                 isReturn={isReturn}
                 protectedReview={protectedReview}
+                estimatedSpend={estimatedSpend}
                 debit={debit}
                 maxDebitLabel={!isReturn && !protectedReview && !toDollars ? money(BigInt(operation.max_debit), true) : undefined}
-                feeText={
-                  isReturn && quote?.paymentMethod.type === 'bolt11Invoice'
-                    ? `${quote.paymentMethod.lightningFeeSats + (quote.paymentMethod.sparkTransferFeeSats ?? 0)} sats`
-                    : 'Included in total'
-                }
+                feeText={reviewFeeText}
+                bufferText={bufferText}
                 liveRate={liveRate}
                 statusHint={
                   !isReturn

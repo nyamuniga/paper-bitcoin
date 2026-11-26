@@ -6,9 +6,11 @@ export interface TransferReviewProps {
   toDollars: boolean;
   isReturn: boolean;
   protectedReview: boolean;
+  estimatedSpend?: string | null;
   debit: string;
   maxDebitLabel?: string;
   feeText: string;
+  bufferText?: string | null;
   liveRate: string | null;
   statusHint: string | null;
   refreshErrorDetails: string | null;
@@ -29,9 +31,11 @@ export const TransferReview: React.FC<TransferReviewProps> = ({
   toDollars,
   isReturn,
   protectedReview,
+  estimatedSpend,
   debit,
   maxDebitLabel,
   feeText,
+  bufferText,
   liveRate,
   statusHint,
   refreshErrorDetails,
@@ -55,6 +59,12 @@ export const TransferReview: React.FC<TransferReviewProps> = ({
             <dt>From</dt>
             <dd>{toDollars ? 'Bitcoin' : 'Dollar'} balance</dd>
           </div>
+          {estimatedSpend && (
+            <div>
+              <dt>Estimated spend</dt>
+              <dd>{estimatedSpend}</dd>
+            </div>
+          )}
           <div>
             <dt>{protectedReview ? 'Maximum you pay' : toDollars ? 'You pay up to' : 'Estimated total'}</dt>
             <dd>{debit}</dd>
@@ -71,6 +81,12 @@ export const TransferReview: React.FC<TransferReviewProps> = ({
         <dt>Fees</dt>
         <dd>{feeText}</dd>
       </div>
+      {bufferText && (
+        <div>
+          <dt>Movement buffer</dt>
+          <dd>{bufferText}</dd>
+        </div>
+      )}
       {!isReturn && liveRate && (
         <div>
           <dt>Rate</dt>

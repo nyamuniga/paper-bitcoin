@@ -14,8 +14,8 @@ test('USD and sat inputs use exact integers, reject ambiguous or unsafe amounts'
   assert.equal(formatUnits(1n, 6), '0.000001');
 });
 
-test('quoted debit includes conversion fee in the source asset', () => {
-  assert.equal(conversionCost({ amountIn: 1000n, fee: 2n }), 1002n);
+test('quoted debit uses amountIn directly without adding swap-internal or token-unit fee', () => {
+  assert.equal(conversionCost({ amountIn: 1000n, fee: 1600n }), 1000n);
   assert.throws(() => conversionCost({amountIn: 0n, fee: 1n}));
   assert.throws(() => conversionCost({amountIn: 1n, fee: -1n}));
 });

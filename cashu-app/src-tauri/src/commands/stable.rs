@@ -2,8 +2,8 @@ use crate::commands::{auth::AppState, spark::SparkState};
 use crate::error::{CommandError, CommandResult};
 use ecash_core::types::TransactionStatus;
 use ecash_wallet::{
-    client::{calculate_input_fee, MintClient},
-    stable::{StableOperation, StableStage},
+    client::MintClient,
+    stable::{estimate_funding_debit, StableOperation, StableStage},
 };
 use std::sync::atomic::Ordering;
 use tauri::State;
@@ -21,7 +21,7 @@ pub async fn stable_operations(state: State<'_, AppState>) -> CommandResult<Vec<
     Ok(guard.as_ref().unwrap().stable_operations.clone())
 }
 
-/// Conservative funding cap: reserve plus fees for all existing inputs and up to 64 new melt proofs.
+/// Funding debit estimate matching `pay_invoice_capped`'s coin selection and active-keyset melt fees.
 #[tauri::command]
 pub async fn stable_funding_quote(
     invoice: String,
@@ -37,7 +37,6 @@ pub async fn stable_funding_quote(
     if keysets.is_empty() {
         return Err(CommandError("Mint returned no fee information".into()));
     }
-    let max_ppk = keysets.iter().map(|ks| ks.input_fee_ppk).max().unwrap_or(0);
     let (guard, _, _) = state.lock_and_get_wallet().await?;
     let proofs = guard
         .as_ref()
@@ -46,15 +45,7 @@ pub async fn stable_funding_quote(
         .get(&mint_url)
         .cloned()
         .unwrap_or_default();
-    let input_fee = calculate_input_fee(&proofs, &keysets);
-    total
-        .checked_add(input_fee)
-        .and_then(|v| {
-            max_ppk
-                .checked_mul(64)
-                .and_then(|f| f.checked_add(999))
-                .and_then(|f| v.checked_add(f / 1000))
-        })
+    estimate_funding_debit(total, &proofs, &keysets)
         .ok_or_else(|| CommandError("Funding quote overflow".into()))
 }
 
