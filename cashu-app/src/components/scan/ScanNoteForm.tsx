@@ -57,7 +57,7 @@ export const ScanNoteForm: React.FC<ScanNoteFormProps> = ({
               }}
             />
             {urDecoder.progress > 0 && !urDecoder.isSuccess && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface-container-highest/80 px-4 py-2 rounded-full text-label-caps font-label-caps text-primary backdrop-blur-md whitespace-nowrap">
+              <div className="scan-progress-pill absolute top-4 left-1/2 -translate-x-1/2 bg-surface-container-highest/80 px-4 py-2 rounded-full text-label-caps font-label-caps text-primary backdrop-blur-md whitespace-nowrap">
                 Scanning: {Math.round(urDecoder.progress * 100)}%
               </div>
             )}

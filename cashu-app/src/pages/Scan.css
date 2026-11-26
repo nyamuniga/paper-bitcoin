@@ -6,7 +6,7 @@
 .scan-form-content { gap:clamp(8px,2dvh,16px); }
 .scan-launch { flex:none; align-self:center; width:min(100%,max(120px,calc(100dvh - 420px)),280px); aspect-ratio:1; }
 .scan-camera { flex:none; width:min(100%,calc(100dvh - 180px)); aspect-ratio:1; align-self:center; position:relative; }
-.scan-camera > div { width:100%; height:100%; }
+.scan-camera > div:not(.scan-progress-pill) { width:100%; height:100%; }
 .scan-paste-fields { flex:none; }
 .scan-primary { flex:none; margin-top:auto; min-height:44px; padding:12px 16px; border-radius:16px; background:#f2a93b; color:#06110c; font-size:15px; font-weight:600; }
 .scan-primary:hover:not(:disabled) { background:#ffc564; }
