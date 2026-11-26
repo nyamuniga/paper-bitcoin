@@ -208,14 +208,45 @@ async fn preparation_outage_leaves_proofs_and_history_untouched() {
 }
 
 #[tokio::test]
-async fn unresolved_swap_keeps_the_durable_pending_transaction_id() {
+async fn offline_swap_fails_before_pending_record_with_service_unavailable() {
     let fixture = TestWallet::new();
     let pubkey = ecash_core::MintKeypair::generate().public_key_hex();
     let error =
         send_ecash_operation(MINT.into(), 100, Some(pubkey), None, None, &fixture.state)
             .await
             .err()
+            .expect("offline swap must fail cleanly");
+    assert_eq!(error.code, SendEcashErrorCode::ServiceUnavailable);
+    assert_eq!(error.tx_id, None);
+    let guard = fixture.state.wallet.lock().await;
+    assert_eq!(guard.as_ref().unwrap().total_balance(), 100);
+    assert!(guard.as_ref().unwrap().transactions.is_empty());
+    assert!(!fixture.state.wallet_path.exists());
+}
+
+#[tokio::test]
+async fn unresolved_swap_keeps_the_durable_pending_transaction_id() {
+    let fixture = TestWallet::new();
+    let initial_save = fixture.directory.join("initial-wallet.json");
+    let (mint, server) = recovery_fault_mint(
+        fixture.state.wallet_path.clone(),
+        initial_save,
+        false,
+    );
+    {
+        let mut guard = fixture.state.wallet.lock().await;
+        let wallet = guard.as_mut().unwrap();
+        let proofs = wallet.proofs.remove(MINT).unwrap();
+        wallet.proofs.insert(mint.clone(), proofs);
+    }
+    let pubkey = ecash_core::MintKeypair::generate().public_key_hex();
+    let error =
+        send_ecash_operation(mint, 100, Some(pubkey), None, None, &fixture.state)
+            .await
+            .err()
             .expect("unavailable swap must fail");
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 2);
     assert_eq!(error.code, SendEcashErrorCode::OutcomeUnknown);
     assert!(error.message.starts_with("Failed to split tokens: "));
     let saved = ecash_wallet::WalletState::load_encrypted(&fixture.state.wallet_path, PASSWORD)

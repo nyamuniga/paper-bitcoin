@@ -2,7 +2,7 @@
 
 use crate::{
     outgoing::{encode_outgoing_tokens, PendingSend, SendEcashResult},
-    proof_selection::select_exact_proofs,
+    proof_selection::{select_exact_proofs, split_for_pocket_change},
     send_error::{SendEcashError, SendEcashErrorCode},
     storage::{EncryptedFileStorage, WalletStorage},
     swap::swap_proofs,
@@ -11,7 +11,7 @@ use crate::{
 use ecash_core::types::{
     split_into_powers_of_2, SendTransactionData, Transaction, TransactionStatus, TransactionType,
 };
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 /// The existing send inputs, shared by legacy and structured native commands.
 pub struct SendEcashRequest {
@@ -141,7 +141,9 @@ pub async fn send_ecash_with_storage<S: WalletStorage>(
                 ))
             })
             .collect();
-        if let Ok(states) = client.check_state(&ys).await {
+        if let Ok(Ok(states)) =
+            tokio::time::timeout(Duration::from_secs(3), client.check_state(&ys)).await
+        {
             let spent_secrets: std::collections::HashSet<String> = candidate_proofs
                 .iter()
                 .filter_map(|p| {
@@ -184,18 +186,16 @@ pub async fn send_ecash_with_storage<S: WalletStorage>(
         }
         // Persist proof removal together with the outgoing token below.
     } else {
-        // 2. We need to split proofs via swap
-        let all_keysets = if force_swap {
-            client.fetch_keysets().await.map_err(|error| {
-                SendEcashError::new(
-                    SendEcashErrorCode::ServiceUnavailable,
-                    error.to_string(),
-                    None,
-                )
-            })?
-        } else {
-            client.fetch_keysets().await.unwrap_or_default()
-        };
+        // 2. We need to split proofs via swap. Verify mint reachability before
+        // persisting a pending send so offline attempts fail cleanly without
+        // leaving stale pending history or an unknown-outcome lock.
+        let all_keysets = client.fetch_keysets().await.map_err(|error| {
+            SendEcashError::new(
+                SendEcashErrorCode::ServiceUnavailable,
+                error.to_string(),
+                None,
+            )
+        })?;
 
         // Select proofs summing to >= amount + swap_fee (prefer smallest to clean up dust)
         let mut sorted_proofs = proofs.clone();
@@ -260,7 +260,16 @@ pub async fn send_ecash_with_storage<S: WalletStorage>(
 
         let change_amount = swap_total.saturating_sub(amount).saturating_sub(swap_fee);
         let desired_denoms = split_into_powers_of_2(amount);
-        let change_denoms = split_into_powers_of_2(change_amount);
+        let selected_secrets: std::collections::HashSet<&str> = selected_for_swap
+            .iter()
+            .map(|proof| proof.secret.as_str())
+            .collect();
+        let remaining_proofs: Vec<_> = proofs
+            .iter()
+            .filter(|proof| !selected_secrets.contains(proof.secret.as_str()))
+            .cloned()
+            .collect();
+        let change_denoms = split_for_pocket_change(change_amount, &remaining_proofs);
 
         // perform_swap handles updating the wallet state with the change
         let swap_result = swap_proofs(

@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { describeSendEcashFailure } from '../src/services/sendEcashError.ts';
+import {
+  describeSendEcashFailure,
+  formatOfflineChangeMessage,
+  isOfflineReceiveError,
+} from '../src/services/sendEcashError.ts';
 
 const errors = JSON.parse(readFileSync(new URL('./fixtures/send-ecash-errors.json', import.meta.url), 'utf8'));
 const hookUrl = new URL('../src/hooks/useEcash.ts', import.meta.url).href;
@@ -198,4 +202,28 @@ test('a receive recovery-save error reports failure without success or an automa
     assert.equal(f.refreshes,0);assert.deepEqual(messages,[diagnostic]);
     assert.deepEqual(f.toasts,silent?[]:[`Receive failed: ${diagnostic}`]);
   }
+});
+
+test('formatOfflineChangeMessage suggests nearest offline denominations cleanly', () => {
+  assert.equal(
+    formatOfflineChangeMessage(20, { lower: 16, higher: 32 }),
+    "You're offline and can't make exact change for 20 sats right now. Try 16 sats or 32 sats.",
+  );
+  assert.equal(
+    formatOfflineChangeMessage(20, { lower: 16, higher: null }),
+    "You're offline and can't make exact change for 20 sats right now. Try 16 sats.",
+  );
+  assert.equal(
+    formatOfflineChangeMessage(20, { lower: null, higher: 32 }),
+    "You're offline and can't make exact change for 20 sats right now. Try 32 sats.",
+  );
+  assert.equal(formatOfflineChangeMessage(20, { lower: null, higher: null }), null);
+});
+
+test('isOfflineReceiveError detects unreachable mints without catching spent or invalid tokens', () => {
+  assert.equal(isOfflineReceiveError('Failed to receive ecash: error sending request for url (https://mint.example/v1/keys): dns error'), true);
+  assert.equal(isOfflineReceiveError('connection refused'), true);
+  assert.equal(isOfflineReceiveError('Tokens are already spent and could not be recovered'), false);
+  assert.equal(isOfflineReceiveError('Cannot unlock P2PK ecash: invalid key'), false);
+  assert.equal(isOfflineReceiveError('Wallet is locked'), false);
 });

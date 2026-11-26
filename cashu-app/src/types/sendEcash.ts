@@ -23,3 +23,9 @@ export interface SendEcashResult {
   token_v4: string;
   tx_id: string;
 }
+
+/** Nearest amounts sendable offline from currently held proofs without a mint swap. */
+export interface NearestOfflineAmounts {
+  lower: number | null;
+  higher: number | null;
+}

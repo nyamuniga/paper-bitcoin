@@ -1,6 +1,7 @@
 //! Receive orchestration independent of Tauri state; the caller owns exclusive wallet access.
 
 use crate::{
+    proof_selection::split_for_pocket_change,
     receive_input::{
         decode_receive_token, prepare_receive_input, validate_receive_constraints,
         PreparedReceiveInput,
@@ -9,7 +10,7 @@ use crate::{
     WalletState,
 };
 use anyhow::{anyhow, Result};
-use ecash_core::types::{split_into_powers_of_2, TransactionStatus, TransactionType};
+use ecash_core::types::{TransactionStatus, TransactionType};
 use std::path::PathBuf;
 
 /// The existing receive inputs, shared by the native command and standalone callers.
@@ -153,7 +154,12 @@ pub async fn receive_ecash_validated(
     w_state.save_encrypted(path, passphrase)?;
 
     // Swap proofs with the mint to re-blind them (prevents sender tracking)
-    let desired_amounts = split_into_powers_of_2(net_amount);
+    let existing_proofs = w_state
+        .proofs
+        .get(&mint_url)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    let desired_amounts = split_for_pocket_change(net_amount, existing_proofs);
     let swap_result = swap_proofs(
         w_state,
         path,

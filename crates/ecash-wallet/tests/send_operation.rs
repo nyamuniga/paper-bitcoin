@@ -424,3 +424,29 @@ async fn send_normalizes_proofs_explicitly_before_calling_injected_storage() {
     assert_eq!(saved_other[0].amount, 8);
     assert_eq!(saved_other[0].derivation_index, 1);
 }
+
+#[tokio::test]
+async fn offline_swap_returns_service_unavailable_without_pending_record() {
+    let mut fixture = TestWallet::new();
+    let error = send_ecash(
+        &mut fixture.wallet,
+        &fixture.path,
+        PASSWORD,
+        SendEcashRequest {
+            mint_url: MINT.into(),
+            amount: 50,
+            pubkey: None,
+            payment_request: None,
+            payment_max_total: None,
+        },
+    )
+    .await
+    .err()
+    .expect("offline swap must fail cleanly");
+
+    assert_eq!(error.code, SendEcashErrorCode::ServiceUnavailable);
+    assert_eq!(error.tx_id, None);
+    assert_eq!(fixture.wallet.total_balance(), 100);
+    assert!(fixture.wallet.transactions.is_empty());
+    assert!(!fixture.path.exists());
+}

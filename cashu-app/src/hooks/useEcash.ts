@@ -5,7 +5,7 @@ import { getGlobalNostrPrivateKey } from './useNostr';
 import { toast } from 'react-hot-toast';
 import { describeSendEcashFailure } from '../services/sendEcashError';
 import type { SendEcashFailure } from '../services/sendEcashError';
-import type { SendEcashResult } from '../types/sendEcash';
+import type { SendEcashErrorCode, SendEcashResult } from '../types/sendEcash';
 
 export const useEcash = (mintUrl?: string) => {
   const [sending, setSending] = useState(false);
@@ -49,17 +49,17 @@ export const useEcash = (mintUrl?: string) => {
     amount: number,
     overrideMintUrl?: string,
     pubkey?: string,
-    opts?: { silent?: boolean; onError?: (msg: string) => void }
+    opts?: { silent?: boolean; onError?: (msg: string, code?: SendEcashErrorCode) => void }
   ) => {
     if (isSendingRef.current) return null;
 
-    const reportError = (message: string) => {
+    const reportError = (message: string, code?: SendEcashErrorCode) => {
       if (!opts?.silent) toast.error(message);
-      opts?.onError?.(message);
+      opts?.onError?.(message, code);
       return null;
     };
     if (unresolvedSendRef.current) {
-      return reportError(unresolvedSendRef.current.message);
+      return reportError(unresolvedSendRef.current.message, unresolvedSendRef.current.code);
     }
 
     const targetMint = overrideMintUrl || mintUrl;
@@ -82,7 +82,7 @@ export const useEcash = (mintUrl?: string) => {
       } catch (error: unknown) {
         const failure = describeSendEcashFailure(error);
         if (failure.requiresReconciliation) unresolvedSendRef.current = failure;
-        return reportError(failure.message);
+        return reportError(failure.message, failure.code);
       }
 
       setCurrentTxId(result.tx_id);

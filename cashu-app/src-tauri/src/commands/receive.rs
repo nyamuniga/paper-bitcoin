@@ -1,10 +1,10 @@
 use crate::error::CommandResult;
 use ecash_core::derivation::TokenDerivation;
 use ecash_core::types::{
-    split_into_powers_of_2, ReceiveLightningTransactionData, Transaction, TransactionStatus,
-    TransactionType,
+    ReceiveLightningTransactionData, Transaction, TransactionStatus, TransactionType,
 };
 use ecash_wallet::client::MintClient;
+use ecash_wallet::proof_selection::split_for_pocket_change;
 use ecash_wallet::stable::StableStage;
 use serde::{Deserialize, Serialize};
 
@@ -53,10 +53,13 @@ pub(crate) async fn persist_receive_quote(
         .await
         .map_err(|e| crate::error::CommandError(format!("Failed to fetch keyset: {}", e)))?;
 
-    let desired_amounts = split_into_powers_of_2(amount);
-
     let (mut wallet_guard, path, passphrase) = state.lock_and_get_wallet().await?;
     let w_state = wallet_guard.as_mut().unwrap();
+
+    let desired_amounts = split_for_pocket_change(
+        amount,
+        w_state.proofs.get(&mint_url).map(Vec::as_slice).unwrap_or(&[]),
+    );
 
     if let Some((id, expected_quote)) = conversion {
         let current = w_state.stable_operations.iter().find(|op| op.id == id)
@@ -178,7 +181,10 @@ pub async fn batch_mint_external_quotes(
         }
 
         for quote in mint_quotes {
-            let desired_amounts = split_into_powers_of_2(quote.amount);
+            let desired_amounts = split_for_pocket_change(
+                quote.amount,
+                w_state.proofs.get(&mint_url).map(Vec::as_slice).unwrap_or(&[]),
+            );
             
             let max_proof_idx = w_state
                 .proofs

@@ -20,7 +20,9 @@ import { EcashReceiveInvoice } from '../../components/home/EcashReceiveInvoice';
 import { EcashRequestPayment } from '../../components/home/EcashRequestPayment';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { isCashuRequest } from '../../services/cashuRequests';
-import { saveEcashForLater } from '../../services/ecashNativeAdapter';
+import { getNearestOfflineSendAmounts, saveEcashForLater } from '../../services/ecashNativeAdapter';
+import { formatOfflineChangeMessage, isOfflineReceiveError } from '../../services/sendEcashError';
+import type { SendEcashErrorCode } from '../../types/sendEcash';
 import { EcashSendView } from './EcashSendView';
 import { EcashReceiveView } from './EcashReceiveView';
 import '../../components/home/SendEcashPage.css';
@@ -67,6 +69,11 @@ export const EcashScreen: React.FC<EcashScreenProps> = ({
   const [tokenV4, setTokenV4] = useState<string | null>(null);
   const [formatVersion, setFormatVersion] = useState<'v3' | 'v4'>('v3');
   const [copied, setCopied] = useState(false);
+  const [offlineHint, setOfflineHint] = useState<{
+    message: string;
+    lower: number | null;
+    higher: number | null;
+  } | null>(null);
 
   // Receive state
   const [receiveToken, setReceiveToken] = useState(initialToken || '');
@@ -142,8 +149,9 @@ export const EcashScreen: React.FC<EcashScreenProps> = ({
     }
   }, [isClaimed, hasCelebratedClaim, token, paymentAmount, parsedAmount]);
 
-  const handleSend = async () => {
-    if (!isValid || requestBusy) return;
+  const handleSend = async (overrideAmount?: number) => {
+    const sendAmount = overrideAmount ?? parsedAmount;
+    if (sendAmount <= 0 || sendAmount > availableBalance || requestBusy) return;
 
     let targetPubkey = pubkey.trim();
     if (targetPubkey) {
@@ -163,12 +171,15 @@ export const EcashScreen: React.FC<EcashScreenProps> = ({
       }
     }
 
-    setPaymentAmount(parsedAmount);
+    setOfflineHint(null);
+    setPaymentAmount(sendAmount);
     let mintErr = '';
-    const result = await sendEcash(parsedAmount, undefined, targetPubkey || undefined, {
+    let errCode: SendEcashErrorCode | undefined;
+    const result = await sendEcash(sendAmount, undefined, targetPubkey || undefined, {
       silent: true,
-      onError: (msg) => {
+      onError: (msg, code) => {
         mintErr = msg;
+        errCode = code;
       },
     });
     if (result) {
@@ -178,6 +189,22 @@ export const EcashScreen: React.FC<EcashScreenProps> = ({
       setFormatVersion('v3');
       setHasCelebratedClaim(false);
     } else {
+      if (errCode === 'SERVICE_UNAVAILABLE' && !targetPubkey) {
+        try {
+          const nearest = await getNearestOfflineSendAmounts(mintUrl, sendAmount);
+          const suggestionMessage = formatOfflineChangeMessage(sendAmount, nearest);
+          if (suggestionMessage) {
+            setOfflineHint({
+              message: suggestionMessage,
+              lower: nearest.lower,
+              higher: nearest.higher,
+            });
+            return;
+          }
+        } catch {
+          // Fall through to standard service-unavailable toast.
+        }
+      }
       toast.error(mintErr || 'Could not create eCash token from mint.');
     }
   };
@@ -232,6 +259,19 @@ export const EcashScreen: React.FC<EcashScreenProps> = ({
         setPaymentSubtitle('This eCash token has already been claimed or redeemed.');
         setPaymentErrorMessage(mintErr || 'Tokens are already spent and cannot be claimed again.');
         setPaymentBadgeLabel('Already Spent');
+      } else if (isOfflineReceiveError(mintErr)) {
+        try {
+          await saveEcashForLater(trimmed);
+          await refreshWallet();
+          toast.success("You're offline — token saved in History. Claim it when you're back online.");
+          navigate('/');
+          return;
+        } catch {
+          setPaymentTitle('Claim Failed');
+          setPaymentSubtitle(mintErr || 'Failed to claim eCash token.');
+          setPaymentErrorMessage(mintErr || 'The mint could not be reached.');
+          setPaymentBadgeLabel('Failed');
+        }
       } else {
         setPaymentTitle('Claim Failed');
         setPaymentSubtitle(mintErr || 'Failed to claim eCash token.');
@@ -259,6 +299,7 @@ export const EcashScreen: React.FC<EcashScreenProps> = ({
 
   const resetSend = () => {
     setAmount('');
+    setOfflineHint(null);
     setToken(null);
     setTokenV3(null);
     setTokenV4(null);
@@ -458,7 +499,14 @@ export const EcashScreen: React.FC<EcashScreenProps> = ({
             <div className="flex flex-col gap-1.5 sm:gap-2">
               <div className="ecash-mint-row flex items-stretch gap-2">
                 <div className="flex-1 min-w-0">
-                  <MintBalancePicker mintUrl={mintUrl} balances={mintBalances} onSelect={setMintUrl} />
+                  <MintBalancePicker
+                    mintUrl={mintUrl}
+                    balances={mintBalances}
+                    onSelect={(nextMint) => {
+                      setMintUrl(nextMint);
+                      setOfflineHint(null);
+                    }}
+                  />
                 </div>
                 {activeTab === 'send' && !token && !requestBusy && (
                   <button
@@ -561,9 +609,10 @@ export const EcashScreen: React.FC<EcashScreenProps> = ({
                 pubkeyField={pubkeyField}
                 onAmountChange={(val) => {
                   setAmount(val);
+                  setOfflineHint(null);
                   setToken(null);
                 }}
-                onSend={handleSend}
+                onSend={() => handleSend()}
                 onCopy={handleCopy}
                 onFormatChange={(val) => {
                   setFormatVersion(val);
@@ -654,16 +703,79 @@ export const EcashScreen: React.FC<EcashScreenProps> = ({
                 Insufficient balance
               </p>
             )}
+            {offlineHint && !isInsufficient && (
+              <p role="status" className="mt-1.5 text-xs text-on-surface-variant text-center leading-relaxed">
+                {offlineHint.message}
+              </p>
+            )}
           </div>
         )}
         {page && activeTab === 'send' && !token && !requestBusy && !showScanner && (
           <div className="ecash-controls">
             <div className="ecash-number-pad" role="group" aria-label="Amount keypad">
-              <NumberPad value={amount} onChange={setAmount} compact />
+              <NumberPad
+                value={amount}
+                onChange={(val) => {
+                  setAmount(val);
+                  setOfflineHint(null);
+                }}
+                compact
+              />
             </div>
-            <button type="button" onClick={handleSend} disabled={sending || !isValid} className="ecash-create">
-              {sending ? <Loader2 className="animate-spin" /> : 'Create Token'}
-            </button>
+            {offlineHint && !isInsufficient ? (
+              <div className="ecash-create-choices">
+                {offlineHint.lower !== null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = offlineHint.lower!;
+                      setAmount(String(next));
+                      void handleSend(next);
+                    }}
+                    disabled={sending}
+                    aria-label={`Try ${offlineHint.lower.toLocaleString()} sats`}
+                    title={`Try ${offlineHint.lower.toLocaleString()} sats`}
+                    className="ecash-create"
+                  >
+                    {sending ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <>
+                        <span className="ecash-choice-kicker">Try</span>
+                        <span className="ecash-choice-value">₿{offlineHint.lower.toLocaleString()}</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                {offlineHint.higher !== null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = offlineHint.higher!;
+                      setAmount(String(next));
+                      void handleSend(next);
+                    }}
+                    disabled={sending}
+                    aria-label={`Try ${offlineHint.higher.toLocaleString()} sats`}
+                    title={`Try ${offlineHint.higher.toLocaleString()} sats`}
+                    className="ecash-create"
+                  >
+                    {sending ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <>
+                        <span className="ecash-choice-kicker">Try</span>
+                        <span className="ecash-choice-value">₿{offlineHint.higher.toLocaleString()}</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button type="button" onClick={() => handleSend()} disabled={sending || !isValid} className="ecash-create">
+                {sending ? <Loader2 className="animate-spin" /> : 'Create Token'}
+              </button>
+            )}
           </div>
         )}
       </div>

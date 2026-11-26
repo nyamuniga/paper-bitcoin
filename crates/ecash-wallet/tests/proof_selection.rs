@@ -1,5 +1,7 @@
 use ecash_core::types::{Dleq, Proof};
-use ecash_wallet::proof_selection::select_exact_proofs;
+use ecash_wallet::proof_selection::{
+    nearest_offline_amounts, select_exact_proofs, split_for_pocket_change, NearestOfflineAmounts,
+};
 use std::collections::HashSet;
 
 fn proofs(amounts: &[u64]) -> Vec<Proof> {
@@ -135,4 +137,71 @@ fn matches_independent_subset_sum_oracle_for_cashu_inventories() {
             }
         }
     }
+}
+
+#[test]
+fn nearest_offline_amounts_matches_subset_sum_oracle_for_cashu_inventories() {
+    for inventory in 0..81 {
+        let mut counts = inventory;
+        let mut amounts = Vec::new();
+        for amount in [1, 2, 4, 8] {
+            amounts.extend(std::iter::repeat(amount).take(counts % 3));
+            counts /= 3;
+        }
+        let input = proofs(&amounts);
+        let mut possible = HashSet::from([0u64]);
+        for &amount in &amounts {
+            let added: Vec<_> = possible.iter().map(|sum| sum + amount).collect();
+            possible.extend(added);
+        }
+        let total = amounts.iter().sum::<u64>();
+        for target in 1..=total + 2 {
+            let nearest = nearest_offline_amounts(&input, target);
+            let expected_lower = possible
+                .iter()
+                .copied()
+                .filter(|&sum| sum > 0 && sum < target)
+                .max();
+            let expected_higher = possible.iter().copied().filter(|&sum| sum > target).min();
+            assert_eq!(
+                nearest,
+                NearestOfflineAmounts {
+                    lower: expected_lower,
+                    higher: expected_higher,
+                },
+                "inventory {amounts:?}, target {target}"
+            );
+            if let Some(lower) = nearest.lower {
+                assert!(select_exact_proofs(&input, lower).is_some());
+            }
+            if let Some(higher) = nearest.higher {
+                assert!(select_exact_proofs(&input, higher).is_some());
+            }
+        }
+    }
+}
+
+#[test]
+fn split_for_pocket_change_tops_up_small_denominations_and_preserves_total() {
+    let empty_split = split_for_pocket_change(100, &[]);
+    assert_eq!(empty_split.iter().sum::<u64>(), 100);
+    assert!(empty_split.iter().all(|&d| d.is_power_of_two()));
+    // Should include small change (1, 2, 4, 8, 16) so common offline amounts are exact-matchable.
+    let funded = proofs(&empty_split);
+    for amount in [1, 2, 3, 5, 10, 15, 16, 20, 25] {
+        assert!(
+            select_exact_proofs(&funded, amount).is_some(),
+            "expected {amount} sats to be offline-sendable from {empty_split:?}"
+        );
+    }
+
+    // Once pocket change is already stocked (2x of 1..=64), no extra small splits are added.
+    let stocked_amounts: Vec<u64> = [1, 2, 4, 8, 16, 32, 64]
+        .into_iter()
+        .flat_map(|d| [d, d])
+        .collect();
+    let stocked = proofs(&stocked_amounts);
+    let minimal = split_for_pocket_change(100, &stocked);
+    assert_eq!(minimal, vec![4, 32, 64]);
+    assert!(split_for_pocket_change(0, &stocked).is_empty());
 }

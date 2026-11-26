@@ -93,6 +93,7 @@ pub fn run() {
             commands::send::send_ecash_v2,
             commands::send::receive_ecash,
             commands::send::save_ecash_for_later,
+            commands::send::get_nearest_offline_send_amounts,
             commands::receive::receive_lightning,
             commands::receive::batch_mint_external_quotes,
             commands::auth::is_wallet_setup,

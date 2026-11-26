@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { NearestOfflineAmounts } from '../types/sendEcash';
 
 export interface PreparedEcashPayment {
   token: string;
@@ -44,4 +45,14 @@ export async function validateEcashPayment(token: string, amount: number): Promi
 
 export async function saveEcashForLater(tokenString: string): Promise<void> {
   await invoke<void>('save_ecash_for_later', { tokenString });
+}
+
+export async function getNearestOfflineSendAmounts(
+  mintUrl: string,
+  amount: number,
+): Promise<NearestOfflineAmounts> {
+  return invoke<NearestOfflineAmounts>('get_nearest_offline_send_amounts', {
+    mintUrl,
+    amount,
+  });
 }

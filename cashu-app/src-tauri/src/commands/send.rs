@@ -140,6 +140,24 @@ pub async fn save_ecash_for_later(token_string: String, state: State<'_, AppStat
     Ok(id)
 }
 
+#[tauri::command]
+pub async fn get_nearest_offline_send_amounts(
+    mint_url: String,
+    amount: u64,
+    state: State<'_, AppState>,
+) -> CommandResult<ecash_wallet::proof_selection::NearestOfflineAmounts> {
+    let (guard, _, _) = state.lock_and_get_wallet().await?;
+    let wallet = guard.as_ref().unwrap();
+    let normalized = ecash_wallet::state::normalize_mint_url(&mint_url);
+    let proofs = wallet
+        .proofs
+        .get(&mint_url)
+        .or_else(|| wallet.proofs.get(&normalized))
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    Ok(ecash_wallet::proof_selection::nearest_offline_amounts(proofs, amount))
+}
+
 #[cfg(test)]
 #[path = "send_tests.rs"]
 mod structured_send_tests;
