@@ -289,3 +289,147 @@ async fn test_check_receive_lightning_expired_by_days_old() {
     let _ = std::fs::remove_file(wallet_path);
 }
 
+
+#[tokio::test]
+async fn test_check_receive_lightning_400_quote_not_found_expires_after_grace() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/mint/quote/bolt11/quote_400_missing"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "detail": "Quote not found",
+            "code": 20001
+        })))
+        .mount(&server)
+        .await;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let mut state = WalletState::new("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff".to_string(), None);
+    state.transactions.push(Transaction {
+        id: "tx_recv_400".to_string(),
+        tx_type: TransactionType::ReceiveLightning(ecash_core::types::ReceiveLightningTransactionData {
+            quote_id: "quote_400_missing".to_string(),
+            outputs: vec![],
+            blinding_sessions_hex: vec![],
+        }),
+        amount: 500,
+        fee: 0,
+        status: TransactionStatus::Pending,
+        timestamp: now - 300,
+        mint_url: server.uri(),
+    });
+
+    let wallet_path = std::env::temp_dir().join(format!("test_wallet_recv_400_{}.json", uuid::Uuid::new_v4()));
+    let result = check_transaction_status(&mut state, &wallet_path, "pass", "tx_recv_400").await.unwrap();
+    assert_eq!(result, TransactionStatus::Failed);
+    let _ = std::fs::remove_file(wallet_path);
+}
+
+#[tokio::test]
+async fn test_check_receive_lightning_normalizes_millisecond_expiry_and_preserves_429() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/mint/quote/bolt11/quote_ms_expiry"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "quote": "quote_ms_expiry",
+            "state": "UNPAID",
+            "expiry": 1_000_000_000_000u64
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/mint/quote/bolt11/quote_rate_limited"))
+        .respond_with(ResponseTemplate::new(429).set_body_json(json!({
+            "detail": "Too many requests"
+        })))
+        .mount(&server)
+        .await;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let mut state = WalletState::new("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff".to_string(), None);
+    state.transactions.push(Transaction {
+        id: "tx_ms_expiry".to_string(),
+        tx_type: TransactionType::ReceiveLightning(ecash_core::types::ReceiveLightningTransactionData {
+            quote_id: "quote_ms_expiry".to_string(),
+            outputs: vec![],
+            blinding_sessions_hex: vec![],
+        }),
+        amount: 500,
+        fee: 0,
+        status: TransactionStatus::Pending,
+        timestamp: now,
+        mint_url: server.uri(),
+    });
+    state.transactions.push(Transaction {
+        id: "tx_rate_limited".to_string(),
+        tx_type: TransactionType::ReceiveLightning(ecash_core::types::ReceiveLightningTransactionData {
+            quote_id: "quote_rate_limited".to_string(),
+            outputs: vec![],
+            blinding_sessions_hex: vec![],
+        }),
+        amount: 500,
+        fee: 0,
+        status: TransactionStatus::Pending,
+        timestamp: now - 7200,
+        mint_url: server.uri(),
+    });
+
+    let wallet_path = std::env::temp_dir().join(format!("test_wallet_recv_ms_{}.json", uuid::Uuid::new_v4()));
+    assert_eq!(
+        check_transaction_status(&mut state, &wallet_path, "pass", "tx_ms_expiry").await.unwrap(),
+        TransactionStatus::Failed
+    );
+    assert_eq!(
+        check_transaction_status(&mut state, &wallet_path, "pass", "tx_rate_limited").await.unwrap(),
+        TransactionStatus::Pending
+    );
+    let _ = std::fs::remove_file(wallet_path);
+}
+
+#[tokio::test]
+async fn test_check_receive_lightning_unpaid_without_expiry_expires_after_one_hour() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/mint/quote/bolt11/quote_two_hours"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "quote": "quote_two_hours",
+            "state": "UNPAID"
+        })))
+        .mount(&server)
+        .await;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let mut state = WalletState::new("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff".to_string(), None);
+    state.transactions.push(Transaction {
+        id: "tx_two_hours".to_string(),
+        tx_type: TransactionType::ReceiveLightning(ecash_core::types::ReceiveLightningTransactionData {
+            quote_id: "quote_two_hours".to_string(),
+            outputs: vec![],
+            blinding_sessions_hex: vec![],
+        }),
+        amount: 500,
+        fee: 0,
+        status: TransactionStatus::Pending,
+        timestamp: now - 3700,
+        mint_url: server.uri(),
+    });
+
+    let wallet_path = std::env::temp_dir().join(format!("test_wallet_recv_1h_{}.json", uuid::Uuid::new_v4()));
+    assert_eq!(
+        check_transaction_status(&mut state, &wallet_path, "pass", "tx_two_hours").await.unwrap(),
+        TransactionStatus::Failed
+    );
+    let _ = std::fs::remove_file(wallet_path);
+}

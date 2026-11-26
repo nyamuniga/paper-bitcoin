@@ -4,14 +4,14 @@ import type { WalletTransactionSummary } from '../types/wallet';
 import { subscribeToSparkEvents, syncAndSweepSpark } from './sparkService';
 import { timeoutScheduler } from './scheduler';
 import { createSparkReconciler, startSparkReconciliation } from './sparkReconciliation';
-import { createTransactionStatusReader, checkWalletTransaction, pendingOnchainMint, startCashuReconciliation } from './walletReconciliation';
+import { activeInFlightQuoteId, createTransactionStatusReader, checkWalletTransaction, pendingOnchainMint, startCashuReconciliation } from './walletReconciliation';
 import type { ReconciliationTransaction } from './walletReconciliation';
 
 const getTransactions = () => invoke<ReconciliationTransaction[]>('get_transactions');
 const checkStatus = createTransactionStatusReader(id =>
   invoke<WalletTransactionSummary['status']>('check_transaction_status', { txId: id })
 );
-const activeQuoteId = () => useTransactionStore.getState().activeTransaction?.mintQuoteId;
+const activeQuoteId = () => activeInFlightQuoteId(useTransactionStore.getState().activeTransaction);
 const reconcileSpark = createSparkReconciler(async preferredMint => {
   const mint = preferredMint ?? pendingOnchainMint(await getTransactions(), activeQuoteId());
   return syncAndSweepSpark(mint);

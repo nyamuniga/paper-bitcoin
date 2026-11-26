@@ -2,7 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createManualScheduler } from './helpers/manualScheduler.ts';
 import { createSparkReconciler, startSparkReconciliation } from '../src/services/sparkReconciliation.ts';
-import { createTransactionStatusReader, pendingOnchainMint, startCashuReconciliation, checkWalletTransaction } from '../src/services/walletReconciliation.ts';
+import {
+  activeInFlightQuoteId,
+  createTransactionStatusReader,
+  pendingOnchainMint,
+  startCashuReconciliation,
+  checkWalletTransaction,
+} from '../src/services/walletReconciliation.ts';
 
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};};
@@ -40,7 +46,7 @@ test('automatic polling retains eligible transaction types and excludes complete
   const f=cashuFixture();f.activeQuote='owned';
   f.transactions=['ReceiveLightning','ReceiveOnchain','Melt','Send','SendOnchain','Mint','Issue'].map(type=>transaction(type,type));
   f.transactions.push(transaction('owned'),transaction('complete','ReceiveLightning',{status:'Success'}));
-  const stop=f.start();await flush();assert.deepEqual(f.checks,['ReceiveLightning','ReceiveOnchain','Melt','Send','SendOnchain']);stop();
+  const stop=f.start();await flush();assert.deepEqual(f.checks,['ReceiveLightning','ReceiveOnchain','Melt','Send','SendOnchain','Mint']);stop();
 });
 test('a terminal status refreshes the wallet and failed checks remain retryable',async()=>{
   const f=cashuFixture();let requests=0;f.check=async()=>{if(++requests===1)throw new Error('Synthetic status outage');return 'Success';};
@@ -139,4 +145,32 @@ test('unmount while an on-chain check awaits Spark cannot dispatch its native st
     checkTransaction:(transaction,isCurrent)=>checkWalletTransaction(transaction,{isCurrent,reconcileSpark:()=>spark.promise,checkStatus:async()=>{checked++;return 'Success';}}),
     requestSpark:()=>{},refreshWallet:async()=>{},reportError:()=>{errors++;}});
   await flush();stop();spark.resolve(false);await flush();assert.equal(checked,0);assert.equal(errors,0);assert.equal(clock.pendingCount,0);
+});
+
+test('older pending transactions poll with age-based backoff instead of every 2s',async()=>{
+  const nowMs=1_700_000_000_000;
+  const clock=createManualScheduler();
+  const checks=[];
+  const older=transaction('older','ReceiveLightning',{timestamp:Math.floor(nowMs/1000)-300});
+  const stop=startCashuReconciliation({
+    scheduler:clock.scheduler,now:()=>nowMs,
+    getTransactions:async()=>[older],activeQuoteId:()=>null,
+    checkTransaction:async tx=>{checks.push(tx.id);return 'Pending';},
+    requestSpark:()=>{},refreshWallet:async()=>{},reportError:()=>{},
+  });
+  await flush();assert.equal(checks.length,1);
+  for(let i=0;i<4;i++){clock.advanceBy(2000);await flush();}
+  assert.equal(checks.length,1);
+  clock.advanceBy(2000);await flush();
+  assert.equal(checks.length,2);
+  stop();
+});
+
+test('activeInFlightQuoteId suppresses only active MoMo transfers, not failed or recovery ones',()=>{
+  assert.equal(activeInFlightQuoteId({mintQuoteId:'q1',currentPhase:'PENDING_PAYMENT'}),'q1');
+  assert.equal(activeInFlightQuoteId({mintQuoteId:'q1',currentPhase:'MINTING'}),'q1');
+  for(const phase of ['IDLE','PAYMENT_FAILED','PAYOUT_FAILED','RECOVERY_REQUIRED','RETRYABLE_ERROR','EXPIRED']){
+    assert.equal(activeInFlightQuoteId({mintQuoteId:'q1',currentPhase:phase}),null);
+  }
+  assert.equal(activeInFlightQuoteId(null),null);
 });

@@ -101,48 +101,130 @@ pub enum TransactionDiff {
     RedeemSuccessRestore(Vec<String>), // mint_urls
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MintQuoteCheck {
+    Paid,
+    Issued,
+    Pending,
+    Expired,
+}
+
+fn normalize_expiry_secs(raw: u64) -> u64 {
+    if raw > 10_000_000_000 {
+        raw / 1000
+    } else {
+        raw
+    }
+}
+
+fn json_mentions_missing_or_expired_quote(qv: &serde_json::Value) -> bool {
+    for key in ["detail", "error", "message"] {
+        if let Some(text) = qv.get(key).and_then(|v| v.as_str()) {
+            let lower = text.to_lowercase();
+            if lower.contains("not found")
+                || lower.contains("expired")
+                || lower.contains("unknown quote")
+                || lower.contains("does not exist")
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+async fn check_bolt11_mint_quote_state(
+    client: &MintClient,
+    quote_id: &str,
+    tx_timestamp: u64,
+) -> MintQuoteCheck {
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let age_secs = now_secs.saturating_sub(tx_timestamp);
+
+    let qv_res = client
+        .http
+        .get(format!("{}/v1/mint/quote/bolt11/{}", client.url, quote_id))
+        .send()
+        .await;
+    match qv_res {
+        Ok(resp) => {
+            let status = resp.status();
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
+                return MintQuoteCheck::Pending;
+            }
+            if status == reqwest::StatusCode::NOT_FOUND {
+                // The mint purged this quote because it expired.
+                return if age_secs > 120 {
+                    MintQuoteCheck::Expired
+                } else {
+                    MintQuoteCheck::Pending
+                };
+            }
+            if let Ok(qv) = resp.json::<serde_json::Value>().await {
+                let state_str = qv["state"].as_str().unwrap_or("").to_uppercase();
+                if state_str == "ISSUED" {
+                    return MintQuoteCheck::Issued;
+                }
+                if state_str == "PAID" || qv["paid"].as_bool() == Some(true) {
+                    return MintQuoteCheck::Paid;
+                }
+                if state_str == "EXPIRED" {
+                    return MintQuoteCheck::Expired;
+                }
+                if status.is_client_error() {
+                    return if json_mentions_missing_or_expired_quote(&qv) && age_secs > 120 {
+                        MintQuoteCheck::Expired
+                    } else if age_secs > 3600 {
+                        MintQuoteCheck::Expired
+                    } else {
+                        MintQuoteCheck::Pending
+                    };
+                }
+                let expiry_secs = qv
+                    .get("expiry")
+                    .and_then(|v| {
+                        v.as_u64()
+                            .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+                    })
+                    .map(normalize_expiry_secs)
+                    .unwrap_or(0);
+                if expiry_secs > 0 && now_secs > expiry_secs {
+                    return MintQuoteCheck::Expired;
+                }
+                if expiry_secs == 0 && age_secs > 3600 {
+                    return MintQuoteCheck::Expired;
+                }
+                return MintQuoteCheck::Pending;
+            }
+            if age_secs > 3600 {
+                MintQuoteCheck::Expired
+            } else {
+                MintQuoteCheck::Pending
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Failed to query mint quote {}: {}", quote_id, e);
+            if age_secs > 86400 * 7 {
+                MintQuoteCheck::Expired
+            } else {
+                MintQuoteCheck::Pending
+            }
+        }
+    }
+}
+
 pub async fn check_bolt11_mint_quote(
     client: &MintClient,
     quote_id: &str,
     tx_timestamp: u64,
 ) -> (bool, bool) {
-    let now_secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    let qv_res = client.http.get(format!("{}/v1/mint/quote/bolt11/{}", client.url, quote_id)).send().await;
-    match qv_res {
-        Ok(resp) => {
-            if resp.status() == reqwest::StatusCode::NOT_FOUND {
-                // The mint purged this quote because it expired
-                return (false, now_secs.saturating_sub(tx_timestamp) > 900);
-            }
-            if let Ok(qv) = resp.json::<serde_json::Value>().await {
-                let state_str = qv["state"].as_str().unwrap_or("").to_uppercase();
-                if state_str == "PAID" || state_str == "ISSUED" {
-                    return (true, false);
-                }
-                if state_str == "EXPIRED" {
-                    return (false, true);
-                }
-                let expiry_secs = qv.get("expiry")
-                    .and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())))
-                    .unwrap_or(0);
-                if expiry_secs > 0 && now_secs > expiry_secs {
-                    return (false, true);
-                }
-                if now_secs.saturating_sub(tx_timestamp) > 86400 {
-                    return (false, true);
-                }
-                return (false, false);
-            }
-            (false, now_secs.saturating_sub(tx_timestamp) > 86400)
-        }
-        Err(e) => {
-            tracing::warn!("Failed to query mint quote {}: {}", quote_id, e);
-            (false, now_secs.saturating_sub(tx_timestamp) > 86400 * 7)
-        }
+    match check_bolt11_mint_quote_state(client, quote_id, tx_timestamp).await {
+        MintQuoteCheck::Paid | MintQuoteCheck::Issued => (true, false),
+        MintQuoteCheck::Expired => (false, true),
+        MintQuoteCheck::Pending => (false, false),
     }
 }
 
@@ -235,7 +317,10 @@ pub async fn check_transaction_network(
             return Err(anyhow!("Network check for Issue not supported lock-free yet"));
         },
         TransactionType::ReceiveLightning(recv_data) => {
-            let (paid, expired) = check_bolt11_mint_quote(&client, &recv_data.quote_id, tx.timestamp).await;
+            let quote_state = check_bolt11_mint_quote_state(&client, &recv_data.quote_id, tx.timestamp).await;
+            let is_issued = quote_state == MintQuoteCheck::Issued;
+            let paid = matches!(quote_state, MintQuoteCheck::Paid | MintQuoteCheck::Issued);
+            let expired = quote_state == MintQuoteCheck::Expired;
             if paid {
                 if !recv_data.outputs.is_empty() {
                     match client.mint_tokens(&recv_data.quote_id, recv_data.outputs.clone()).await {
@@ -300,7 +385,15 @@ pub async fn check_transaction_network(
                         }
                         Err(e) => {
                             let err_str = e.to_string();
-                            if err_str.to_lowercase().contains("already signed") || err_str.to_lowercase().contains("already issued") {
+                            let err_lower = err_str.to_lowercase();
+                            let already_minted = is_issued
+                                || err_lower.contains("already signed")
+                                || err_lower.contains("already issued")
+                                || err_lower.contains("already minted")
+                                || err_lower.contains("already paid")
+                                || err_lower.contains("outputs already")
+                                || err_lower.contains("blinded message already");
+                            if already_minted {
                                 if let Ok((out_arr, sig_arr)) = client.restore_tokens(recv_data.outputs.clone()).await {
                                     if !sig_arr.is_empty() {
                                         let mut keyset_cache: std::collections::HashMap<String, crate::client::KeysetInfo> = std::collections::HashMap::new();
